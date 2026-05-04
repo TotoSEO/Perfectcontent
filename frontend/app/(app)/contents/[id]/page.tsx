@@ -1,0 +1,157 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import useSWR from "swr";
+import { api, API_BASE, fetcher } from "@/lib/api";
+import { Content } from "@/lib/types";
+import { ContentEditor } from "@/components/ContentEditor";
+import { LinkSuggestionsPanel } from "@/components/LinkSuggestionsPanel";
+import { CoverageBadge } from "@/components/CoverageBadge";
+
+export default function ContentPage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+
+  const { data: content, mutate } = useSWR<Content>(
+    id ? `/api/contents/${id}` : null,
+    fetcher
+  );
+
+  const [html, setHtml] = useState("");
+  const [chosenIdx, setChosenIdx] = useState(0);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (content?.html) setHtml(content.html);
+    if (content?.title_variants && content.chosen_title) {
+      const idx = content.title_variants.findIndex(
+        (v) => v.title === content.chosen_title
+      );
+      if (idx >= 0) setChosenIdx(idx);
+    }
+  }, [content?.html, content?.chosen_title, content?.title_variants]);
+
+  if (!content) return <p className="text-zinc-500">Chargement…</p>;
+
+  const variants = content.title_variants || [];
+  const chosen = variants[chosenIdx];
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api(`/api/contents/${id}`, {
+        method: "PATCH",
+        json: {
+          html,
+          chosen_title: chosen?.title,
+          chosen_meta: chosen?.meta,
+        },
+      });
+      mutate();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function regenImage() {
+    await api(`/api/contents/${id}/regenerate-image`, { method: "POST" });
+    setTimeout(() => mutate(), 1500);
+  }
+
+  return (
+    <div className="grid grid-cols-3 gap-6 max-w-7xl">
+      <div className="col-span-2 space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold">{content.keyword}</h1>
+          <div className="flex items-center gap-3">
+            <CoverageBadge score={content.coverage_score} />
+            <button
+              onClick={save}
+              disabled={saving}
+              className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-3 py-2 rounded text-sm"
+            >
+              {saving ? "Enregistrement…" : "Enregistrer"}
+            </button>
+          </div>
+        </div>
+
+        {variants.length > 0 && (
+          <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
+            <div className="text-xs uppercase tracking-wider text-zinc-500">
+              Variantes title / meta
+            </div>
+            {variants.map((v, i) => (
+              <label
+                key={i}
+                className={`block border rounded p-2 cursor-pointer ${
+                  chosenIdx === i
+                    ? "border-accent-500 bg-accent-500/10"
+                    : "border-ink-800 hover:border-ink-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="title"
+                  className="hidden"
+                  checked={chosenIdx === i}
+                  onChange={() => setChosenIdx(i)}
+                />
+                <div className="text-sm font-medium">{v.title}</div>
+                <div className="text-xs text-zinc-500">{v.meta}</div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <ContentEditor html={html} onChange={setHtml} />
+
+        <div className="flex gap-3 text-sm">
+          <a
+            href={`${API_BASE}/api/contents/${id}/export?format=html`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent-500 hover:underline"
+          >
+            Export HTML
+          </a>
+          <a
+            href={`${API_BASE}/api/contents/${id}/export?format=md`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent-500 hover:underline"
+          >
+            Export Markdown
+          </a>
+        </div>
+      </div>
+
+      <div className="col-span-1 space-y-4">
+        {content.image_url && (
+          <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
+            <img
+              src={content.image_url}
+              alt=""
+              className="w-full rounded border border-ink-800"
+            />
+            <button
+              onClick={regenImage}
+              className="text-xs text-accent-500 hover:underline"
+            >
+              Régénérer l'image
+            </button>
+          </div>
+        )}
+        <LinkSuggestionsPanel links={content.internal_links} />
+        {content.schema_recommendations && (
+          <details className="bg-ink-900 border border-ink-800 rounded-xl p-4">
+            <summary className="text-sm cursor-pointer">Schema recommandé</summary>
+            <pre className="text-xs mt-2 overflow-auto">
+              {JSON.stringify(content.schema_recommendations, null, 2)}
+            </pre>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
