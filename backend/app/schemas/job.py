@@ -27,6 +27,7 @@ class JobEstimateOut(BaseModel):
 class JobCreateIn(JobEstimateIn):
     cost_cap: float | None = Field(default=None)
     folder_id: UUID | None = None
+    auto_validate_blueprint: bool = False
 
 
 class JobOut(BaseModel):
@@ -39,6 +40,8 @@ class JobOut(BaseModel):
     language_code: str
     domain_id: UUID | None
     internal_linking: bool
+    auto_validate_blueprint: bool
+    batch_id: UUID | None
     status: str
     current_step: str | None
     cost_estimate_low: float | None
@@ -49,6 +52,33 @@ class JobOut(BaseModel):
     audit: dict
     created_at: datetime
     updated_at: datetime
+
+
+class BatchItemIn(BaseModel):
+    keyword: str
+    content_type: ContentType
+
+
+class JobBatchCreateIn(BaseModel):
+    items: list[BatchItemIn] = Field(..., min_length=1)
+    location_code: int = 2250
+    language_code: str = "fr"
+    domain_id: UUID | None = None
+    folder_id: UUID | None = None
+    internal_linking: bool = False
+    auto_validate_blueprint: bool = True
+    cost_cap: float | None = None
+
+
+class JobBatchEstimateOut(BaseModel):
+    items: int
+    low_total: float
+    high_total: float
+
+
+class BatchOut(BaseModel):
+    batch_id: UUID
+    jobs: list[JobOut]
 
 
 class BlueprintEditIn(BaseModel):

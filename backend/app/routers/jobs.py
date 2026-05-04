@@ -10,14 +10,18 @@ from app.cache import get_redis
 from app.db import get_db
 from app.models import Content, Job
 from app.schemas.job import (
+    BatchOut,
     BlueprintEditIn,
     CannibalizationIn,
+    JobBatchCreateIn,
+    JobBatchEstimateOut,
     JobCreateIn,
     JobEstimateIn,
     JobEstimateOut,
     JobOut,
     RegenerateSectionIn,
 )
+from app.services import batch as batch_svc
 from app.services import cannibalization, cost
 from app.workers.queue import (
     enqueue_regenerate_section,
@@ -70,6 +74,7 @@ async def create_job(payload: JobCreateIn, db: AsyncSession = Depends(get_db)) -
         language_code=payload.language_code,
         domain_id=payload.domain_id,
         internal_linking=payload.internal_linking,
+        auto_validate_blueprint=payload.auto_validate_blueprint,
         cost_estimate_low=rng.low,
         cost_estimate_high=rng.high,
         cost_cap=payload.cost_cap,
@@ -81,6 +86,35 @@ async def create_job(payload: JobCreateIn, db: AsyncSession = Depends(get_db)) -
     await db.refresh(job)
     enqueue_run_job(job.id)
     return job
+
+
+@router.post("/batch/estimate", response_model=JobBatchEstimateOut)
+async def batch_estimate(payload: JobBatchCreateIn) -> JobBatchEstimateOut:
+    low = high = 0.0
+    for item in payload.items:
+        rng = cost.estimate(
+            content_type=item.content_type, internal_linking=payload.internal_linking
+        )
+        low += rng.low
+        high += rng.high
+    return JobBatchEstimateOut(
+        items=len(payload.items),
+        low_total=round(low, 4),
+        high_total=round(high, 4),
+    )
+
+
+@router.post("/batch", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
+async def create_batch(
+    payload: JobBatchCreateIn, db: AsyncSession = Depends(get_db)
+) -> BatchOut:
+    batch_id, jobs = await batch_svc.create_batch(db, payload)
+    for j in jobs:
+        enqueue_run_job(j.id)
+    return BatchOut(
+        batch_id=batch_id,
+        jobs=[JobOut.model_validate(j) for j in jobs],
+    )
 
 
 @router.get("/{job_id}", response_model=JobOut)

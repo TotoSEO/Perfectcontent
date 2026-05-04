@@ -184,7 +184,7 @@ def _inject_anchor(paragraph: Tag, anchor: str, href: str) -> bool:
     from bs4 import NavigableString
 
     pattern = re.compile(re.escape(anchor), flags=re.IGNORECASE)
-    soup = paragraph if paragraph.parent is None else _root_soup(paragraph)
+    soup = _root_soup(paragraph)
 
     for descendant in list(paragraph.descendants):
         if not isinstance(descendant, NavigableString):

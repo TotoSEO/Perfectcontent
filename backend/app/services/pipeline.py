@@ -94,10 +94,15 @@ async def run_pipeline(job_id: UUID, *, from_step: str | None = None) -> None:
                     job = await session.get(Job, job_id)
                     if job is None:
                         return
-                    job.status = "paused"
+                    if job.auto_validate_blueprint:
+                        # Skip the pause; mark validated and continue.
+                        state["blueprint_validated"] = True
+                    else:
+                        job.status = "paused"
+                        await session.commit()
+                        await _publish(job_id, {"status": "paused", "step": step})
+                        return
                     await session.commit()
-                await _publish(job_id, {"status": "paused", "step": step})
-                return
 
         await _finalize(job_id, status="done")
     except Exception as exc:  # noqa: BLE001
