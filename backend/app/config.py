@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     cost_hard_cap_default: float = 1.00
     mock_external: bool = Field(default=False)
 
+    # Comma-separated list of origins, e.g. "https://pc.example.com"
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:
