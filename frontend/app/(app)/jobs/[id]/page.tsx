@@ -56,6 +56,12 @@ export default function JobPage() {
     mutate();
   }
 
+  async function retry() {
+    if (!id) return;
+    await api(`/api/jobs/${id}/retry`, { method: "POST" });
+    mutate();
+  }
+
   if (!job) return <p className="text-zinc-500">Chargement…</p>;
 
   return (
@@ -69,17 +75,22 @@ export default function JobPage() {
           </p>
         </div>
         <JobTimeline job={job} />
-        {job.status === "running" || job.status === "queued" ? (
-          <button
-            onClick={cancel}
-            className="text-xs text-red-400 hover:underline"
-          >
-            Annuler le job
-          </button>
-        ) : null}
+        <div className="flex gap-3 text-xs">
+          {(job.status === "running" || job.status === "queued") && (
+            <button onClick={cancel} className="text-red-400 hover:underline">
+              Annuler le job
+            </button>
+          )}
+          {(job.status === "failed" || job.status === "capped") && (
+            <button onClick={retry} className="text-accent-500 hover:underline">
+              Relancer (cache préservé)
+            </button>
+          )}
+        </div>
         {job.error && (
-          <div className="bg-red-900/30 border border-red-700 text-red-100 p-2 rounded text-xs">
-            {job.error}
+          <div className="bg-red-900/30 border border-red-700 text-red-100 p-3 rounded text-sm">
+            <div className="font-semibold mb-1">Erreur — étape « {job.current_step || "inconnue"} »</div>
+            <div className="text-xs opacity-90">{job.error}</div>
           </div>
         )}
       </div>

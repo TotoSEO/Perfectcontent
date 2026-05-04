@@ -27,6 +27,7 @@ class SemanticReport(Base):
     entities: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     required_terms: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     content_gaps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    term_targets: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     expected_terms_embedding: Mapped[list[float] | None] = mapped_column(
         Vector(EMBEDDING_DIM), nullable=True
     )

@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -184,6 +185,33 @@ async def regenerate_section(
     if job.content_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "no content attached")
     enqueue_regenerate_section(job.id, payload.section_id)
+    return job
+
+
+@router.post("/{job_id}/retry", response_model=JobOut)
+async def retry_job(job_id: UUID, db: AsyncSession = Depends(get_db)) -> Job:
+    """Re-run a failed/capped/cancelled job from the start of its pipeline.
+
+    The cache makes it cheap: cached SERP / scrape / embeddings results don't
+    re-bill. Only the steps that actually re-execute count against cost_actual.
+    """
+    job = await db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    if job.status not in {"failed", "capped"}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "only failed or capped jobs can be retried")
+    job.status = "queued"
+    job.error = None
+    job.current_step = None
+    audit = dict(job.audit or {})
+    history = list(audit.get("retries", []))
+    history.append({"at": datetime.now(timezone.utc).isoformat(), "previous_steps": audit.get("steps", [])})
+    audit["retries"] = history
+    audit["steps"] = []
+    job.audit = audit
+    await db.commit()
+    await db.refresh(job)
+    enqueue_run_job(job.id)
     return job
 
 

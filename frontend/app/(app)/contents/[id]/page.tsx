@@ -9,6 +9,7 @@ import { ContentEditor } from "@/components/ContentEditor";
 import { LinkSuggestionsPanel } from "@/components/LinkSuggestionsPanel";
 import { CoverageBadge } from "@/components/CoverageBadge";
 import { SectionList } from "@/components/SectionList";
+import { SemanticScore } from "@/components/SemanticScore";
 import { useRouter } from "next/navigation";
 
 export default function ContentPage() {
@@ -182,6 +183,7 @@ export default function ContentPage() {
             </button>
           </div>
         )}
+        <SemanticScore contentId={id!} html={html} />
         <SectionList html={html} onRegenerate={regenSection} />
         <LinkSuggestionsPanel links={content.internal_links} />
         {content.schema_recommendations && (

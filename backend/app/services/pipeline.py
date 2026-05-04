@@ -28,6 +28,7 @@ from app.services import (
     quality,
     scraper,
     serp,
+    term_freq,
 )
 
 STEPS = [
@@ -276,6 +277,14 @@ async def _step_analyze(job_id: UUID, state: dict) -> None:
     if expected_text.strip():
         vecs = await embeddings.embed([expected_text])
         expected_vec = vecs[0] if vecs else None
+
+    # YourTextGuru-style top 40 corpus terms with target frequencies
+    competitor_texts = []
+    for raw in state.get("scraped").pages:  # type: ignore[union-attr]
+        if raw.markdown:
+            competitor_texts.append(raw.markdown)
+    targets = term_freq.compute_term_targets(competitor_texts, top_n=40)
+
     async with SessionLocal() as session:
         sr = await session.get(SemanticReport, state["report_id"])
         if sr is not None:
@@ -284,6 +293,7 @@ async def _step_analyze(job_id: UUID, state: dict) -> None:
             sr.entities = report.entities
             sr.required_terms = report.required_terms
             sr.content_gaps = report.content_gaps
+            sr.term_targets = [t.to_dict() for t in targets]
             if expected_vec is not None:
                 sr.expected_terms_embedding = expected_vec
             await session.commit()
@@ -382,10 +392,15 @@ async def _step_image(job_id: UUID, state: dict) -> None:
 
 async def _step_link(job_id: UUID, state: dict) -> None:
     job = await _load_job(job_id)
-    if not job.internal_linking or not job.domain_id:
+    if not job.internal_linking:
+        await log_step(job_id, "link", "skipped", {"reason": "internal_linking disabled"})
+        return
+    if not job.domain_id:
+        await log_step(job_id, "link", "skipped", {"reason": "no domain selected"})
         return
     content = await _load_content(job.content_id)
     if content is None or not content.html:
+        await log_step(job_id, "link", "skipped", {"reason": "no content html"})
         return
 
     async with SessionLocal() as session:

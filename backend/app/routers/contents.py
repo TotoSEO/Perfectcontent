@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_session
 from app.db import get_db
-from app.models import Content
+from app.models import Content, Job, SemanticReport
 from app.schemas.content import ContentOut, ContentPatch, RegenerateContentSectionIn
 from app.workers.queue import enqueue_regenerate_content_section, enqueue_regenerate_image
 
@@ -66,6 +66,41 @@ async def regenerate_content_section(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     enqueue_regenerate_content_section(content.id, payload.section_id)
     return {"ok": True}
+
+
+@router.get("/{content_id}/semantic-targets")
+async def semantic_targets(content_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Return the top corpus terms with target / min / max frequencies.
+
+    The frontend computes the user's actual count locally from the editor HTML
+    using the same tokenization rules (mirrored in lib/stopwords.ts).
+    """
+    content = await db.get(Content, content_id)
+    if content is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
+
+    # Find the most recent job for this content; its semantic_report has the targets.
+    job = (
+        await db.execute(
+            select(Job)
+            .where(Job.content_id == content_id)
+            .order_by(Job.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        return {"keyword": content.keyword, "targets": []}
+
+    sr = (
+        await db.execute(
+            select(SemanticReport).where(SemanticReport.job_id == job.id)
+        )
+    ).scalar_one_or_none()
+
+    return {
+        "keyword": content.keyword,
+        "targets": (sr.term_targets if sr and sr.term_targets else []),
+    }
 
 
 @router.get("/{content_id}/export", response_class=PlainTextResponse)
