@@ -58,3 +58,7 @@ class BlueprintEditIn(BaseModel):
 class CannibalizationIn(BaseModel):
     keyword: str
     domain_id: UUID
+
+
+class RegenerateSectionIn(BaseModel):
+    section_id: str

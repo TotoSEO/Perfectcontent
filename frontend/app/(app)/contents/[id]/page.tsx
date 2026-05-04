@@ -8,14 +8,18 @@ import { Content } from "@/lib/types";
 import { ContentEditor } from "@/components/ContentEditor";
 import { LinkSuggestionsPanel } from "@/components/LinkSuggestionsPanel";
 import { CoverageBadge } from "@/components/CoverageBadge";
+import { SectionList } from "@/components/SectionList";
+import { useRouter } from "next/navigation";
 
 export default function ContentPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params.id;
 
   const { data: content, mutate } = useSWR<Content>(
     id ? `/api/contents/${id}` : null,
-    fetcher
+    fetcher,
+    { refreshInterval: 4000 }
   );
 
   const [html, setHtml] = useState("");
@@ -59,6 +63,28 @@ export default function ContentPage() {
     setTimeout(() => mutate(), 1500);
   }
 
+  async function regenSection(sectionId: string) {
+    await api(`/api/contents/${id}/regenerate-section`, {
+      method: "POST",
+      json: { section_id: sectionId },
+    });
+    setTimeout(() => mutate(), 1500);
+  }
+
+  async function archive() {
+    await api(`/api/contents/${id}`, {
+      method: "PATCH",
+      json: { status: "archived" },
+    });
+    mutate();
+  }
+
+  async function remove() {
+    if (!confirm("Supprimer définitivement ce contenu ?")) return;
+    await api(`/api/contents/${id}`, { method: "DELETE" });
+    router.push("/dashboard");
+  }
+
   return (
     <div className="grid grid-cols-3 gap-6 max-w-7xl">
       <div className="col-span-2 space-y-4">
@@ -66,6 +92,20 @@ export default function ContentPage() {
           <h1 className="text-xl font-semibold">{content.keyword}</h1>
           <div className="flex items-center gap-3">
             <CoverageBadge score={content.coverage_score} />
+            <button
+              onClick={archive}
+              className="text-xs text-zinc-400 hover:text-white"
+              title="Archiver"
+            >
+              Archiver
+            </button>
+            <button
+              onClick={remove}
+              className="text-xs text-red-400 hover:text-red-300"
+              title="Supprimer"
+            >
+              Supprimer
+            </button>
             <button
               onClick={save}
               disabled={saving}
@@ -142,6 +182,7 @@ export default function ContentPage() {
             </button>
           </div>
         )}
+        <SectionList html={html} onRegenerate={regenSection} />
         <LinkSuggestionsPanel links={content.internal_links} />
         {content.schema_recommendations && (
           <details className="bg-ink-900 border border-ink-800 rounded-xl p-4">

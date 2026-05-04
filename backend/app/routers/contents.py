@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import require_session
 from app.db import get_db
 from app.models import Content
-from app.schemas.content import ContentOut, ContentPatch
-from app.workers.queue import enqueue_regenerate_image
+from app.schemas.content import ContentOut, ContentPatch, RegenerateContentSectionIn
+from app.workers.queue import enqueue_regenerate_content_section, enqueue_regenerate_image
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -52,6 +52,19 @@ async def regenerate_image(content_id: UUID, db: AsyncSession = Depends(get_db))
     if content is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     enqueue_regenerate_image(content.id)
+    return {"ok": True}
+
+
+@router.post("/{content_id}/regenerate-section")
+async def regenerate_content_section(
+    content_id: UUID,
+    payload: RegenerateContentSectionIn,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    content = await db.get(Content, content_id)
+    if content is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
+    enqueue_regenerate_content_section(content.id, payload.section_id)
     return {"ok": True}
 
 

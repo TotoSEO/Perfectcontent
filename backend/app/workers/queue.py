@@ -48,3 +48,21 @@ def enqueue_regenerate_image(content_id: UUID) -> None:
         str(content_id),
         job_id=f"image:{content_id}",
     )
+
+
+def enqueue_regenerate_section(job_id: UUID, section_id: str) -> None:
+    default_queue().enqueue(
+        "app.workers.job_worker.regenerate_section_sync",
+        str(job_id),
+        section_id,
+        job_id=f"regen:{job_id}:{section_id}",
+    )
+
+
+def enqueue_regenerate_content_section(content_id: UUID, section_id: str) -> None:
+    default_queue().enqueue(
+        "app.workers.job_worker.regenerate_content_section_sync",
+        str(content_id),
+        section_id,
+        job_id=f"regen-content:{content_id}:{section_id}",
+    )

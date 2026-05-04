@@ -16,9 +16,14 @@ from app.schemas.job import (
     JobEstimateIn,
     JobEstimateOut,
     JobOut,
+    RegenerateSectionIn,
 )
 from app.services import cannibalization, cost
-from app.workers.queue import enqueue_run_job, enqueue_resume_job
+from app.workers.queue import (
+    enqueue_regenerate_section,
+    enqueue_resume_job,
+    enqueue_run_job,
+)
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -135,12 +140,16 @@ async def edit_blueprint(
 
 @router.post("/{job_id}/regenerate-section", response_model=JobOut)
 async def regenerate_section(
-    job_id: UUID, db: AsyncSession = Depends(get_db)
+    job_id: UUID,
+    payload: RegenerateSectionIn,
+    db: AsyncSession = Depends(get_db),
 ) -> Job:
     job = await db.get(Job, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
-    enqueue_resume_job(job.id, from_step="generate")
+    if job.content_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no content attached")
+    enqueue_regenerate_section(job.id, payload.section_id)
     return job
 
 

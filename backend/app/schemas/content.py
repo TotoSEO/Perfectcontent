@@ -36,3 +36,7 @@ class ContentPatch(BaseModel):
     chosen_meta: str | None = None
     html: str | None = None
     markdown: str | None = None
+
+
+class RegenerateContentSectionIn(BaseModel):
+    section_id: str

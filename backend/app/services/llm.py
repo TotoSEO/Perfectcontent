@@ -143,6 +143,12 @@ def _mock_response(system: str, user: str) -> LLMResponse:
                 {"section_id": "s1", "anchor": "guide complet", "target_url": "MOCK_URL"}
             ]
         })
+    elif "réécrire" in sys_low or "rewrite" in sys_low or "réécris" in sys_low or "section" in sys_low:
+        body = (
+            '<h2 id="regen">Section réécrite</h2>'
+            "<p>Nouveau paragraphe plus précis et sans redondance avec les autres sections.</p>"
+            "<p>Détail complémentaire utile au lecteur.</p>"
+        )
     else:
         body = "{}"
     return LLMResponse(text=body, cost=0.0, input_tokens=0, output_tokens=0)

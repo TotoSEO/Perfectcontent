@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth as auth_router
-from app.routers import contents, domains, folders, jobs
+from app.routers import contents, domains, folders, healthz, jobs
 
 
 @asynccontextmanager
@@ -27,8 +27,4 @@ app.include_router(folders.router, prefix="/api/folders", tags=["folders"])
 app.include_router(domains.router, prefix="/api/domains", tags=["domains"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(contents.router, prefix="/api/contents", tags=["contents"])
-
-
-@app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+app.include_router(healthz.router, prefix="/healthz", tags=["healthz"])

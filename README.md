@@ -30,6 +30,18 @@ pnpm dev
 
 Open http://localhost:3000 — login with `APP_PASSWORD` from `.env`.
 
+## Database: Supabase (production)
+
+1. Create a Supabase project.
+2. In SQL editor, run once: `CREATE EXTENSION IF NOT EXISTS vector;` (pgcrypto is already enabled).
+3. Project Settings → Database → Connection string → URI → copy.
+4. Adapt the URI in `.env`: prefix `postgresql+asyncpg://` instead of `postgresql://` and prefer
+   the Session pooler endpoint (port 5432) for long-running workers.
+5. Run `alembic upgrade head` once locally pointing at the Supabase URL.
+6. Redis can stay on Upstash (serverless, pay-per-request) — set `REDIS_URL` accordingly.
+
+The codebase doesn't use Supabase Auth (single-user via `APP_PASSWORD`), only its Postgres.
+
 ## Pipeline steps
 
 | # | Step | Notes |
