@@ -19,7 +19,7 @@ export default function ContentPage() {
   const id = params.id;
 
   const { data: content, mutate } = useSWR<Content>(
-    id ? `/api/contents/${id}` : null,
+    id ? `/srv/contents/${id}` : null,
     fetcher,
     { refreshInterval: 4000 }
   );
@@ -46,7 +46,7 @@ export default function ContentPage() {
   async function save() {
     setSaving(true);
     try {
-      await api(`/api/contents/${id}`, {
+      await api(`/srv/contents/${id}`, {
         method: "PATCH",
         json: {
           html,
@@ -61,7 +61,7 @@ export default function ContentPage() {
   }
 
   async function regenSection(sectionId: string) {
-    await api(`/api/contents/${id}/regenerate-section`, {
+    await api(`/srv/contents/${id}/regenerate-section`, {
       method: "POST",
       json: { section_id: sectionId },
     });
@@ -69,7 +69,7 @@ export default function ContentPage() {
   }
 
   async function archive() {
-    await api(`/api/contents/${id}`, {
+    await api(`/srv/contents/${id}`, {
       method: "PATCH",
       json: { status: "archived" },
     });
@@ -78,7 +78,7 @@ export default function ContentPage() {
 
   async function remove() {
     if (!confirm("Supprimer définitivement ce contenu ?")) return;
-    await api(`/api/contents/${id}`, { method: "DELETE" });
+    await api(`/srv/contents/${id}`, { method: "DELETE" });
     router.push("/dashboard");
   }
 
@@ -145,7 +145,7 @@ export default function ContentPage() {
 
         <div className="flex gap-3 text-sm">
           <a
-            href={`${API_BASE}/api/contents/${id}/export?format=html`}
+            href={`${API_BASE}/srv/contents/${id}/export?format=html`}
             target="_blank"
             rel="noreferrer"
             className="text-accent-500 hover:underline"
@@ -153,7 +153,7 @@ export default function ContentPage() {
             Export HTML
           </a>
           <a
-            href={`${API_BASE}/api/contents/${id}/export?format=md`}
+            href={`${API_BASE}/srv/contents/${id}/export?format=md`}
             target="_blank"
             rel="noreferrer"
             className="text-accent-500 hover:underline"

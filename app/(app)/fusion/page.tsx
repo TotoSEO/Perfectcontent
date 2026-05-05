@@ -18,7 +18,7 @@ function newSource(): Source {
 
 export default function FusionPage() {
   const router = useRouter();
-  const { data: folders } = useSWR<Folder[]>("/api/folders", fetcher);
+  const { data: folders } = useSWR<Folder[]>("/srv/folders", fetcher);
 
   const [keyword, setKeyword] = useState("");
   const [folderId, setFolderId] = useState<string>("");
@@ -36,7 +36,7 @@ export default function FusionPage() {
     }
     const t = setTimeout(async () => {
       try {
-        const e = await api<Estimate>("/api/fusion/estimate", {
+        const e = await api<Estimate>("/srv/fusion/estimate", {
           method: "POST",
           json: { sources: validSources.map((s) => s.html) },
         });
@@ -64,7 +64,7 @@ export default function FusionPage() {
     setBusy(true);
     setErr(null);
     try {
-      const res = await api<{ content_id: string; cost: number }>("/api/fusion", {
+      const res = await api<{ content_id: string; cost: number }>("/srv/fusion", {
         method: "POST",
         json: {
           keyword: keyword.trim(),

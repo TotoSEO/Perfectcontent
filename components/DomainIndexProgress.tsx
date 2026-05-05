@@ -29,7 +29,7 @@ export function DomainProgress({ id, autoStart = true }: { id: string; autoStart
     (async () => {
       while (!stopped && !cancelled.current) {
         try {
-          const next = await api<State>(`/api/domains/${id}/index-chunk?limit=30`, {
+          const next = await api<State>(`/srv/domains/${id}/index-chunk?limit=30`, {
             method: "POST",
           });
           setState(next);

@@ -44,7 +44,7 @@ export async function runJobToCompletion(
 
     let res: StepResult;
     try {
-      res = await api<StepResult>(`/api/jobs/${jobId}/step/${current}`, { method: "POST" });
+      res = await api<StepResult>(`/srv/jobs/${jobId}/step/${current}`, { method: "POST" });
     } catch (err) {
       return { status: "failed", lastStep: current, error: String(err) };
     }

@@ -37,7 +37,7 @@ export function SemanticScore({
   html: string;
 }) {
   const { data } = useSWR<{ keyword: string; targets: TermTarget[] }>(
-    `/api/contents/${contentId}/semantic-targets`,
+    `/srv/contents/${contentId}/semantic-targets`,
     fetcher,
   );
 

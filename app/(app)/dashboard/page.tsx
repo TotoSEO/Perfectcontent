@@ -6,23 +6,24 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { Content } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
+import { SkeletonList } from "@/components/Skeleton";
 
 const STATUS_TONE: Record<string, string> = {
-  analysis: "bg-ink-800 text-zinc-400 border-ink-700",
-  generated: "bg-emerald-700/30 text-emerald-200 border-emerald-700",
-  editing: "bg-blue-700/30 text-blue-200 border-blue-700",
-  archived: "bg-ink-800 text-zinc-500 border-ink-700",
+  analysis: "border-zinc-700 text-zinc-400 bg-zinc-800/40",
+  generated: "border-emerald-700/50 text-emerald-300 bg-emerald-500/10",
+  editing: "border-blue-700/50 text-blue-300 bg-blue-500/10",
+  archived: "border-zinc-700 text-zinc-500 bg-zinc-800/30",
 };
 
-const TYPE_META: Record<string, { label: string; emoji: string }> = {
-  blog: { label: "Blog", emoji: "📝" },
-  category: { label: "Catégorie", emoji: "🗂️" },
-  product: { label: "Produit", emoji: "🛒" },
-  service_lp: { label: "Service / LP", emoji: "🎯" },
+const TYPE_LABELS: Record<string, string> = {
+  blog: "Blog",
+  category: "Catégorie",
+  product: "Produit",
+  service_lp: "Service / LP",
 };
 
 export default function DashboardPage() {
-  const { data: contents } = useSWR<Content[]>("/api/contents", fetcher, {
+  const { data: contents } = useSWR<Content[]>("/srv/contents", fetcher, {
     refreshInterval: 5000,
   });
   const [search, setSearch] = useState("");
@@ -48,50 +49,48 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <header className="bg-gradient-to-r from-accent-600/20 via-accent-600/10 to-transparent border border-ink-800 rounded-2xl p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Tes contenus</h1>
-            <p className="text-sm text-zinc-400 mt-1">
-              Lance un nouveau lot, retrouve tes générations passées, édite et exporte.
-            </p>
-          </div>
-          <Link
-            href="/new"
-            className="bg-accent-600 hover:bg-accent-500 px-4 py-2 rounded-lg text-sm font-medium shadow-md shadow-accent-500/20"
-          >
-            ✨ Nouveau lot
-          </Link>
+    <div className="space-y-8 max-w-6xl animate-fadein">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[28px] font-semibold tracking-tight">Tes contenus</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Lance un nouveau lot, retrouve tes générations passées, édite et exporte.
+          </p>
         </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5">
-          <Stat label="Total" value={(contents || []).length} />
-          <Stat label="Actifs" value={stats.active} />
-          <Stat
-            label="Couverture moyenne"
-            value={stats.covN > 0 ? `${Math.round(stats.covSum / stats.covN)}%` : "—"}
-            help="Moyenne du score de couverture sémantique sur tes contenus."
-          />
-        </div>
+        <Link href="/new" className="btn-primary">
+          Nouveau lot
+        </Link>
       </header>
 
-      <div className="flex flex-wrap gap-2 items-center">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍 Filtrer par mot-clé…"
-          className="bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-sm flex-1 min-w-[240px] focus:outline-none focus:border-accent-500"
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Stat label="Total" value={(contents || []).length} />
+        <Stat label="Actifs" value={stats.active} />
+        <Stat
+          label="Couverture moyenne"
+          value={stats.covN > 0 ? `${Math.round(stats.covSum / stats.covN)}%` : "—"}
+          help="Moyenne du score de couverture sémantique sur tes contenus."
         />
-        <div className="flex gap-1 text-xs">
+      </div>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[240px]">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-xs">⌕</span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filtrer par mot-clé…"
+            className="input pl-8"
+          />
+        </div>
+        <div className="flex bg-[#131316] border border-[#25252a] rounded-lg p-0.5">
           {(["active", "archived", "all"] as const).map((k) => (
             <button
               key={k}
               onClick={() => setFilter(k)}
-              className={`px-3 py-1.5 rounded-lg border transition ${
+              className={`px-3 py-1.5 rounded-md text-xs transition-all ${
                 filter === k
-                  ? "border-accent-500 bg-accent-500/20 text-white"
-                  : "border-ink-800 text-zinc-500 hover:text-white hover:border-ink-700"
+                  ? "bg-accent-600/20 text-white"
+                  : "text-zinc-500 hover:text-zinc-200"
               }`}
             >
               {k === "active" ? "Actifs" : k === "archived" ? "Archivés" : "Tous"}
@@ -100,41 +99,36 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {!contents && <p className="text-zinc-500 text-sm">Chargement…</p>}
+      {!contents && <SkeletonList rows={5} />}
       {contents && filtered.length === 0 && (
         <EmptyState empty={contents.length === 0} />
       )}
       {filtered.length > 0 && (
-        <ul className="divide-y divide-ink-800 border border-ink-800 rounded-xl overflow-hidden bg-ink-900/40">
+        <ul className="card divide-y divide-[#1f1f24] overflow-hidden">
           {filtered.map((c) => {
-            const meta = TYPE_META[c.content_type] || { label: c.content_type, emoji: "•" };
+            const label = TYPE_LABELS[c.content_type] || c.content_type;
             return (
               <li key={c.id}>
                 <Link
                   href={`/contents/${c.id}`}
-                  className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-ink-800/50 transition"
+                  className="flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-[#1a1a1e] transition-colors"
                 >
-                  <span className="text-lg">{meta.emoji}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">
+                    <div className="font-medium truncate text-[14px]">
                       {c.chosen_title || c.keyword}
                     </div>
-                    <div className="text-xs text-zinc-500">
-                      {meta.label}
-                      {c.intent ? ` · ${c.intent}` : ""}
-                      {c.chosen_title ? ` · ${c.keyword}` : ""}
+                    <div className="text-xs text-zinc-500 mt-0.5">
+                      {label}
+                      {c.intent ? <span className="text-zinc-600"> · {c.intent}</span> : null}
+                      {c.chosen_title ? <span className="text-zinc-600"> · {c.keyword}</span> : null}
                     </div>
                   </div>
-                  <span
-                    className={`text-[11px] border rounded-full px-2 py-0.5 ${
-                      STATUS_TONE[c.status] || STATUS_TONE.analysis
-                    }`}
-                  >
+                  <span className={`chip ${STATUS_TONE[c.status] || STATUS_TONE.analysis}`}>
                     {c.status}
                   </span>
                   {c.coverage_score != null && (
                     <span
-                      className="text-xs text-zinc-300 tabular-nums bg-ink-800 px-2 py-0.5 rounded-full"
+                      className="chip border-[#2c2c32] text-zinc-300 bg-[#1a1a1e] tabular-nums"
                       title="Score de couverture sémantique"
                     >
                       {Number(c.coverage_score).toFixed(0)}%
@@ -152,12 +146,12 @@ export default function DashboardPage() {
 
 function Stat({ label, value, help }: { label: string; value: number | string; help?: string }) {
   return (
-    <div className="bg-ink-900/60 border border-ink-800 rounded-xl px-4 py-3">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500 inline-flex items-center">
+    <div className="card p-4">
+      <div className="label inline-flex items-center">
         {label}
         {help && <HelpIcon content={help} />}
       </div>
-      <div className="text-xl font-semibold mt-0.5 tabular-nums">{value}</div>
+      <div className="text-[26px] font-semibold mt-1.5 tabular-nums tracking-tight">{value}</div>
     </div>
   );
 }
@@ -165,25 +159,23 @@ function Stat({ label, value, help }: { label: string; value: number | string; h
 function EmptyState({ empty }: { empty: boolean }) {
   if (!empty) {
     return (
-      <div className="border border-dashed border-ink-800 rounded-2xl p-10 text-center text-zinc-500 text-sm">
+      <div className="card p-12 text-center text-zinc-500 text-sm border-dashed">
         Rien ne correspond à ce filtre.
       </div>
     );
   }
   return (
-    <div className="border border-dashed border-ink-800 rounded-2xl p-10 text-center space-y-3">
-      <div className="text-4xl">📝</div>
-      <div className="text-zinc-300">Aucun contenu pour l'instant.</div>
+    <div className="card p-14 text-center space-y-4 border-dashed animate-fadein">
+      <div className="mx-auto w-12 h-12 rounded-2xl bg-accent-600/15 border border-accent-500/30 flex items-center justify-center">
+        <span className="text-accent-400 text-xl">✦</span>
+      </div>
+      <div className="text-zinc-200 font-medium">Aucun contenu pour l'instant</div>
       <p className="text-zinc-500 text-sm max-w-md mx-auto">
-        Lance ton premier lot : tu colles tes mots-clés (un par ligne) dans
-        la catégorie qui va bien (blog, fiche produit, …) et le pipeline
-        fait le reste.
+        Lance ton premier lot. Tu colles tes mots-clés dans la catégorie qui va bien
+        et le pipeline fait le reste.
       </p>
-      <Link
-        href="/new"
-        className="inline-block bg-accent-600 hover:bg-accent-500 px-4 py-2 rounded-lg text-sm font-medium mt-2"
-      >
-        ✨ Créer mon premier lot
+      <Link href="/new" className="btn-primary inline-flex">
+        Créer mon premier lot
       </Link>
     </div>
   );

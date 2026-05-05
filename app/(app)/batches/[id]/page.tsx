@@ -34,7 +34,7 @@ export default function BatchPage() {
   const batchId = params.id;
 
   const { data: jobs, mutate } = useSWR<Job[]>(
-    batchId ? `/api/batches/${batchId}` : null,
+    batchId ? `/srv/batches/${batchId}` : null,
     fetcher,
     { refreshInterval: 3000 }
   );

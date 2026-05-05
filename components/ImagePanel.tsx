@@ -41,7 +41,7 @@ export function ImagePanel({
     setBusy(true);
     setErr(null);
     try {
-      await api(`/api/contents/${contentId}/generate-image?backend=${backend}`, {
+      await api(`/srv/contents/${contentId}/generate-image?backend=${backend}`, {
         method: "POST",
       });
       onUpdate();

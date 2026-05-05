@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
+import { SkeletonList } from "@/components/Skeleton";
 
 type Log = {
   id: number;
@@ -24,21 +25,19 @@ export default function ConsolePage() {
   const [search, setSearch] = useState("");
 
   const path =
-    level === "all"
-      ? "/api/logs?limit=200"
-      : `/api/logs?limit=200&level=${level}`;
-  const { data: logs, mutate } = useSWR<Log[]>(path, fetcher, {
-    refreshInterval: 4000,
-  });
+    level === "all" ? "/srv/logs?limit=200" : `/srv/logs?limit=200&level=${level}`;
+  const { data: logs, mutate } = useSWR<Log[]>(path, fetcher, { refreshInterval: 4000 });
 
   const filtered = (logs || []).filter(
-    (l) => !search || l.message.toLowerCase().includes(search.toLowerCase()) ||
-           (l.module || "").toLowerCase().includes(search.toLowerCase())
+    (l) =>
+      !search ||
+      l.message.toLowerCase().includes(search.toLowerCase()) ||
+      (l.module || "").toLowerCase().includes(search.toLowerCase())
   );
 
   async function clear() {
     if (!confirm("Effacer les logs de plus d'une heure ?")) return;
-    await api("/api/logs", { method: "DELETE" });
+    await api("/srv/logs", { method: "DELETE" });
     mutate();
   }
 
@@ -54,41 +53,36 @@ export default function ConsolePage() {
   }
 
   return (
-    <div className="space-y-4 max-w-5xl">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl font-semibold">Console</h1>
-        <div className="flex gap-2 text-xs">
-          <button
-            onClick={copyAll}
-            className="px-2.5 py-1 rounded border border-ink-800 hover:bg-ink-800 text-zinc-400"
-          >
-            Copier tout
-          </button>
-          <button
-            onClick={clear}
-            className="px-2.5 py-1 rounded border border-ink-800 hover:bg-ink-800 text-red-400"
-          >
-            Vider (&gt;1h)
-          </button>
+    <div className="space-y-6 max-w-5xl animate-fadein">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[28px] font-semibold tracking-tight">Console</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Logs récents (max 500 entrées). Si un truc plante, copie tout et colle-moi ça.
+          </p>
         </div>
-      </div>
+        <div className="flex gap-2 text-xs">
+          <button onClick={copyAll} className="btn-ghost px-3 py-2">Copier tout</button>
+          <button onClick={clear} className="btn-danger px-3 py-2">Vider (&gt;1h)</button>
+        </div>
+      </header>
 
       <div className="flex flex-wrap gap-2 items-center">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filtrer (mot-clé, module…)"
-          className="bg-ink-900 border border-ink-800 rounded px-3 py-2 text-sm flex-1 min-w-[240px]"
+          placeholder="Filtrer par mot-clé / module…"
+          className="input flex-1 min-w-[240px]"
         />
-        <div className="flex gap-1 text-xs">
+        <div className="flex bg-[#131316] border border-[#25252a] rounded-lg p-0.5">
           {(["all", "info", "warn", "error"] as const).map((lv) => (
             <button
               key={lv}
               onClick={() => setLevel(lv)}
-              className={`px-2.5 py-1 rounded border ${
+              className={`px-3 py-1.5 rounded-md text-xs transition-all uppercase tracking-wider ${
                 level === lv
-                  ? "border-accent-500 bg-accent-500/20 text-white"
-                  : "border-ink-800 text-zinc-500 hover:text-white"
+                  ? "bg-accent-600/20 text-white"
+                  : "text-zinc-500 hover:text-zinc-200"
               }`}
             >
               {lv}
@@ -97,21 +91,27 @@ export default function ConsolePage() {
         </div>
       </div>
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl overflow-hidden">
-        {!logs && <p className="p-4 text-sm text-zinc-500">Chargement…</p>}
-        {logs && filtered.length === 0 && (
-          <p className="p-4 text-sm text-zinc-500">Aucun log.</p>
-        )}
-        {filtered.length > 0 && (
-          <ul className="divide-y divide-ink-800 font-mono text-xs max-h-[70vh] overflow-y-auto">
+      {!logs && <SkeletonList rows={6} />}
+
+      {logs && filtered.length === 0 && (
+        <div className="card p-10 text-center text-sm text-zinc-500">Aucun log.</div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="card overflow-hidden">
+          <ul className="divide-y divide-[#1f1f24] font-mono text-xs max-h-[72vh] overflow-y-auto">
             {filtered.map((l) => (
-              <li key={l.id} className="px-3 py-2 hover:bg-ink-800/50">
-                <span className="text-zinc-500">
-                  {l.ts ? new Date(l.ts).toLocaleTimeString() : "—"}
-                </span>{" "}
-                <span className={`uppercase ${TONE[l.level]}`}>{l.level}</span>{" "}
-                <span className="text-accent-500">{l.module || ""}</span>{" "}
-                <span>{l.message}</span>
+              <li key={l.id} className="px-4 py-2.5 hover:bg-[#1a1a1e]">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-zinc-600 tabular-nums">
+                    {l.ts ? new Date(l.ts).toLocaleTimeString() : "—"}
+                  </span>
+                  <span className={`uppercase tracking-wider text-[10px] font-semibold ${TONE[l.level]}`}>
+                    {l.level}
+                  </span>
+                  {l.module && <span className="text-accent-400 text-[11px]">{l.module}</span>}
+                  <span className="text-zinc-200">{l.message}</span>
+                </div>
                 {l.meta && Object.keys(l.meta).length > 0 && (
                   <pre className="mt-1 text-[10px] text-zinc-500 whitespace-pre-wrap">
                     {JSON.stringify(l.meta, null, 2)}
@@ -120,8 +120,8 @@ export default function ConsolePage() {
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

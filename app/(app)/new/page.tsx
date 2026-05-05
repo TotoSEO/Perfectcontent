@@ -67,8 +67,8 @@ function parseLines(text: string): string[] {
 
 export default function NewContentPage() {
   const router = useRouter();
-  const { data: domains } = useSWR<Domain[]>("/api/domains", fetcher);
-  const { data: folders } = useSWR<Folder[]>("/api/folders", fetcher);
+  const { data: domains } = useSWR<Domain[]>("/srv/domains", fetcher);
+  const { data: folders } = useSWR<Folder[]>("/srv/folders", fetcher);
 
   const [texts, setTexts] = useState<Record<ContentType, string>>({
     blog: "",
@@ -133,7 +133,7 @@ export default function NewContentPage() {
     }
     const t = setTimeout(async () => {
       try {
-        const e = await api<Estimate>("/api/jobs/batch/estimate", {
+        const e = await api<Estimate>("/srv/jobs/batch/estimate", {
           method: "POST",
           json: {
             items: rows.map((r) => ({
@@ -165,7 +165,7 @@ export default function NewContentPage() {
     setBusy(true);
     setErr(null);
     try {
-      const res = await api<{ batch_id: string }>("/api/jobs/batch", {
+      const res = await api<{ batch_id: string }>("/srv/jobs/batch", {
         method: "POST",
         json: {
           items: rows.map((r) => ({

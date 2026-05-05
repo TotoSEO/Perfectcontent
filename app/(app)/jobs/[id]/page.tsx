@@ -14,11 +14,11 @@ export default function JobPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
-  const { data: job, mutate } = useSWR<Job>(id ? `/api/jobs/${id}` : null, fetcher, {
+  const { data: job, mutate } = useSWR<Job>(id ? `/srv/jobs/${id}` : null, fetcher, {
     refreshInterval: 2000,
   });
   const { data: content } = useSWR<Content>(
-    job?.content_id ? `/api/contents/${job.content_id}` : null,
+    job?.content_id ? `/srv/contents/${job.content_id}` : null,
     fetcher,
     { refreshInterval: 2500 }
   );
@@ -55,7 +55,7 @@ export default function JobPage() {
     if (!id) return;
     setBusy(true);
     try {
-      await api(`/api/jobs/${id}/blueprint`, { method: "POST", json: { blueprint: bp } });
+      await api(`/srv/jobs/${id}/blueprint`, { method: "POST", json: { blueprint: bp } });
       // Resume from "generate" client-side
       runJobToCompletion(id, { fromStep: "generate", onStep: () => mutate() })
         .finally(() => mutate());
@@ -67,13 +67,13 @@ export default function JobPage() {
   async function cancel() {
     if (!id) return;
     cancelled.current = true;
-    await api(`/api/jobs/${id}/cancel`, { method: "POST" });
+    await api(`/srv/jobs/${id}/cancel`, { method: "POST" });
     mutate();
   }
 
   async function retry() {
     if (!id) return;
-    await api(`/api/jobs/${id}/retry`, { method: "POST" });
+    await api(`/srv/jobs/${id}/retry`, { method: "POST" });
     mutate();
   }
 

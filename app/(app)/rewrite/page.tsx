@@ -18,8 +18,8 @@ const CONTENT_TYPES: { value: ContentType; label: string }[] = [
 
 export default function RewritePage() {
   const router = useRouter();
-  const { data: domains } = useSWR<Domain[]>("/api/domains", fetcher);
-  const { data: folders } = useSWR<Folder[]>("/api/folders", fetcher);
+  const { data: domains } = useSWR<Domain[]>("/srv/domains", fetcher);
+  const { data: folders } = useSWR<Folder[]>("/srv/folders", fetcher);
 
   const [keyword, setKeyword] = useState("");
   const [contentType, setContentType] = useState<ContentType>("blog");
@@ -46,7 +46,7 @@ export default function RewritePage() {
     const t = setTimeout(async () => {
       try {
         const e = await api<{ low: number; high: number; source_chars: number }>(
-          "/api/jobs/rewrite/estimate",
+          "/srv/jobs/rewrite/estimate",
           {
             method: "POST",
             json: {
@@ -73,7 +73,7 @@ export default function RewritePage() {
     setBusy(true);
     setErr(null);
     try {
-      const job = await api<{ id: string }>("/api/jobs/rewrite", {
+      const job = await api<{ id: string }>("/srv/jobs/rewrite", {
         method: "POST",
         json: {
           keyword: keyword.trim(),
