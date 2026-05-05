@@ -99,6 +99,20 @@ async def batch_estimate(payload: JobBatchCreateIn) -> JobBatchEstimateOut:
     )
 
 
+@router.post("/rewrite/estimate")
+async def estimate_rewrite(payload: RewriteJobIn) -> dict:
+    """Cost estimate for the rewrite pipeline (SERP + scrape + analyse + rewrite)."""
+    sanitized = fusion_sanitize.sanitize_html(payload.source_content)
+    rng = cost.estimate_rewrite(
+        source_chars=len(sanitized), internal_linking=payload.internal_linking
+    )
+    return {
+        "low": rng.low,
+        "high": rng.high,
+        "source_chars": len(sanitized),
+    }
+
+
 @router.post("/rewrite", response_model=JobOut, status_code=status.HTTP_201_CREATED)
 async def create_rewrite_job(
     payload: RewriteJobIn, db: AsyncSession = Depends(get_db)

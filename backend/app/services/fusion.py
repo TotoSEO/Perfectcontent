@@ -16,10 +16,14 @@ from app.services.generator import EDITORIAL_RULES
 ALLOWED_TAGS = {
     "h1", "h2", "h3", "h4", "h5", "h6",
     "p", "ul", "ol", "li",
-    "strong", "em", "b", "i",
+    "strong", "em", "b", "i", "u",
     "table", "thead", "tbody", "tr", "th", "td",
-    "blockquote", "code", "br",
+    "blockquote", "code", "br", "a",
 }
+DROP_TAGS = {"script", "style", "noscript", "iframe", "img", "svg", "form", "input", "button"}
+# When pasting from a web page, browsers wrap line-level content in <div>.
+# Convert these to <p> so paragraph structure survives sanitization.
+DIV_TO_P = True
 
 
 @dataclass
@@ -31,14 +35,53 @@ class FusionResult:
 
 
 def sanitize_html(raw: str) -> str:
-    """Strip everything except whitelisted tags. Keep text content."""
+    """Whitelist-based HTML sanitizer that preserves structure from web pastes.
+
+    Rules:
+    - drop script/style/iframe/img/etc. entirely (with their content)
+    - convert <div> to <p> so paragraph structure survives a browser paste
+    - strip everything else not in the whitelist (unwrap, keep text)
+    - drop ALL attributes except href on <a>
+    - collapse whitespace
+    """
+    if not raw or not raw.strip():
+        return ""
     soup = BeautifulSoup(raw, "lxml")
+
     for tag in soup.find_all(True):
-        if tag.name not in ALLOWED_TAGS:
-            tag.unwrap()
+        if tag.name in DROP_TAGS:
+            tag.decompose()
+            continue
+        if DIV_TO_P and tag.name == "div":
+            # Heuristic: if a div contains any block-level child, just unwrap
+            # (the children carry their own structure). Otherwise treat as a
+            # paragraph.
+            has_block_child = any(
+                getattr(c, "name", None)
+                in {"h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "table", "blockquote", "div"}
+                for c in tag.children
+            )
+            if has_block_child:
+                tag.unwrap()
+            else:
+                tag.name = "p"
+                tag.attrs = {}
+            continue
+        if tag.name in ALLOWED_TAGS:
+            if tag.name == "a":
+                href = tag.get("href")
+                tag.attrs = {"href": href} if href else {}
+            else:
+                tag.attrs = {}
         else:
-            tag.attrs = {}
-    return str(soup)
+            tag.unwrap()
+
+    # Drop empty paragraphs left over from cleanup
+    for p in soup.find_all("p"):
+        if not p.get_text(strip=True):
+            p.decompose()
+
+    return str(soup).strip()
 
 
 SYSTEM = (

@@ -21,9 +21,32 @@ class FusionIn(BaseModel):
     folder_id: UUID | None = None
 
 
+class FusionEstimateIn(BaseModel):
+    sources: list[str]
+
+
+class FusionEstimateOut(BaseModel):
+    sources: int
+    chars_total: int
+    low: float
+    high: float
+
+
 class FusionOut(BaseModel):
     content_id: UUID
     cost: float
+
+
+@router.post("/estimate", response_model=FusionEstimateOut)
+async def estimate_fusion(payload: FusionEstimateIn) -> FusionEstimateOut:
+    from app.services import cost as cost_svc
+    rng = cost_svc.estimate_fusion(payload.sources)
+    return FusionEstimateOut(
+        sources=len([s for s in payload.sources if s.strip()]),
+        chars_total=sum(len(s) for s in payload.sources),
+        low=rng.low,
+        high=rng.high,
+    )
 
 
 @router.post("", response_model=FusionOut, status_code=status.HTTP_201_CREATED)

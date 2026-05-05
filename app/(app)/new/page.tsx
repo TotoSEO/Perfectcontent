@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
 import { ContentType, Domain, Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
+import { CountryPicker } from "@/components/CountryPicker";
 
 type Bucket = { type: ContentType; label: string; hint: string; emoji: string; color: string };
 
@@ -334,23 +335,11 @@ export default function NewContentPage() {
           <HelpIcon content="Réglages appliqués à tous les mots-clés du lot." />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Location code (Google)" help="Code DataForSEO. France=2250, Belgique=2056, Suisse=2756, USA=2840, Canada=2124.">
-            <input
-              type="number"
-              value={locationCode}
-              onChange={(e) => setLocationCode(Number(e.target.value))}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-            />
-          </Field>
-          <Field label="Langue" help="Code ISO de la langue (fr, en, es, de…).">
-            <input
-              value={languageCode}
-              onChange={(e) => setLanguageCode(e.target.value)}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-            />
-          </Field>
-        </div>
+        <CountryPicker
+          countryCode={locationCode}
+          languageCode={languageCode}
+          onChange={(c, l) => { setLocationCode(c); setLanguageCode(l); }}
+        />
 
         <Field label="Dossier de classement" help="Tous les contenus du lot iront dans ce dossier.">
           <select

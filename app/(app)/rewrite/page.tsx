@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
 import { ContentType, Domain, Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { RichTextarea } from "@/components/RichTextarea";
+import { CountryPicker } from "@/components/CountryPicker";
 
 const CONTENT_TYPES: { value: ContentType; label: string }[] = [
   { value: "blog", label: "Article de blog" },
@@ -31,10 +32,41 @@ export default function RewritePage() {
   const [source, setSource] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<{ low: number; high: number; source_chars: number } | null>(null);
 
   const readyDomains = (domains || []).filter((d) => d.status === "ready");
   const sourceWords = source.replace(/<[^>]+>/g, "").trim().split(/\s+/).filter(Boolean).length;
   const ready = !!keyword.trim() && sourceWords >= 100;
+
+  useEffect(() => {
+    if (sourceWords < 100) {
+      setEstimate(null);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const e = await api<{ low: number; high: number; source_chars: number }>(
+          "/api/jobs/rewrite/estimate",
+          {
+            method: "POST",
+            json: {
+              keyword: keyword || "test",
+              source_content: source,
+              content_type: contentType,
+              location_code: locationCode,
+              language_code: languageCode,
+              internal_linking: internalLinking && !!domainId,
+            },
+          }
+        );
+        setEstimate(e);
+      } catch {
+        setEstimate(null);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source.length, internalLinking, domainId]);
 
   async function submit() {
     if (!ready) return;
@@ -101,23 +133,11 @@ export default function RewritePage() {
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Location code" help="Code DataForSEO. France=2250, Belgique=2056, Suisse=2756.">
-            <input
-              type="number"
-              value={locationCode}
-              onChange={(e) => setLocationCode(Number(e.target.value))}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-            />
-          </Field>
-          <Field label="Langue">
-            <input
-              value={languageCode}
-              onChange={(e) => setLanguageCode(e.target.value)}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-            />
-          </Field>
-        </div>
+        <CountryPicker
+          countryCode={locationCode}
+          languageCode={languageCode}
+          onChange={(c, l) => { setLocationCode(c); setLanguageCode(l); }}
+        />
 
         <Field label="Dossier (optionnel)">
           <select
@@ -196,10 +216,26 @@ export default function RewritePage() {
       )}
 
       <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 flex items-center justify-between gap-3 sticky bottom-3 backdrop-blur">
-        <div className="text-sm text-zinc-400">
-          {ready
-            ? "Le pipeline va analyser la SERP puis réécrire ton contenu (~1 min)."
-            : "Renseigne le mot-clé et colle un contenu de 100+ mots."}
+        <div className="text-sm">
+          {!ready ? (
+            <span className="text-zinc-500">
+              Renseigne le mot-clé et colle un contenu de 100+ mots.
+            </span>
+          ) : (
+            <>
+              <div className="font-medium">
+                Réécriture prête à lancer
+              </div>
+              <div className="text-xs text-zinc-500 mt-0.5">
+                Pipeline complet (SERP → analyse → réécriture) ~1 min
+                {estimate && (
+                  <>
+                    {" "}· estimation <strong className="text-zinc-300">${estimate.low.toFixed(3)}</strong> – <strong className="text-zinc-300">${estimate.high.toFixed(3)}</strong>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
         <button
           disabled={!ready || busy}

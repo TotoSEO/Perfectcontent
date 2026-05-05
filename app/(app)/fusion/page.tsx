@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
 import { Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { RichTextarea } from "@/components/RichTextarea";
+
+type Estimate = { sources: number; chars_total: number; low: number; high: number };
 
 type Source = { id: string; html: string };
 
@@ -23,8 +25,29 @@ export default function FusionPage() {
   const [sources, setSources] = useState<Source[]>([newSource(), newSource()]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
 
   const validSources = sources.filter((s) => s.html.trim().length > 50);
+
+  useEffect(() => {
+    if (validSources.length < 2) {
+      setEstimate(null);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const e = await api<Estimate>("/api/fusion/estimate", {
+          method: "POST",
+          json: { sources: validSources.map((s) => s.html) },
+        });
+        setEstimate(e);
+      } catch {
+        setEstimate(null);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validSources.map((s) => s.html.length).join(",")]);
 
   function setSrc(id: string, html: string) {
     setSources((prev) => prev.map((s) => (s.id === id ? { ...s, html } : s)));
@@ -154,12 +177,17 @@ export default function FusionPage() {
               Colle au moins 2 contenus (minimum ~50 caractères chacun) pour activer la fusion.
             </span>
           ) : (
-            <span className="font-medium">
-              {validSources.length} contenu{validSources.length > 1 ? "s" : ""} prêt{validSources.length > 1 ? "s" : ""} à fusionner
-              <span className="text-zinc-500 ml-2 text-xs">
-                · ~$0.05-0.15 selon la longueur
-              </span>
-            </span>
+            <>
+              <div className="font-medium">
+                {validSources.length} contenu{validSources.length > 1 ? "s" : ""} prêt{validSources.length > 1 ? "s" : ""} à fusionner
+              </div>
+              {estimate && (
+                <div className="text-xs text-zinc-400 mt-0.5">
+                  Estimation : <strong className="text-zinc-200">${estimate.low.toFixed(3)}</strong> – <strong className="text-zinc-200">${estimate.high.toFixed(3)}</strong>
+                  <span className="text-zinc-600 ml-1">· {estimate.chars_total.toLocaleString()} caractères en entrée</span>
+                </div>
+              )}
+            </>
           )}
         </div>
         <button
