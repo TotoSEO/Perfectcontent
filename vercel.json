@@ -4,10 +4,15 @@
   "framework": "nextjs",
   "functions": {
     "api/index.py": {
+      "runtime": "@vercel/python@4.3.1",
       "includeFiles": "backend/**"
+    },
+    "api/ping.py": {
+      "runtime": "@vercel/python@4.3.1"
     }
   },
   "rewrites": [
+    { "source": "/srv/diag", "destination": "/api/ping.py" },
     { "source": "/srv/(.*)", "destination": "/api/index.py" },
     { "source": "/healthz/(.*)", "destination": "/api/index.py" }
   ]
