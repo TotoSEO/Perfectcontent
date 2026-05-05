@@ -5,19 +5,49 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
 import { ContentType, Domain, Folder } from "@/lib/types";
+import { HelpIcon } from "@/components/Tooltip";
 
-const CONTENT_TYPES: { value: ContentType; label: string }[] = [
-  { value: "blog", label: "Article de blog" },
-  { value: "category", label: "Catégorie produit" },
-  { value: "product", label: "Fiche produit" },
-  { value: "service_lp", label: "Service / Landing page" },
+type Bucket = {
+  type: ContentType;
+  label: string;
+  hint: string;
+  emoji: string;
+};
+
+const BUCKETS: Bucket[] = [
+  {
+    type: "blog",
+    label: "Articles de blog",
+    hint: "Contenu informationnel : guides, comparatifs, tutoriels.",
+    emoji: "📝",
+  },
+  {
+    type: "category",
+    label: "Catégories produit",
+    hint: "Pages de listing e-commerce avec critères de choix.",
+    emoji: "🗂️",
+  },
+  {
+    type: "product",
+    label: "Fiches produit",
+    hint: "Description orientée décision d'achat avec FAQ courte.",
+    emoji: "🛒",
+  },
+  {
+    type: "service_lp",
+    label: "Pages service / Landing",
+    hint: "Promesse + bénéfices + preuves, structurée pour la conversion.",
+    emoji: "🎯",
+  },
 ];
 
-type Row = { id: string; keyword: string; content_type: ContentType };
 type Estimate = { items: number; low_total: number; high_total: number };
 
-function newRow(content_type: ContentType = "blog"): Row {
-  return { id: crypto.randomUUID(), keyword: "", content_type };
+function parseLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 }
 
 export default function NewContentPage() {
@@ -25,7 +55,12 @@ export default function NewContentPage() {
   const { data: domains } = useSWR<Domain[]>("/api/domains", fetcher);
   const { data: folders } = useSWR<Folder[]>("/api/folders", fetcher);
 
-  const [rows, setRows] = useState<Row[]>([newRow()]);
+  const [texts, setTexts] = useState<Record<ContentType, string>>({
+    blog: "",
+    category: "",
+    product: "",
+    service_lp: "",
+  });
   const [locationCode, setLocationCode] = useState(2250);
   const [languageCode, setLanguageCode] = useState("fr");
   const [domainId, setDomainId] = useState<string>("");
@@ -35,15 +70,19 @@ export default function NewContentPage() {
   const [costCap, setCostCap] = useState<number | "">(1.0);
 
   const [estimate, setEstimate] = useState<Estimate | null>(null);
-  const [pasteOpen, setPasteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const readyDomains = (domains || []).filter((d) => d.status === "ready");
-  const validRows = rows.filter((r) => r.keyword.trim().length > 0);
+
+  const items = (Object.keys(texts) as ContentType[]).flatMap((type) =>
+    parseLines(texts[type]).map((keyword) => ({ keyword, content_type: type }))
+  );
+  const totalCount = items.length;
+  const perBucket = BUCKETS.map((b) => ({ ...b, count: parseLines(texts[b.type]).length }));
 
   useEffect(() => {
-    if (validRows.length === 0) {
+    if (totalCount === 0) {
       setEstimate(null);
       return;
     }
@@ -52,10 +91,7 @@ export default function NewContentPage() {
         const e = await api<Estimate>("/api/jobs/batch/estimate", {
           method: "POST",
           json: {
-            items: validRows.map((r) => ({
-              keyword: r.keyword.trim(),
-              content_type: r.content_type,
-            })),
+            items,
             location_code: locationCode,
             language_code: languageCode,
             domain_id: domainId || null,
@@ -68,66 +104,29 @@ export default function NewContentPage() {
       } catch {
         setEstimate(null);
       }
-    }, 300);
+    }, 350);
     return () => clearTimeout(t);
-  }, [
-    JSON.stringify(validRows),
-    locationCode,
-    languageCode,
-    domainId,
-    internalLinking,
-    autoValidate,
-  ]);
-
-  function updateRow(id: string, patch: Partial<Row>) {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }
-  function removeRow(id: string) {
-    setRows((prev) => (prev.length === 1 ? prev : prev.filter((r) => r.id !== id)));
-  }
-  function addRow() {
-    setRows((prev) => [...prev, newRow(prev.at(-1)?.content_type)]);
-  }
-  function pasteBulk(text: string) {
-    const newRows: Row[] = [];
-    for (const line of text.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      // Accept "keyword" or "keyword,type" or "keyword;type"
-      const [kw, type] = trimmed.split(/[;,]\s*/);
-      const ctype = (CONTENT_TYPES.find((c) => c.value === type)?.value ?? "blog") as ContentType;
-      newRows.push({ id: crypto.randomUUID(), keyword: kw.trim(), content_type: ctype });
-    }
-    if (newRows.length > 0) {
-      setRows(newRows);
-      setPasteOpen(false);
-    }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalCount, locationCode, languageCode, domainId, internalLinking, autoValidate]);
 
   async function submit() {
-    if (validRows.length === 0) return;
+    if (totalCount === 0) return;
     setBusy(true);
     setErr(null);
     try {
-      const res = await api<{ batch_id: string; jobs: { id: string }[] }>(
-        "/api/jobs/batch",
-        {
-          method: "POST",
-          json: {
-            items: validRows.map((r) => ({
-              keyword: r.keyword.trim(),
-              content_type: r.content_type,
-            })),
-            location_code: locationCode,
-            language_code: languageCode,
-            domain_id: domainId || null,
-            folder_id: folderId || null,
-            internal_linking: internalLinking && !!domainId,
-            auto_validate_blueprint: autoValidate,
-            cost_cap: costCap === "" ? null : Number(costCap),
-          },
-        }
-      );
+      const res = await api<{ batch_id: string }>("/api/jobs/batch", {
+        method: "POST",
+        json: {
+          items,
+          location_code: locationCode,
+          language_code: languageCode,
+          domain_id: domainId || null,
+          folder_id: folderId || null,
+          internal_linking: internalLinking && !!domainId,
+          auto_validate_blueprint: autoValidate,
+          cost_cap: costCap === "" ? null : Number(costCap),
+        },
+      });
       router.push(`/batches/${res.batch_id}`);
     } catch (e) {
       setErr(String(e));
@@ -136,74 +135,62 @@ export default function NewContentPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-5xl">
+      <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Nouveau lot de contenus</h1>
-        <button
-          onClick={() => setPasteOpen((v) => !v)}
-          className="text-xs text-accent-500 hover:underline"
-        >
-          {pasteOpen ? "Fermer" : "Coller depuis CSV / liste"}
-        </button>
+        <p className="text-sm text-zinc-500">
+          Colle tes mots-clés dans la catégorie correspondante. Un mot-clé par ligne.
+          Toutes les catégories sont lancées dans le même lot.
+        </p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {BUCKETS.map((b) => {
+          const count = parseLines(texts[b.type]).length;
+          return (
+            <div
+              key={b.type}
+              className={`bg-ink-900 border rounded-xl overflow-hidden transition ${
+                count > 0 ? "border-accent-500/60" : "border-ink-800"
+              }`}
+            >
+              <div className="flex items-center justify-between px-4 py-2 border-b border-ink-800 bg-ink-900/60">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{b.emoji}</span>
+                  <span className="font-medium text-sm">{b.label}</span>
+                  <HelpIcon content={b.hint} />
+                </div>
+                <span className="text-xs text-zinc-500 tabular-nums">
+                  {count > 0
+                    ? `${count} mot${count > 1 ? "s" : ""}-clé${count > 1 ? "s" : ""}`
+                    : "—"}
+                </span>
+              </div>
+              <textarea
+                value={texts[b.type]}
+                onChange={(e) => setTexts({ ...texts, [b.type]: e.target.value })}
+                rows={6}
+                placeholder={`un mot-clé par ligne, ex:\nmeilleure cafetière à grain\nfiltre eau pas cher`}
+                className="w-full bg-ink-900 px-4 py-3 text-sm font-mono leading-relaxed focus:outline-none resize-y min-h-[140px]"
+              />
+            </div>
+          );
+        })}
       </div>
 
-      {pasteOpen && (
-        <PasteArea onApply={pasteBulk} onCancel={() => setPasteOpen(false)} />
-      )}
-
-      <div className="bg-ink-900 border border-ink-800 rounded-xl">
-        <div className="grid grid-cols-[1fr_180px_40px] text-xs uppercase tracking-wider text-zinc-500 px-4 py-2 border-b border-ink-800">
-          <span>Mot-clé</span>
-          <span>Type</span>
-          <span></span>
+      <section className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm uppercase tracking-wider text-zinc-500">
+            Paramètres communs au lot
+          </h2>
+          <HelpIcon content="Ces réglages s'appliquent à tous les mots-clés du lot." />
         </div>
-        {rows.map((r) => (
-          <div
-            key={r.id}
-            className="grid grid-cols-[1fr_180px_40px] gap-2 px-4 py-2 border-b border-ink-800 last:border-0"
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field
+            label="Location code (Google)"
+            help="Code DataForSEO du pays/région ciblé. France = 2250, Belgique = 2056, Suisse = 2756, USA = 2840, Canada = 2124."
           >
-            <input
-              value={r.keyword}
-              onChange={(e) => updateRow(r.id, { keyword: e.target.value })}
-              placeholder="ex: meilleure cafetière à grain"
-              className="bg-ink-800 border border-ink-700 rounded px-2 py-1.5 text-sm"
-            />
-            <select
-              value={r.content_type}
-              onChange={(e) => updateRow(r.id, { content_type: e.target.value as ContentType })}
-              className="bg-ink-800 border border-ink-700 rounded px-2 py-1.5 text-sm"
-            >
-              {CONTENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => removeRow(r.id)}
-              disabled={rows.length === 1}
-              className="text-zinc-500 hover:text-red-400 disabled:opacity-30 text-lg"
-              title="Retirer"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={addRow}
-          className="w-full text-sm text-accent-500 hover:bg-ink-800/50 py-2"
-        >
-          + Ajouter un mot-clé
-        </button>
-      </div>
-
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-          Paramètres communs
-        </h2>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Location code (DataForSEO)">
             <input
               type="number"
               value={locationCode}
@@ -211,7 +198,7 @@ export default function NewContentPage() {
               className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
             />
           </Field>
-          <Field label="Langue">
+          <Field label="Langue" help="Code ISO de la langue (fr, en, es, de…).">
             <input
               value={languageCode}
               onChange={(e) => setLanguageCode(e.target.value)}
@@ -220,7 +207,10 @@ export default function NewContentPage() {
           </Field>
         </div>
 
-        <Field label="Dossier de classement">
+        <Field
+          label="Dossier de classement"
+          help="Tous les contenus du lot iront dans ce dossier. Crée-en un dans l'onglet Dossiers."
+        >
           <select
             value={folderId}
             onChange={(e) => setFolderId(e.target.value)}
@@ -235,7 +225,10 @@ export default function NewContentPage() {
           </select>
         </Field>
 
-        <Field label="Domaine cible (pour le maillage interne)">
+        <Field
+          label="Domaine cible"
+          help="Si tu sélectionnes un domaine déjà indexé, on insérera des liens internes vers ses pages dans tes contenus. Ajoute un domaine via l'onglet Domaines."
+        >
           <select
             value={domainId}
             onChange={(e) => setDomainId(e.target.value)}
@@ -244,33 +237,44 @@ export default function NewContentPage() {
             <option value="">(aucun)</option>
             {readyDomains.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.hostname} ({d.pages_count} pages)
+                {d.hostname} — {d.pages_count} pages
               </option>
             ))}
           </select>
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex items-center gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
               disabled={!domainId}
               checked={internalLinking && !!domainId}
               onChange={(e) => setInternalLinking(e.target.checked)}
+              className="mt-0.5"
             />
-            Maillage interne automatique
+            <span>
+              Maillage interne automatique
+              <HelpIcon content="On cherche dans l'index du domaine choisi des pages sémantiquement proches de chaque section, et on insère des liens naturels avec ancre validée par Claude." />
+            </span>
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
               checked={autoValidate}
               onChange={(e) => setAutoValidate(e.target.checked)}
+              className="mt-0.5"
             />
-            Auto-valider les blueprints (sans pause)
+            <span>
+              Auto-valider les blueprints
+              <HelpIcon content="Si coché, le pipeline ne s'arrête pas pour te faire valider le plan d'article : il enchaîne directement la génération. Pratique en mode batch." />
+            </span>
           </label>
         </div>
 
-        <Field label="Plafond de coût par mot-clé (USD)">
+        <Field
+          label="Plafond de coût par mot-clé (USD)"
+          help="Si la génération d'un mot-clé dépasse ce montant, on l'arrête proprement (statut 'capped'). Garde-fou contre les surprises de facturation."
+        >
           <input
             type="number"
             step={0.05}
@@ -281,72 +285,75 @@ export default function NewContentPage() {
             className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
           />
         </Field>
+      </section>
+
+      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm">
+          {totalCount === 0 ? (
+            <span className="text-zinc-500">Aucun mot-clé pour l'instant.</span>
+          ) : (
+            <>
+              <div className="font-medium">
+                {totalCount} contenu{totalCount > 1 ? "s" : ""} à générer
+              </div>
+              <div className="text-xs text-zinc-500 mt-0.5">
+                {perBucket
+                  .filter((p) => p.count > 0)
+                  .map((p) => `${p.count} ${p.label.toLowerCase()}`)
+                  .join(" · ")}
+              </div>
+              {estimate && (
+                <div className="text-xs text-zinc-400 mt-0.5">
+                  Estimation :{" "}
+                  <strong className="text-zinc-200">
+                    ${estimate.low_total.toFixed(3)}
+                  </strong>{" "}
+                  –{" "}
+                  <strong className="text-zinc-200">
+                    ${estimate.high_total.toFixed(3)}
+                  </strong>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <button
+          disabled={totalCount === 0 || busy}
+          onClick={submit}
+          className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-5 py-2.5 rounded font-medium text-sm shadow"
+        >
+          {busy
+            ? "Lancement…"
+            : `Lancer la génération${totalCount > 1 ? ` (${totalCount})` : ""}`}
+        </button>
       </div>
 
-      {estimate && (
-        <div className="text-sm text-zinc-300">
-          {estimate.items} contenu{estimate.items > 1 ? "s" : ""} → estimation totale :{" "}
-          <strong>${estimate.low_total.toFixed(3)}</strong> –{" "}
-          <strong>${estimate.high_total.toFixed(3)}</strong>
+      {err && (
+        <div className="bg-red-900/30 border border-red-700 text-red-100 p-3 rounded-xl text-sm">
+          {err}
         </div>
       )}
-
-      {err && <p className="text-sm text-red-400">{err}</p>}
-
-      <button
-        disabled={validRows.length === 0 || busy}
-        onClick={submit}
-        className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-4 py-2 rounded font-medium"
-      >
-        {busy
-          ? "Lancement…"
-          : `Lancer ${validRows.length} génération${validRows.length > 1 ? "s" : ""}`}
-      </button>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  help?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="block space-y-1">
-      <span className="text-xs uppercase tracking-wider text-zinc-500">{label}</span>
+    <label className="block space-y-1.5">
+      <span className="text-xs uppercase tracking-wider text-zinc-500 inline-flex items-center">
+        {label}
+        {help && <HelpIcon content={help} />}
+      </span>
       {children}
     </label>
-  );
-}
-
-function PasteArea({
-  onApply,
-  onCancel,
-}: {
-  onApply: (text: string) => void;
-  onCancel: () => void;
-}) {
-  const [text, setText] = useState("");
-  return (
-    <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
-      <p className="text-xs text-zinc-500">
-        Une ligne par mot-clé. Format : <code>mot-clé</code> ou{" "}
-        <code>mot-clé, blog</code> / <code>mot-clé, product</code> / etc.
-      </p>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={6}
-        className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 text-sm font-mono"
-        placeholder={"meilleure cafetière, blog\nfiltre eau pas cher, product\nlocation utilitaire, service_lp"}
-      />
-      <div className="flex gap-2">
-        <button
-          onClick={() => onApply(text)}
-          className="bg-accent-600 hover:bg-accent-500 rounded px-3 py-1.5 text-sm"
-        >
-          Importer
-        </button>
-        <button onClick={onCancel} className="text-zinc-400 text-sm hover:underline">
-          Annuler
-        </button>
-      </div>
-    </div>
   );
 }

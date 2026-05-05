@@ -25,26 +25,44 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-600/20 via-transparent to-transparent pointer-events-none" />
       <form
         onSubmit={submit}
-        className="w-full max-w-sm space-y-4 bg-ink-900 border border-ink-800 rounded-xl p-6"
+        className="relative w-full max-w-sm space-y-4 bg-ink-900/80 backdrop-blur border border-ink-800 rounded-2xl p-8 shadow-xl"
       >
-        <h1 className="text-xl font-semibold">PerfectContent</h1>
-        <p className="text-sm text-zinc-400">Mot de passe d'accès</p>
-        <input
-          type="password"
-          autoFocus
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-        />
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        <div className="text-center">
+          <div className="text-3xl mb-2">✨</div>
+          <h1 className="text-2xl font-semibold">PerfectContent</h1>
+          <p className="text-xs text-zinc-500 mt-1 uppercase tracking-wider">
+            Pipeline SEO single-user
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] uppercase tracking-wider text-zinc-500 block">
+            Mot de passe d'accès
+          </label>
+          <input
+            type="password"
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2.5 focus:outline-none focus:border-accent-500"
+          />
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-300 bg-red-900/30 border border-red-700/40 rounded px-3 py-2">
+            {error}
+          </div>
+        )}
+
         <button
-          disabled={loading}
-          className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 rounded px-3 py-2 font-medium"
+          disabled={loading || !password}
+          className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 rounded-lg px-3 py-2.5 font-medium shadow-md shadow-accent-500/20"
         >
-          {loading ? "..." : "Entrer"}
+          {loading ? "Connexion…" : "Entrer"}
         </button>
       </form>
     </div>

@@ -4,8 +4,33 @@
 
 html, body {
   @apply bg-ink-950 text-zinc-100 antialiased;
+  font-feature-settings: "ss01", "cv11";
 }
 
+* {
+  @apply selection:bg-accent-500/30 selection:text-white;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2f;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a42;
+}
+
+input::placeholder, textarea::placeholder {
+  @apply text-zinc-600;
+}
+
+/* TipTap editor body styling */
 .tt { @apply max-w-none text-zinc-100; }
 .tt h1 { @apply text-2xl font-semibold mt-2 mb-3; }
 .tt h2 { @apply text-xl font-semibold mt-6 mb-2; }
