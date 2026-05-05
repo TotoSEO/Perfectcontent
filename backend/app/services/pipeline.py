@@ -202,15 +202,19 @@ async def _step_serp(job_id: UUID) -> None:
     )
     await _add_cost(job_id, serp_result.cost + (serp.RELATED_COST if related else 0))
 
+    # Persist the PARSED SERP fields (organic_top7, paa, features) at top level
+    # of serp_raw — that's what _hydrate_serp / _step_scrape expect. Stash the
+    # full raw DataForSEO payload under "_dfs" for debugging if ever needed.
     sr = await _ensure_report(job_id)
     async with SessionLocal() as session:
         sr_db = await session.get(SemanticReport, sr.id)
         if sr_db is not None:
-            sr_db.serp_raw = serp_result.raw or {
+            sr_db.serp_raw = {
+                "keyword": serp_result.keyword,
                 "organic_top7": serp_result.organic_top7,
                 "paa": serp_result.paa,
                 "features": serp_result.features,
-                "keyword": serp_result.keyword,
+                "_dfs": serp_result.raw,
             }
             sr_db.related_keywords = [r.__dict__ for r in related]
             await session.commit()
