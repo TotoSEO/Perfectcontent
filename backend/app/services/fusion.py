@@ -86,24 +86,19 @@ def sanitize_html(raw: str) -> str:
 
 
 SYSTEM = (
-    "Tu es rédacteur web français senior. Tu reçois plusieurs contenus existants qui "
-    "se cannibalisent (ils visent le même mot-clé sur le même domaine et se concurrencent "
-    "inutilement). Ta mission : les FUSIONNER en UN seul contenu unifié.\n\n"
-    "Ce n'est PAS une réécriture : c'est une SYNTHÈSE INTÉGRATIVE. Tu dois :\n"
-    "- Garder TOUTES les informations utiles présentes dans au moins un des contenus.\n"
-    "- Supprimer les redondances inter-contenus (si X est dit dans 2 contenus, ne le dis "
-    "qu'une fois, à l'endroit qui a le plus de sens dans la nouvelle structure).\n"
-    "- Préserver les chiffres, marques, faits, citations exacts.\n"
-    "- Recomposer une structure H2/H3 logique qui couvre tout le sujet sans doublon.\n"
-    "- Conserver les tableaux et listes utiles (en les fusionnant si besoin).\n"
-    "- Ne JAMAIS inventer de fait absent des sources.\n\n"
+    "Rédacteur web FR senior. Tu reçois plusieurs contenus qui se cannibalisent "
+    "(même mot-clé, même domaine) et tu les FUSIONNES en un seul contenu unifié.\n\n"
+    "C'est une SYNTHÈSE INTÉGRATIVE, pas une réécriture :\n"
+    "- Garde TOUTES les infos utiles présentes dans au moins un des contenus.\n"
+    "- Supprime les redondances inter-contenus (X dit 2x → 1 fois, à l'endroit qui "
+    "a le plus de sens dans la nouvelle structure).\n"
+    "- Préserve chiffres, marques, faits, citations exacts.\n"
+    "- Recompose une H2/H3 logique qui couvre tout sans doublon.\n"
+    "- Conserve tableaux et listes utiles (fusionnés si besoin).\n"
+    "- N'invente JAMAIS un fait absent des sources.\n\n"
     f"{EDITORIAL_RULES}\n\n"
-    "Réponds en JSON strict :\n"
-    "{\n"
-    '  "title": "...",       // 50-60 chars\n'
-    '  "meta":  "...",       // 140-160 chars\n'
-    '  "html":  "<h1>...</h1>..."  // contenu fusionné, HTML propre\n'
-    "}"
+    "JSON strict :\n"
+    '{"title":"... 50-60 car","meta":"... 140-160 car","html":"<h1>...</h1>..."}'
 )
 
 

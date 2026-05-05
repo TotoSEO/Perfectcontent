@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
@@ -8,7 +8,7 @@ import { Domain, Folder } from "@/lib/types";
 import { CountryPicker } from "@/components/CountryPicker";
 import { HelpIcon } from "@/components/Tooltip";
 
-// Mirror of backend/app/services/slug.slugify — kept simple, FR-friendly.
+// Mirror of backend/app/services/slug.slugify — keep in sync.
 const FILLER = new Set([
   "de","du","des","le","la","les","l","un","une","et","ou","à","a","au","aux",
   "en","dans","sur","pour","par","avec","sans",
@@ -49,8 +49,8 @@ export default function NewSiloPage() {
 
   const [locationCode, setLocationCode] = useState(2250);
   const [languageCode, setLanguageCode] = useState("fr");
-  const [domainId, setDomainId] = useState<string>("");
-  const [folderId, setFolderId] = useState<string>("");
+  const [domainId, setDomainId] = useState("");
+  const [folderId, setFolderId] = useState("");
   const [useHaiku, setUseHaiku] = useState(false);
   const [generateImage, setGenerateImage] = useState(false);
   const [costCap, setCostCap] = useState<number | "">(2.5);
@@ -62,7 +62,6 @@ export default function NewSiloPage() {
     () => satText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
     [satText],
   );
-
   const sats: SatRow[] = useMemo(
     () =>
       satKws.map((kw) => {
@@ -72,42 +71,34 @@ export default function NewSiloPage() {
       }),
     [satKws, overrides],
   );
-
-  const pillarSlug = useMemo(() => (usePillarUrl ? "" : slugify(pillarKw)), [pillarKw, usePillarUrl]);
+  const pillarSlug = usePillarUrl ? "" : slugify(pillarKw);
   const pillarFinalUrl = usePillarUrl ? pillarUrl : joinUrl(baseUrl, pillarSlug, trailing);
 
-  // Validation
   const baseUrlOk = /^https?:\/\/.+/i.test(baseUrl) && baseUrl !== "https://";
   const pillarOk = usePillarUrl
     ? /^https?:\/\/.+/i.test(pillarUrl)
     : pillarKw.trim().length > 0;
   const satsOk = sats.length >= 2;
-  const allSlugs = new Set<string>();
+  const slugSet = new Set<string>();
   let dupSlug: string | null = null;
   for (const s of sats) {
-    if (allSlugs.has(s.slug)) { dupSlug = s.slug; break; }
-    allSlugs.add(s.slug);
+    if (slugSet.has(s.slug)) { dupSlug = s.slug; break; }
+    slugSet.add(s.slug);
   }
-  if (!usePillarUrl && pillarSlug && allSlugs.has(pillarSlug)) dupSlug = pillarSlug;
-
+  if (!usePillarUrl && pillarSlug && slugSet.has(pillarSlug)) dupSlug = pillarSlug;
   const canSubmit = baseUrlOk && pillarOk && satsOk && !dupSlug && !busy;
 
-  // Cost estimate (rough, mirrors cost.py default ranges)
-  const perArticleLow = useHaiku ? 0.05 : 0.12;
-  const perArticleHigh = useHaiku ? 0.10 : 0.22;
   const totalCount = sats.length + (usePillarUrl ? 0 : 1);
-  const estLow = totalCount * perArticleLow;
-  const estHigh = totalCount * perArticleHigh;
+  const perLow = useHaiku ? 0.05 : 0.12;
+  const perHigh = useHaiku ? 0.10 : 0.22;
+  const estLow = totalCount * perLow;
+  const estHigh = totalCount * perHigh;
 
   function setSlug(kw: string, slug: string) {
     setOverrides((prev) => ({ ...prev, [kw]: slug }));
   }
   function resetSlug(kw: string) {
-    setOverrides((prev) => {
-      const out = { ...prev };
-      delete out[kw];
-      return out;
-    });
+    setOverrides((prev) => { const o = { ...prev }; delete o[kw]; return o; });
   }
 
   async function submit() {
@@ -140,47 +131,57 @@ export default function NewSiloPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <span className="text-accent-400">◧</span> Nouveau silo SEO
-        </h1>
-        <p className="text-sm text-zinc-500">
-          Une page pilier + N articles satellites, générés en parallèle, déjà maillés
-          entre eux. Le pilier introduit chaque sous-thème et pousse vers son article ;
-          chaque satellite pointe vers le pilier dans ses 3 premiers paragraphes et
-          tisse des liens contextuels naturels vers les voisins thématiques.
-        </p>
+    <div className="space-y-7 max-w-5xl animate-fadein">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="label mb-1.5">Création</div>
+          <h1 className="text-[28px] font-semibold tracking-tight flex items-center gap-2">
+            <span className="text-accent-400">◧</span> Nouveau silo SEO
+          </h1>
+          <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
+            Une page pilier (à générer ou existante) + N satellites, tous générés en
+            parallèle et déjà maillés. Le pilier introduit chaque satellite ; chaque
+            satellite pointe vers le pilier dans ses 3 premiers paragraphes et tisse
+            des liens contextuels naturels vers ses voisins.
+          </p>
+        </div>
       </header>
 
-      {/* Pillar */}
-      <section className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-          1. Page pilier
-        </h2>
-        <div className="flex gap-2 text-sm">
-          <button
-            onClick={() => setUsePillarUrl(false)}
-            className={`px-3 py-1.5 rounded border ${!usePillarUrl ? "border-accent-500 bg-accent-500/10 text-accent-200" : "border-ink-700 text-zinc-400"}`}
-          >
-            Générer le pilier
-          </button>
-          <button
-            onClick={() => setUsePillarUrl(true)}
-            className={`px-3 py-1.5 rounded border ${usePillarUrl ? "border-accent-500 bg-accent-500/10 text-accent-200" : "border-ink-700 text-zinc-400"}`}
-          >
-            Pilier déjà existant (URL)
-          </button>
+      {/* Live silo schema preview */}
+      <SiloSchema
+        pillarLabel={usePillarUrl ? "(URL existante)" : pillarKw || "—"}
+        satellites={sats.map((s) => s.kw)}
+      />
+
+      {/* PILIER */}
+      <Card title="Page pilier" stepIndex={1}>
+        <div className="inline-flex bg-[#0e0e11] border border-[#25252a] rounded-lg p-0.5 text-xs">
+          {[
+            { id: "kw", label: "Générer le pilier", val: false },
+            { id: "url", label: "Pilier déjà existant", val: true },
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              onClick={() => setUsePillarUrl(opt.val)}
+              className={`px-3 py-1.5 rounded-md transition-colors ${
+                usePillarUrl === opt.val
+                  ? "bg-accent-600/20 text-white"
+                  : "text-zinc-500 hover:text-zinc-200"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
 
         {!usePillarUrl ? (
-          <Field label="Mot-clé pilier (= la requête sur laquelle le silo doit ranker)" help="Ex : « meilleure cafetière ». Cet article sera plus long et présentera chacun des satellites.">
+          <Field label="Mot-clé pilier" help="La requête sur laquelle le silo doit ranker. Ex : « meilleure cafetière ».">
             <input
               type="text"
               value={pillarKw}
               onChange={(e) => setPillarKw(e.target.value)}
               placeholder="meilleure cafetière"
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             />
           </Field>
         ) : (
@@ -190,64 +191,64 @@ export default function NewSiloPage() {
               value={pillarUrl}
               onChange={(e) => setPillarUrl(e.target.value)}
               placeholder="https://striq.fr/blog/cafetiere/"
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 font-mono text-xs"
+              className="input font-mono text-xs"
             />
           </Field>
         )}
-      </section>
+      </Card>
 
-      {/* Base URL */}
-      <section className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-          2. URL de base des articles
-        </h2>
+      {/* URL DE BASE */}
+      <Card title="URL de base des articles" stepIndex={2}>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
-          <Field label="Base URL" help="Slug de chaque article ajouté après. Ex : https://striq.fr/blog/  →  https://striq.fr/blog/cafetiere-grain/">
+          <Field label="Base URL" help="Le slug de chaque article s'ajoute après. Ex : https://striq.fr/blog/  →  https://striq.fr/blog/cafetiere-grain/">
             <input
               type="url"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://striq.fr/blog/"
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 font-mono text-xs"
+              className="input font-mono text-xs"
             />
           </Field>
-          <label className="flex items-center gap-2 text-sm pb-2.5">
+          <label className="flex items-center gap-2 text-sm text-zinc-300 pb-2.5 whitespace-nowrap">
             <input
               type="checkbox"
               checked={trailing}
               onChange={(e) => setTrailing(e.target.checked)}
+              className="accent-accent-500"
             />
-            <code>/</code> à la fin de l'URL
+            <code className="bg-[#0e0e11] px-1.5 py-0.5 rounded text-xs">/</code>
+            à la fin
           </label>
         </div>
         {!usePillarUrl && pillarSlug && baseUrlOk && (
           <div className="text-xs text-zinc-500">
             URL pilier prévue :{" "}
-            <code className="text-accent-300">{pillarFinalUrl}</code>
+            <code className="text-accent-300 break-all">{pillarFinalUrl}</code>
           </div>
         )}
-      </section>
+      </Card>
 
-      {/* Satellites */}
-      <section className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-          3. Mots-clés satellites <span className="text-zinc-600">(un par ligne)</span>
-        </h2>
+      {/* SATELLITES */}
+      <Card
+        title={`Mots-clés satellites${sats.length ? ` (${sats.length})` : ""}`}
+        subtitle="un par ligne"
+        stepIndex={3}
+      >
         <textarea
           value={satText}
           onChange={(e) => setSatText(e.target.value)}
-          rows={6}
-          placeholder={"meilleure cafetière à grain\ncomment choisir une cafetière expresso\ncafetière filtre vs capsule\n..."}
-          className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 font-mono text-xs resize-y"
+          rows={5}
+          placeholder={"meilleure cafetière à grain\ncomment choisir une cafetière expresso\ncafetière filtre vs capsule"}
+          className="input font-mono text-xs leading-relaxed resize-y min-h-[100px]"
         />
         {sats.length > 0 && (
-          <div className="border border-ink-800 rounded overflow-hidden">
+          <div className="border border-[#25252a] rounded-lg overflow-hidden">
             <table className="w-full text-xs">
-              <thead className="text-[10px] uppercase tracking-wider text-zinc-500 bg-ink-900/80">
+              <thead className="text-[10px] uppercase tracking-[0.06em] text-zinc-500 bg-[#0e0e11]">
                 <tr>
-                  <th className="text-left px-3 py-2">Mot-clé</th>
-                  <th className="text-left px-3 py-2 w-1/3">Slug (éditable)</th>
-                  <th className="text-left px-3 py-2">URL générée</th>
+                  <th className="text-left px-3 py-2.5 w-1/3">Mot-clé</th>
+                  <th className="text-left px-3 py-2.5 w-[260px]">Slug (éditable)</th>
+                  <th className="text-left px-3 py-2.5">URL générée</th>
                 </tr>
               </thead>
               <tbody>
@@ -255,21 +256,24 @@ export default function NewSiloPage() {
                   const url = joinUrl(baseUrl, s.slug, trailing);
                   const dup = dupSlug === s.slug;
                   return (
-                    <tr key={s.kw} className="border-t border-ink-800">
+                    <tr
+                      key={s.kw}
+                      className="border-t border-[#1f1f24] hover:bg-[#1a1a1e]"
+                    >
                       <td className="px-3 py-2 text-zinc-200">{s.kw}</td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1">
                           <input
                             value={s.slug}
                             onChange={(e) => setSlug(s.kw, e.target.value)}
-                            className={`flex-1 bg-ink-800 border rounded px-2 py-1 font-mono ${
-                              dup ? "border-red-500 text-red-300" : "border-ink-700"
+                            className={`flex-1 bg-[#0e0e11] border rounded px-2 py-1 font-mono focus:outline-none focus:border-accent-500 ${
+                              dup ? "border-red-500 text-red-300" : "border-[#25252a]"
                             }`}
                           />
                           {!s.auto && (
                             <button
                               onClick={() => resetSlug(s.kw)}
-                              className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                              className="text-[10px] text-zinc-500 hover:text-zinc-300 px-1.5"
                               title="Restaurer le slug auto"
                             >
                               ↺
@@ -285,29 +289,26 @@ export default function NewSiloPage() {
             </table>
             {dupSlug && (
               <div className="px-3 py-2 text-xs text-red-300 bg-red-500/5 border-t border-red-500/20">
-                ⚠ Slug dupliqué : <code>{dupSlug}</code> — modifie-le pour qu'il soit unique.
+                ⚠ Slug dupliqué : <code className="bg-red-500/10 px-1 rounded">{dupSlug}</code> — modifie-le pour qu'il soit unique.
               </div>
             )}
           </div>
         )}
-      </section>
+      </Card>
 
-      {/* Common params */}
-      <section className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-          4. Paramètres communs
-        </h2>
+      {/* PARAMÈTRES COMMUNS */}
+      <Card title="Paramètres communs" stepIndex={4}>
         <CountryPicker
           countryCode={locationCode}
           languageCode={languageCode}
           onChange={(c, l) => { setLocationCode(c); setLanguageCode(l); }}
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Domaine indexé (optionnel)" help="Sert juste pour le contexte SERP — le maillage interne du silo s'auto-construit, indépendamment de l'index.">
+          <Field label="Domaine indexé" help="Optionnel. Sert juste pour le contexte SERP — le maillage interne du silo s'auto-construit indépendamment de l'index.">
             <select
               value={domainId}
               onChange={(e) => setDomainId(e.target.value)}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             >
               <option value="">(aucun)</option>
               {(domains || []).filter((d) => d.status === "ready").map((d) => (
@@ -319,7 +320,7 @@ export default function NewSiloPage() {
             <select
               value={folderId}
               onChange={(e) => setFolderId(e.target.value)}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             >
               <option value="">(aucun)</option>
               {folders?.map((f) => (
@@ -329,55 +330,59 @@ export default function NewSiloPage() {
           </Field>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={useHaiku} onChange={(e) => setUseHaiku(e.target.checked)} />
-            🪶 Haiku 4.5 (-66 % de coût)
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={generateImage} onChange={(e) => setGenerateImage(e.target.checked)} />
-            🖼️ Image par article
-          </label>
+          <ToggleRow
+            checked={useHaiku}
+            onChange={setUseHaiku}
+            label="🪶 Haiku 4.5"
+            sub="−66 % de coût"
+          />
+          <ToggleRow
+            checked={generateImage}
+            onChange={setGenerateImage}
+            label="🖼️ Image"
+            sub="par article"
+          />
           <Field label="Plafond / article ($)" help="Garde-fou par job. Au-delà, l'article s'arrête en 'capped'.">
             <input
               type="number"
               step={0.05}
               value={costCap}
               onChange={(e) => setCostCap(e.target.value === "" ? "" : Number(e.target.value))}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             />
           </Field>
         </div>
-      </section>
+      </Card>
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur">
+      {/* STICKY CTA */}
+      <div className="card p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)]">
         <div className="text-sm">
           {totalCount === 0 ? (
             <span className="text-zinc-500">Configure le pilier et au moins 2 satellites.</span>
           ) : (
             <>
-              <div className="font-medium">
+              <div className="font-medium tabular-nums">
                 {totalCount} contenu{totalCount > 1 ? "s" : ""} à générer
-                {usePillarUrl ? "" : " (1 pilier + " + sats.length + " satellites)"}
+                <span className="text-zinc-500">
+                  {!usePillarUrl ? ` · 1 pilier + ${sats.length} satellites` : ` · ${sats.length} satellites`}
+                </span>
               </div>
               <div className="text-xs text-zinc-400 mt-0.5">
                 Estimation totale :{" "}
-                <strong className="text-zinc-200">${estLow.toFixed(2)}</strong> –{" "}
+                <strong className="text-zinc-200">${estLow.toFixed(2)}</strong>
+                {" – "}
                 <strong className="text-zinc-200">${estHigh.toFixed(2)}</strong>
               </div>
             </>
           )}
         </div>
-        <button
-          disabled={!canSubmit}
-          onClick={submit}
-          className="bg-accent-600 hover:bg-accent-500 disabled:opacity-40 px-5 py-2.5 rounded font-medium text-sm"
-        >
+        <button disabled={!canSubmit} onClick={submit} className="btn-primary">
           {busy ? "Lancement…" : "Lancer le silo"}
         </button>
       </div>
 
       {err && (
-        <div className="bg-red-900/30 border border-red-700 text-red-100 p-3 rounded-xl text-sm">
+        <div className="card border-red-700/50 bg-red-900/20 text-red-100 p-3 text-sm">
           {err}
         </div>
       )}
@@ -385,14 +390,107 @@ export default function NewSiloPage() {
   );
 }
 
+function SiloSchema({ pillarLabel, satellites }: { pillarLabel: string; satellites: string[] }) {
+  const n = satellites.length;
+  return (
+    <div className="card px-6 py-5">
+      <div className="flex flex-col items-center gap-3">
+        <div className="px-4 py-2 rounded-lg border border-accent-500/40 bg-accent-500/10 text-accent-200 text-xs font-medium tracking-wide uppercase max-w-[400px] text-center">
+          ◉ Pilier · <span className="text-accent-100 font-semibold normal-case tracking-normal">{pillarLabel || "—"}</span>
+        </div>
+        <div className="text-zinc-700 text-xs">↓ {n || "?"} lien{n > 1 ? "s sortants" : " sortant"} contextuels</div>
+        <div className="flex flex-wrap gap-2 justify-center max-w-3xl">
+          {n === 0 ? (
+            <div className="text-zinc-600 text-xs italic">Ajoute des mots-clés satellites ↓</div>
+          ) : (
+            satellites.slice(0, 16).map((s, i) => (
+              <span
+                key={i}
+                className="px-2.5 py-1 rounded-md border border-blue-500/30 bg-blue-500/10 text-blue-200 text-[11px] truncate max-w-[180px]"
+                title={s}
+              >
+                ○ {s}
+              </span>
+            ))
+          )}
+          {n > 16 && <span className="text-xs text-zinc-500 self-center">+{n - 16} autres</span>}
+        </div>
+        {n >= 2 && (
+          <div className="text-[10px] text-zinc-600 italic">
+            Chaque satellite pointe vers le pilier (intro) + ses voisins thématiques contextuellement
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Card({
+  title,
+  subtitle,
+  stepIndex,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  stepIndex?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="card p-5 space-y-4">
+      <div className="flex items-baseline justify-between">
+        <h2 className="label flex items-center gap-2">
+          {stepIndex != null && (
+            <span className="w-5 h-5 rounded-full bg-[#1c1c20] border border-[#34343b] inline-flex items-center justify-center text-[10px] text-zinc-300">
+              {stepIndex}
+            </span>
+          )}
+          {title}
+          {subtitle && <span className="text-zinc-600 lowercase font-normal">— {subtitle}</span>}
+        </h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs uppercase tracking-wider text-zinc-500 inline-flex items-center">
+      <span className="label inline-flex items-center">
         {label}
         {help && <HelpIcon content={help} />}
       </span>
       {children}
+    </label>
+  );
+}
+
+function ToggleRow({
+  checked,
+  onChange,
+  label,
+  sub,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  sub?: string;
+}) {
+  return (
+    <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+      checked ? "border-accent-500/40 bg-accent-500/5" : "border-[#25252a] bg-[#0e0e11] hover:bg-[#1a1a1e]"
+    }`}>
+      <div className="flex flex-col">
+        <span className="text-sm text-zinc-200">{label}</span>
+        {sub && <span className="text-[10px] text-zinc-500">{sub}</span>}
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-accent-500"
+      />
     </label>
   );
 }

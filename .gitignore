@@ -36,3 +36,4 @@ Thumbs.db
 # Build artefacts
 backend/alembic/versions/__pycache__/
 .vercel
+tsconfig.tsbuildinfo

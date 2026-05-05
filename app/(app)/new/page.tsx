@@ -199,31 +199,35 @@ export default function NewContentPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Nouveau lot de contenus</h1>
-        <p className="text-sm text-zinc-500">
-          Étape 1 : colle tes mots-clés dans la bonne catégorie. Étape 2 : ajuste maillage / image
-          par mot-clé si besoin. Étape 3 : tu lances.
-        </p>
+    <div className="space-y-6 max-w-6xl animate-fadein">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="label mb-1.5">Création</div>
+          <h1 className="text-[28px] font-semibold tracking-tight">Nouveau lot de contenus</h1>
+          <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
+            Colle tes mots-clés dans la bonne catégorie, ajuste maillage / image par
+            mot-clé si besoin, et lance.
+          </p>
+        </div>
       </header>
 
       {/* Step 1 — buckets */}
-      <section className="space-y-2">
-        <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-          1. Coller les mots-clés
+      <section className="space-y-3">
+        <h2 className="label flex items-center gap-2">
+          <StepBadge n={1} /> Coller les mots-clés
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {BUCKETS.map((b) => {
             const count = parseLines(texts[b.type]).length;
+            const active = count > 0;
             return (
               <div
                 key={b.type}
-                className={`bg-ink-900 border rounded-xl overflow-hidden transition ${
-                  count > 0 ? b.color : "border-ink-800"
+                className={`card overflow-hidden transition-colors ${
+                  active ? b.color : ""
                 }`}
               >
-                <div className="flex items-center justify-between px-4 py-2 border-b border-ink-800 bg-ink-900/60">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-[#25252a] bg-[#0e0e11]/60">
                   <div className="flex items-center gap-2">
                     <span className="text-base">{b.emoji}</span>
                     <span className="font-medium text-sm">{b.label}</span>
@@ -238,9 +242,9 @@ export default function NewContentPage() {
                 <textarea
                   value={texts[b.type]}
                   onChange={(e) => setTexts({ ...texts, [b.type]: e.target.value })}
-                  rows={5}
-                  placeholder={`un mot-clé par ligne, ex:\nmeilleure cafetière à grain\nfiltre eau pas cher`}
-                  className="w-full bg-ink-900 px-4 py-3 text-sm font-mono leading-relaxed focus:outline-none resize-y min-h-[120px]"
+                  rows={3}
+                  placeholder={`un mot-clé par ligne…`}
+                  className="w-full bg-transparent px-4 py-2.5 text-sm font-mono leading-relaxed focus:outline-none resize-y min-h-[80px]"
                 />
               </div>
             );
@@ -250,59 +254,55 @@ export default function NewContentPage() {
 
       {/* Step 2 — per-row table */}
       {totalCount > 0 && (
-        <section className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-              2. Paramétrage par mot-clé
-              <HelpIcon content="Décoche maillage ou image individuellement si tu veux pas pour un kw donné. Les défauts (en haut) s'appliquent à toute nouvelle ligne." />
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="label flex items-center gap-2">
+              <StepBadge n={2} /> Paramétrage par mot-clé
+              <HelpIcon content="Décoche par ligne si tu veux exclure un mot-clé d'une option. Les défauts à droite s'appliquent à toute nouvelle ligne." />
             </h2>
-            <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
-              <span>Défauts :</span>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  disabled={!domainId}
-                  checked={defaultLinking && !!domainId}
-                  onChange={(e) => setDefaultLinking(e.target.checked)}
-                />
-                🔗 maillage
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={defaultImage}
-                  onChange={(e) => setDefaultImage(e.target.checked)}
-                />
-                🖼️ image (~$0.04 / kw)
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={defaultHaiku}
-                  onChange={(e) => setDefaultHaiku(e.target.checked)}
-                />
-                🪶 Haiku (-66 % coût)
-              </label>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-[10px] uppercase tracking-wider text-zinc-600 mr-1">défauts</span>
+              <DefaultPill
+                checked={defaultLinking && !!domainId}
+                disabled={!domainId}
+                onChange={setDefaultLinking}
+                emoji="🔗"
+                label="maillage"
+              />
+              <DefaultPill
+                checked={defaultImage}
+                onChange={setDefaultImage}
+                emoji="🖼️"
+                label="image"
+                hint="~$0.04 / kw"
+              />
+              <DefaultPill
+                checked={defaultHaiku}
+                onChange={setDefaultHaiku}
+                emoji="🪶"
+                label="Haiku"
+                hint="−66 %"
+              />
             </div>
           </div>
 
-          <div className="bg-ink-900 border border-ink-800 rounded-xl overflow-hidden">
+          <div className="card overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="text-[10px] uppercase tracking-wider text-zinc-500 bg-ink-900/80">
-                <tr className="border-b border-ink-800">
-                  <th className="text-left px-4 py-2">Mot-clé</th>
-                  <th className="text-left px-3 py-2 w-32">Type</th>
-                  <th className="text-center px-3 py-2 w-20">
+              <thead className="text-[10px] uppercase tracking-[0.06em] text-zinc-500 bg-[#0e0e11]">
+                <tr>
+                  <th className="text-left px-4 py-2.5">Mot-clé</th>
+                  <th className="text-left px-3 py-2.5 w-32">Type</th>
+                  <th className="text-center px-3 py-2.5 w-16">
                     🔗
-                    <HelpIcon side="bottom" content="Maillage interne automatique pour ce mot-clé." />
+                    <HelpIcon side="bottom" content="Maillage interne automatique vers le domaine indexé." />
                   </th>
-                  <th className="text-center px-3 py-2 w-20">
+                  <th className="text-center px-3 py-2.5 w-16">
                     🖼️
-                    <HelpIcon side="bottom" content="Génération d'image automatique pour ce mot-clé (~$0.04 si OpenAI)." />
+                    <HelpIcon side="bottom" content="Génération d'image automatique (~$0.04)." />
                   </th>
-                  <th className="text-center px-3 py-2 w-20">
+                  <th className="text-center px-3 py-2.5 w-16">
                     🪶
-                    <HelpIcon side="bottom" content="Coche pour générer ce contenu avec Claude Haiku 4.5 au lieu de Sonnet 4.6 (-66 % de coût, qualité éditoriale légèrement moindre — utile pour les contenus secondaires)." />
+                    <HelpIcon side="bottom" content="Génère avec Haiku 4.5 au lieu de Sonnet 4.6 (−66 % de coût, qualité éditoriale légèrement moindre)." />
                   </th>
                 </tr>
               </thead>
@@ -310,38 +310,39 @@ export default function NewContentPage() {
                 {rows.map((r) => {
                   const meta = TYPE_META[r.content_type];
                   return (
-                    <tr key={r.id} className="border-b border-ink-800 last:border-0 hover:bg-ink-800/30">
-                      <td className="px-4 py-2 font-mono text-xs">{r.keyword}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider border rounded-full px-2 py-0.5 ${meta.color}`}
-                        >
+                    <tr key={r.id} className="border-t border-[#1f1f24] hover:bg-[#1a1a1e]">
+                      <td className="px-4 py-2.5 font-mono text-xs">{r.keyword}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`chip ${meta.color}`}>
                           <span>{meta.emoji}</span>
                           {meta.label}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-2.5 text-center">
                         <input
                           type="checkbox"
                           disabled={!domainId}
                           checked={r.internal_linking && !!domainId}
                           onChange={(e) => setRow(r.id, { internal_linking: e.target.checked })}
+                          className="accent-accent-500"
                           title={!domainId ? "Ajoute un domaine cible pour activer le maillage" : ""}
                         />
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-2.5 text-center">
                         <input
                           type="checkbox"
                           checked={r.generate_image}
                           onChange={(e) => setRow(r.id, { generate_image: e.target.checked })}
+                          className="accent-accent-500"
                         />
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-2.5 text-center">
                         <input
                           type="checkbox"
                           checked={r.use_haiku}
                           onChange={(e) => setRow(r.id, { use_haiku: e.target.checked })}
-                          title="Génère ce contenu avec Haiku 4.5 (moins cher, légèrement moins fin)"
+                          className="accent-accent-500"
+                          title="Génère ce contenu avec Haiku 4.5"
                         />
                       </td>
                     </tr>
@@ -354,13 +355,11 @@ export default function NewContentPage() {
       )}
 
       {/* Step 3 — common params */}
-      <section className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-            3. Paramètres communs
-          </h2>
+      <section className="card p-5 space-y-4">
+        <h2 className="label flex items-center gap-2">
+          <StepBadge n={3} /> Paramètres communs
           <HelpIcon content="Réglages appliqués à tous les mots-clés du lot." />
-        </div>
+        </h2>
 
         <CountryPicker
           countryCode={locationCode}
@@ -368,73 +367,81 @@ export default function NewContentPage() {
           onChange={(c, l) => { setLocationCode(c); setLanguageCode(l); }}
         />
 
-        <Field label="Dossier de classement" help="Tous les contenus du lot iront dans ce dossier.">
-          <select
-            value={folderId}
-            onChange={(e) => setFolderId(e.target.value)}
-            className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-          >
-            <option value="">(aucun)</option>
-            {folders?.map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Dossier de classement" help="Tous les contenus du lot iront dans ce dossier.">
+            <select
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
+              className="input"
+            >
+              <option value="">(aucun)</option>
+              {folders?.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </Field>
 
-        <Field label="Domaine cible" help="Sélectionne un domaine indexé pour activer le maillage interne. Décoche par mot-clé dans le tableau ci-dessus si tu veux exclure certains contenus.">
-          <select
-            value={domainId}
-            onChange={(e) => setDomainId(e.target.value)}
-            className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-          >
-            <option value="">(aucun)</option>
-            {readyDomains.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.hostname} — {d.pages_count} pages
-              </option>
-            ))}
-          </select>
-        </Field>
+          <Field label="Domaine cible" help="Sélectionne un domaine indexé pour activer le maillage interne. Décoche par mot-clé dans le tableau ci-dessus si tu veux exclure certains contenus.">
+            <select
+              value={domainId}
+              onChange={(e) => setDomainId(e.target.value)}
+              className="input"
+            >
+              <option value="">(aucun)</option>
+              {readyDomains.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.hostname} — {d.pages_count} pages
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="flex items-start gap-2 text-sm">
+          <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+            autoValidate ? "border-accent-500/40 bg-accent-500/5" : "border-[#25252a] bg-[#0e0e11] hover:bg-[#1a1a1e]"
+          }`}>
+            <div className="flex flex-col">
+              <span className="text-sm text-zinc-200 inline-flex items-center">
+                Auto-valider les blueprints
+                <HelpIcon content="Si coché, le pipeline ne s'arrête pas pour te faire valider chaque plan d'article. Pratique en mode batch." />
+              </span>
+              <span className="text-[10px] text-zinc-500">pas d'arrêt avant la génération</span>
+            </div>
             <input
               type="checkbox"
               checked={autoValidate}
               onChange={(e) => setAutoValidate(e.target.checked)}
-              className="mt-0.5"
+              className="accent-accent-500"
             />
-            <span>
-              Auto-valider les blueprints
-              <HelpIcon content="Si coché, le pipeline ne s'arrête pas pour te faire valider chaque plan d'article. Pratique en mode batch." />
-            </span>
           </label>
-          <Field label="Plafond de coût / mot-clé (USD)" help="Garde-fou. Au-delà, le job s'arrête en 'capped'.">
+          <Field label="Plafond de coût / mot-clé ($)" help="Garde-fou. Au-delà, le job s'arrête en 'capped'.">
             <input
               type="number"
               step={0.05}
               value={costCap}
               onChange={(e) => setCostCap(e.target.value === "" ? "" : Number(e.target.value))}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             />
           </Field>
         </div>
       </section>
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur">
+      <div className="card p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)]">
         <div className="text-sm">
           {totalCount === 0 ? (
             <span className="text-zinc-500">Aucun mot-clé pour l'instant.</span>
           ) : (
             <>
-              <div className="font-medium">
+              <div className="font-medium tabular-nums">
                 {totalCount} contenu{totalCount > 1 ? "s" : ""} prêt{totalCount > 1 ? "s" : ""} à lancer
               </div>
               {estimate && (
                 <div className="text-xs text-zinc-400 mt-0.5">
                   Estimation totale :{" "}
-                  <strong className="text-zinc-200">${estimate.low_total.toFixed(3)}</strong> –{" "}
-                  <strong className="text-zinc-200">${estimate.high_total.toFixed(3)}</strong>
+                  <strong className="text-zinc-200">${estimate.low_total.toFixed(2)}</strong>
+                  {" – "}
+                  <strong className="text-zinc-200">${estimate.high_total.toFixed(2)}</strong>
                 </div>
               )}
             </>
@@ -443,16 +450,14 @@ export default function NewContentPage() {
         <button
           disabled={totalCount === 0 || busy}
           onClick={submit}
-          className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-5 py-2.5 rounded font-medium text-sm shadow"
+          className="btn-primary"
         >
-          {busy ? "Lancement…" : `Lancer la génération${totalCount > 1 ? ` (${totalCount})` : ""}`}
+          {busy ? "Lancement…" : `Lancer${totalCount > 1 ? ` (${totalCount})` : ""}`}
         </button>
       </div>
 
       {err && (
-        <div className="bg-red-900/30 border border-red-700 text-red-100 p-3 rounded-xl text-sm">
-          {err}
-        </div>
+        <div className="card border-red-700/50 bg-red-900/20 text-red-100 p-3 text-sm">{err}</div>
       )}
     </div>
   );
@@ -461,11 +466,54 @@ export default function NewContentPage() {
 function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs uppercase tracking-wider text-zinc-500 inline-flex items-center">
+      <span className="label inline-flex items-center">
         {label}
         {help && <HelpIcon content={help} />}
       </span>
       {children}
     </label>
+  );
+}
+
+function StepBadge({ n }: { n: number }) {
+  return (
+    <span className="w-5 h-5 rounded-full bg-[#1c1c20] border border-[#34343b] inline-flex items-center justify-center text-[10px] text-zinc-300">
+      {n}
+    </span>
+  );
+}
+
+function DefaultPill({
+  checked,
+  onChange,
+  emoji,
+  label,
+  hint,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  emoji: string;
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`text-xs px-2.5 py-1 rounded-md border inline-flex items-center gap-1.5 transition-colors ${
+        disabled
+          ? "border-[#25252a] text-zinc-700 bg-[#0e0e11] cursor-not-allowed"
+          : checked
+          ? "border-accent-500/40 bg-accent-500/10 text-accent-200"
+          : "border-[#25252a] bg-[#0e0e11] text-zinc-400 hover:bg-[#1a1a1e]"
+      }`}
+    >
+      <span>{emoji}</span>
+      <span>{label}</span>
+      {hint && <span className="text-[10px] text-zinc-500">{hint}</span>}
+    </button>
   );
 }
