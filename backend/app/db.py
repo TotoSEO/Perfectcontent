@@ -1,11 +1,13 @@
 """Async DB engine + session factory.
 
-Configured for Vercel serverless + Supabase Transaction pooler (port 6543):
-- NullPool : one connection per request, no shared pool across invocations
-- statement_cache_size=0 : pgBouncer in transaction mode rejects prepared statements
-- ssl='require' : the pooler enforces TLS without strict cert verification
-- short connect timeout : fail fast in serverless rather than holding the
-  function open
+Uses psycopg3 instead of asyncpg because asyncpg has known EBUSY issues
+in restricted serverless runtimes (Vercel Python). psycopg3 supports
+async natively via psycopg.AsyncConnection and works reliably.
+
+Configured for Vercel serverless + Supabase Transaction pooler:
+- NullPool : one connection per request, no shared pool
+- prepare_threshold=None : pgBouncer in transaction mode rejects prepared
+  statements; this disables psycopg's prepared statement cache
 """
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -18,23 +20,34 @@ from app.config import get_settings
 
 
 def _normalize_url(url: str) -> tuple[str, dict]:
-    """Strip any ?ssl= query param so we can pass it via connect_args instead.
+    """Normalize the DATABASE_URL for psycopg async usage.
 
-    asyncpg accepts SSL config via connect_args (`ssl='require'`), not the URL,
-    when used through SQLAlchemy. We pop it from the URL if present and turn
-    it into a connect_args entry."""
+    Accepts both `postgresql+asyncpg://` and `postgresql+psycopg://` scheme
+    prefixes (the user might have either set in Vercel env vars). Forces
+    `postgresql+psycopg://` since that's our driver now.
+
+    Pulls the ?ssl= / ?sslmode= query param out of the URL into connect_args
+    so psycopg gets a clean DSN.
+    """
+    if url.startswith("postgresql+asyncpg://"):
+        url = "postgresql+psycopg://" + url[len("postgresql+asyncpg://"):]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+
     parsed = urlparse(url)
     qs = parse_qs(parsed.query)
-    ssl_pref: str | None = None
+    sslmode: str | None = None
     if "ssl" in qs:
-        ssl_pref = qs.pop("ssl")[0]
+        v = qs.pop("ssl")[0].lower()
+        if v in {"require", "true", "1", "verify-full"}:
+            sslmode = "require"
     if "sslmode" in qs:
-        ssl_pref = ssl_pref or qs.pop("sslmode")[0]
+        sslmode = qs.pop("sslmode")[0]
     new_query = urlencode({k: v[0] for k, v in qs.items()})
     cleaned = urlunparse(parsed._replace(query=new_query))
     extra: dict = {}
-    if ssl_pref and ssl_pref.lower() in {"require", "true", "1", "verify-full", "prefer"}:
-        extra["ssl"] = "require"
+    if sslmode:
+        extra["sslmode"] = sslmode
     return cleaned, extra
 
 
@@ -45,9 +58,8 @@ engine = create_async_engine(
     _clean_url,
     poolclass=NullPool,
     connect_args={
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-        "timeout": 10,
+        # pgBouncer transaction-mode: disable psycopg prepared statement cache
+        "prepare_threshold": None,
         **_ssl_extra,
     },
 )
