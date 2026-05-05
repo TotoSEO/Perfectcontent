@@ -7,6 +7,7 @@ et on fusionne intelligemment via Claude.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 
@@ -106,7 +107,9 @@ SYSTEM = (
 )
 
 
-USER_TEMPLATE = """Mot-clé cible (pour calibrer le SEO) : {keyword}
+USER_TEMPLATE = """Date du jour : {today} (utilise cette date comme référence ; ne mentionne JAMAIS une année passée comme si c'était l'année courante).
+
+Mot-clé cible (pour calibrer le SEO) : {keyword}
 
 Contenus à fusionner ({n} sources) :
 
@@ -123,7 +126,12 @@ async def fuse_contents(*, keyword: str, sources: list[str]) -> FusionResult:
     blocks = "\n\n".join(
         f"────── SOURCE {i + 1} ──────\n{s}" for i, s in enumerate(cleaned)
     )
-    user = USER_TEMPLATE.format(keyword=keyword, n=len(cleaned), sources=blocks)
+    user = USER_TEMPLATE.format(
+        today=datetime.utcnow().strftime("%d %B %Y"),
+        keyword=keyword,
+        n=len(cleaned),
+        sources=blocks,
+    )
 
     resp = await llm.complete(system=SYSTEM, user=user, max_tokens=8000, temperature=0.5)
     data = llm.extract_json(resp.text)

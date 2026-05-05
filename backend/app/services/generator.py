@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from app.services import llm
@@ -59,10 +60,20 @@ chiffre / anecdote / contradiction. Surtout pas de phrase de contexte vague.
 CONCLUSION : pas de résumé. Termine par un conseil actionnable, une question ouverte
 ou une prise de position. JAMAIS "En résumé", "Pour conclure", "Dans l'ensemble".
 
+GRAS (obligatoire) : dans CHAQUE paragraphe de prose, mets en <strong> 4 à 8 mots
+contigus — la séquence qui porte l'information clé du paragraphe (l'élément qui
+répond au H2/H3 ou le chiffre / verdict / mot-clé central). UN seul groupe gras par
+paragraphe, pas plusieurs mots isolés. Le gras doit faire phrase quand on lit
+uniquement les portions en gras de la section.
+
+H3 (aération) : si une section H2 dépasse 4 paragraphes ou 350 mots, découpe-la
+avec 1-3 sous-titres <h3> pour respirer. Ne mets pas de H3 si la section est courte
+ou déjà claire.
+
 HTML : tags autorisés UNIQUEMENT h1, h2, h3, p, ul, ol, li, table, thead, tbody, tr,
 th, td, strong, em. IDs slugifiés sur tous les <h2>. Pas de div, classe ou style
-inline. Listes : 3-5 items, longueurs variées, pas de gras systématique. Section H2
-≥ 200 mots avant la suivante.
+inline. Listes : 3-5 items, longueurs variées, pas de gras systématique sur le
+premier mot. Section H2 ≥ 200 mots avant la suivante.
 
 Préfère "Et"/"Mais" en début de phrase à un connecteur formel.
 """
@@ -122,7 +133,13 @@ Réponds UNIQUEMENT en JSON strict (pas de markdown autour) avec ce schéma :
 Contraintes sur title_variants :
 - Exactement 3 variantes, distinctes (angle / formulation différente).
 - title : 50-60 caractères, mot-clé en début si naturel, pas de clickbait.
-- meta : 140-160 caractères, claire, contient le mot-clé une fois, finit sur un "pourquoi".
+- meta : 140-160 caractères. Doit fonctionner comme un MINI-RÉSUMÉ qui répond
+  presque au title : donne le verdict / la réponse principale en 1ère partie,
+  puis invite à lire ("En savoir plus.", "Détails ici.", "Voir le comparatif.").
+  Exemple : title "Webflow ou WordPress en 2026 ?" → meta "Webflow pour les
+  designers et freelances, WordPress pour les agences et l'e-commerce. Voir
+  le comparatif détaillé."
+  Pas de méta vague type "Découvrez tout sur X". Donne une vraie info.
 
 Contraintes sur html :
 - Inclure le H1 (= chosen_title de la 1ère variante par défaut).
@@ -140,7 +157,9 @@ Contraintes sur image_prompt :
 """
 
 
-USER_TEMPLATE = """Mot-clé cible : {keyword}
+USER_TEMPLATE = """Date du jour : {today} (utilise cette date comme référence si tu mentionnes une année — ne dis JAMAIS une année passée comme si c'était l'année courante).
+
+Mot-clé cible : {keyword}
 Intent : {intent}
 Type de contenu : {content_type}
 Domaine cible : {domain}
@@ -201,6 +220,7 @@ async def generate_content(
     )
 
     user = USER_TEMPLATE.format(
+        today=datetime.utcnow().strftime("%d %B %Y"),
         keyword=keyword,
         intent=intent,
         content_type=content_type,

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from bs4 import BeautifulSoup, Tag
@@ -109,7 +110,9 @@ REWRITE_SYSTEM = (
 )
 
 
-REWRITE_USER_TEMPLATE = """Mot-clé cible : {keyword}
+REWRITE_USER_TEMPLATE = """Date du jour : {today} (utilise cette date comme référence ; ne mentionne JAMAIS une année passée comme si c'était l'année courante).
+
+Mot-clé cible : {keyword}
 Intent : {intent}
 Domaine : {domain}
 Cible mots : {target_words}
@@ -157,6 +160,7 @@ async def rewrite_with_context(
         or "(non calculé)"
     )
     user = REWRITE_USER_TEMPLATE.format(
+        today=datetime.utcnow().strftime("%d %B %Y"),
         keyword=keyword,
         intent=intent,
         domain=domain or "(aucun)",
