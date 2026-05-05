@@ -37,7 +37,7 @@ def parse_page(url: str, html: str | None, markdown: str | None) -> ParsedPage:
 
 
 def _from_html(url: str, html: str) -> ParsedPage:
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text(" ", strip=True)
     schemas = _extract_jsonld(soup)
     schema_types = {_type(s) for s in schemas}

@@ -107,7 +107,7 @@ async def suggest_links(
 def insert_links(html: str, suggestions: list[LinkSuggestion]) -> str:
     if not suggestions:
         return html
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
     by_section = {s.section_id: s for s in suggestions}
 
     for h2 in soup.find_all("h2"):
@@ -157,7 +157,7 @@ async def _decide_anchor(
 
 
 def _extract_sections(html: str) -> list[dict]:
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
     sections: list[dict] = []
     for h2 in soup.find_all("h2"):
         sid = h2.get("id") or _slugify(h2.get_text())
@@ -212,7 +212,7 @@ def _root_soup(tag: Tag):
     cur = tag
     while cur.parent is not None:
         cur = cur.parent
-    return cur if isinstance(cur, BeautifulSoup) else BeautifulSoup("", "lxml")
+    return cur if isinstance(cur, BeautifulSoup) else BeautifulSoup("", "html.parser")
 
 
 def _slugify(text: str) -> str:

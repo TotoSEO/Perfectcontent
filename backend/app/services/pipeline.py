@@ -550,7 +550,7 @@ async def _step_score(job_id: UUID) -> None:
         ).scalar_one_or_none()
         expected_terms = list(sr.required_terms or []) if sr else []
 
-    plain = BeautifulSoup(content.html, "lxml").get_text(" ", strip=True)
+    plain = BeautifulSoup(content.html, "html.parser").get_text(" ", strip=True)
     score = await coverage.coverage_score(expected_terms=expected_terms, content_text=plain)
 
     async with SessionLocal() as session:
@@ -611,7 +611,7 @@ def _quick_image_prompt(blueprint: dict) -> str:
 
 
 def _html_to_markdown(html: str) -> str:
-    soup = BeautifulSoup(html or "", "lxml")
+    soup = BeautifulSoup(html or "", "html.parser")
     out: list[str] = []
     for el in soup.descendants:
         if not getattr(el, "name", None):

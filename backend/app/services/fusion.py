@@ -46,7 +46,7 @@ def sanitize_html(raw: str) -> str:
     """
     if not raw or not raw.strip():
         return ""
-    soup = BeautifulSoup(raw, "lxml")
+    soup = BeautifulSoup(raw, "html.parser")
 
     for tag in soup.find_all(True):
         if tag.name in DROP_TAGS:

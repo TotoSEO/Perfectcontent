@@ -182,7 +182,7 @@ async def rewrite_with_context(
 
 
 def _extract_section_html(full_html: str, section_id: str) -> str | None:
-    soup = BeautifulSoup(full_html, "lxml")
+    soup = BeautifulSoup(full_html, "html.parser")
     for h2 in soup.find_all("h2"):
         sid = h2.get("id") or _slugify(h2.get_text())
         if sid != section_id:
@@ -200,7 +200,7 @@ def _extract_section_html(full_html: str, section_id: str) -> str | None:
 
 
 def _list_other_sections(full_html: str, except_section_id: str) -> list[str]:
-    soup = BeautifulSoup(full_html, "lxml")
+    soup = BeautifulSoup(full_html, "html.parser")
     out: list[str] = []
     for h2 in soup.find_all("h2"):
         sid = h2.get("id") or _slugify(h2.get_text())
@@ -211,8 +211,8 @@ def _list_other_sections(full_html: str, except_section_id: str) -> list[str]:
 
 
 def _splice_section(full_html: str, section_id: str, new_section_html: str) -> str:
-    soup = BeautifulSoup(full_html, "lxml")
-    new_fragment = BeautifulSoup(new_section_html, "lxml")
+    soup = BeautifulSoup(full_html, "html.parser")
+    new_fragment = BeautifulSoup(new_section_html, "html.parser")
     new_h2 = new_fragment.find("h2")
     if new_h2 is None:
         return full_html
@@ -250,7 +250,7 @@ def _splice_section(full_html: str, section_id: str, new_section_html: str) -> s
 
 
 def _normalize_section(html: str, expected_id: str) -> str:
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
     h2 = soup.find("h2")
     if h2 is not None and not h2.get("id"):
         h2["id"] = expected_id
