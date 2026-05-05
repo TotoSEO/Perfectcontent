@@ -1,7 +1,6 @@
 fastapi>=0.110
 sqlalchemy[asyncio]>=2.0
 psycopg[binary]>=3.2
-pgvector>=0.2.5
 pydantic>=2.6
 pydantic-settings>=2.2
 httpx>=0.27
