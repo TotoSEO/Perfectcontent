@@ -6,13 +6,17 @@ html, body {
   @apply bg-ink-950 text-zinc-100 antialiased;
 }
 
-.tt {
-  @apply prose prose-invert max-w-none;
-}
-.tt h1 { @apply text-2xl font-semibold; }
-.tt h2 { @apply text-xl font-semibold mt-6; }
-.tt h3 { @apply text-lg font-semibold mt-4; }
-.tt p  { @apply leading-relaxed; }
+.tt { @apply max-w-none text-zinc-100; }
+.tt h1 { @apply text-2xl font-semibold mt-2 mb-3; }
+.tt h2 { @apply text-xl font-semibold mt-6 mb-2; }
+.tt h3 { @apply text-lg font-semibold mt-4 mb-2; }
+.tt p  { @apply leading-relaxed mb-3; }
 .tt a  { @apply text-accent-500 underline; }
-.tt table { @apply border-collapse w-full; }
+.tt ul { @apply list-disc pl-6 mb-3; }
+.tt ol { @apply list-decimal pl-6 mb-3; }
+.tt li { @apply mb-1; }
+.tt strong { @apply font-semibold; }
+.tt em { @apply italic; }
+.tt table { @apply border-collapse w-full mb-3; }
 .tt th, .tt td { @apply border border-ink-700 px-2 py-1; }
+.tt th { @apply font-semibold bg-ink-900; }
