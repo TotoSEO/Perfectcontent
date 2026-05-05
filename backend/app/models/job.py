@@ -25,6 +25,7 @@ class Job(Base):
         UUID(as_uuid=True), ForeignKey("domains.id"), nullable=True
     )
     internal_linking: Mapped[bool] = mapped_column(Boolean, default=False)
+    generate_image: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_validate_blueprint: Mapped[bool] = mapped_column(Boolean, default=False)
     batch_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True

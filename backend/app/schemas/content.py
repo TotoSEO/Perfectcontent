@@ -22,6 +22,7 @@ class ContentOut(BaseModel):
     html: str | None
     markdown: str | None
     image_url: str | None
+    image_prompt: str | None
     schema_recommendations: dict | None
     internal_links: list | None
     coverage_score: float | None

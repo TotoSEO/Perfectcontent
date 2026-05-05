@@ -78,6 +78,7 @@ export type Content = {
   html: string | null;
   markdown: string | null;
   image_url: string | null;
+  image_prompt: string | null;
   schema_recommendations: Record<string, unknown> | null;
   internal_links: InternalLink[] | null;
   coverage_score: number | null;

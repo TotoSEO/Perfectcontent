@@ -363,6 +363,7 @@ async def _step_blueprint(job_id: UUID) -> None:
         intent=intent,
         content_type=job.content_type,
         report=fake_report,
+        term_targets=list(sr.term_targets or []),
     )
     await _add_cost(job_id, bp.llm_cost)
 
@@ -391,10 +392,10 @@ async def _step_generate(job_id: UUID) -> None:
     required = list(sr.required_terms or [])
     entities = list(sr.entities or [])
     gaps = list(sr.content_gaps or [])
+    term_targets = list(sr.term_targets or [])
     domain_host = await _load_domain_host(job.domain_id) if job.domain_id else None
 
-    image_prompt = _quick_image_prompt(blueprint_dict)
-    gen_task = generator.generate_content(
+    generated = await generator.generate_content(
         keyword=job.keyword,
         intent=intent,
         content_type=job.content_type,
@@ -403,11 +404,9 @@ async def _step_generate(job_id: UUID) -> None:
         required_terms=required,
         entities=entities,
         content_gaps=gaps,
+        term_targets=term_targets,
     )
-    image_task = image.generate_image(image_prompt)
-    generated, img = await asyncio.gather(gen_task, image_task)
-
-    await _add_cost(job_id, generated.llm_cost + img.cost)
+    await _add_cost(job_id, generated.llm_cost)
 
     async with SessionLocal() as session:
         c = await session.get(Content, content.id)
@@ -419,8 +418,7 @@ async def _step_generate(job_id: UUID) -> None:
             c.html = generated.html
             c.markdown = _html_to_markdown(generated.html)
             c.schema_recommendations = generated.schema_recommendations
-            c.image_url = img.url
-            c.image_prompt = generated.image_prompt or image_prompt
+            c.image_prompt = generated.image_prompt or _quick_image_prompt(blueprint_dict)
             c.status = "generated"
             embed_text = (c.chosen_title or "") + " " + (c.keyword or "")
             if embed_text.strip():
@@ -431,9 +429,27 @@ async def _step_generate(job_id: UUID) -> None:
 
 
 async def _step_image(job_id: UUID) -> None:
-    """Image already generated in step `generate` (parallel with content).
-    Kept as a no-op step for symmetry with the documented pipeline."""
-    return
+    """Image step is opt-in. Default: do nothing — the prompt is stored on
+    contents.image_prompt and the user generates the image manually (or
+    triggers OpenAI/DALL-E from the content page if they want).
+
+    If a job has generate_image=True, fall back to the configured image
+    backend (Fal.ai or OpenAI). For now, always skip — the user will
+    drive image generation from the editor side."""
+    job = await _load_job(job_id)
+    if not getattr(job, "generate_image", False):
+        await log_step(job_id, "image", "skipped", {"reason": "image opt-in"})
+        return
+    content = await _load_content(job.content_id) if job.content_id else None
+    if content is None or not content.image_prompt:
+        return
+    img = await image.generate_image(content.image_prompt)
+    await _add_cost(job_id, img.cost)
+    async with SessionLocal() as session:
+        c = await session.get(Content, content.id)
+        if c is not None and img.url:
+            c.image_url = img.url
+            await session.commit()
 
 
 async def _step_link(job_id: UUID) -> None:

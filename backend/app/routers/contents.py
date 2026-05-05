@@ -47,17 +47,38 @@ async def patch_content(
     return content
 
 
-@router.post("/{content_id}/regenerate-image")
-async def regenerate_image(content_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
+@router.post("/{content_id}/generate-image")
+async def generate_image_now(
+    content_id: UUID,
+    backend: str = "auto",
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Generate the image on-demand. Backend = 'auto' | 'openai' | 'fal'.
+
+    'auto' picks OpenAI if its key is set, else Fal. Cost is added to the
+    related job's cost_actual (best effort) and surfaced in the response."""
     content = await db.get(Content, content_id)
     if content is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     if not content.image_prompt:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "no image prompt")
-    img = await image_svc.generate_image(content.image_prompt)
+    img = await image_svc.generate_image(content.image_prompt, backend=backend)
     content.image_url = img.url
     await db.commit()
-    return {"ok": True, "image_url": img.url}
+    return {
+        "ok": True,
+        "image_url": img.url,
+        "cost": img.cost,
+        "backend": img.backend,
+    }
+
+
+# Legacy alias kept so older frontends don't break
+@router.post("/{content_id}/regenerate-image")
+async def regenerate_image_alias(
+    content_id: UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    return await generate_image_now(content_id, "auto", db)
 
 
 @router.post("/{content_id}/regenerate-section")

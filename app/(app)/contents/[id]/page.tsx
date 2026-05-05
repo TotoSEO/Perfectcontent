@@ -10,6 +10,7 @@ import { LinkSuggestionsPanel } from "@/components/LinkSuggestionsPanel";
 import { CoverageBadge } from "@/components/CoverageBadge";
 import { SectionList } from "@/components/SectionList";
 import { SemanticScore } from "@/components/SemanticScore";
+import { ImagePanel } from "@/components/ImagePanel";
 import { useRouter } from "next/navigation";
 
 export default function ContentPage() {
@@ -57,11 +58,6 @@ export default function ContentPage() {
     } finally {
       setSaving(false);
     }
-  }
-
-  async function regenImage() {
-    await api(`/api/contents/${id}/regenerate-image`, { method: "POST" });
-    setTimeout(() => mutate(), 1500);
   }
 
   async function regenSection(sectionId: string) {
@@ -168,21 +164,12 @@ export default function ContentPage() {
       </div>
 
       <div className="col-span-1 space-y-4">
-        {content.image_url && (
-          <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
-            <img
-              src={content.image_url}
-              alt=""
-              className="w-full rounded border border-ink-800"
-            />
-            <button
-              onClick={regenImage}
-              className="text-xs text-accent-500 hover:underline"
-            >
-              Régénérer l'image
-            </button>
-          </div>
-        )}
+        <ImagePanel
+          contentId={id!}
+          imageUrl={content.image_url}
+          imagePrompt={content.image_prompt ?? null}
+          onUpdate={mutate}
+        />
         <SemanticScore contentId={id!} html={html} />
         <SectionList html={html} onRegenerate={regenSection} />
         <LinkSuggestionsPanel links={content.internal_links} />
