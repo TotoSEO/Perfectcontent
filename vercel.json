@@ -6,7 +6,7 @@
     {
       "src": "api/index.py",
       "use": "@vercel/python@4.3.1",
-      "config": { "includeFiles": "backend/**" }
+      "config": { "includeFiles": "backend/app/**" }
     },
     { "src": "api/ping.py", "use": "@vercel/python@4.3.1" }
   ],
