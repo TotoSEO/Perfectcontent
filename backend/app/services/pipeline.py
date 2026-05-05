@@ -160,7 +160,8 @@ async def run_step(job_id: UUID, step: str) -> dict[str, Any]:
     paused = False
     if step == PAUSE_AFTER:
         job = await _load_job(job_id)
-        if not job.auto_validate_blueprint:
+        # Rewrite mode has no editable blueprint, so don't pause
+        if not job.auto_validate_blueprint and job.mode != "rewrite":
             await _set_step(job_id, step, "paused")
             paused = True
             next_step = None
@@ -348,6 +349,22 @@ async def _step_blueprint(job_id: UUID) -> None:
     content = await _load_content(job.content_id) if job.content_id else None
     intent = (content.intent if content else None) or "informational"
 
+    # In rewrite mode, no need for a full structural blueprint — we just need a
+    # target_words derived from the source content. The rewrite prompt drives
+    # the structure itself.
+    if job.mode == "rewrite":
+        source_words = len((job.source_content or "").split())
+        target = max(int(source_words * 1.15), 800)
+        if content is not None:
+            async with SessionLocal() as session:
+                c = await session.get(Content, content.id)
+                if c is not None:
+                    c.blueprint = {"target_words": target, "mode": "rewrite"}
+                    if not c.intent:
+                        c.intent = intent
+                    await session.commit()
+        return
+
     # Re-construct a SemanticReport view for blueprint_svc.build_blueprint
     fake_report = analysis.SemanticReport(
         common_subthemes=list(sr.common_subthemes or []),
@@ -383,10 +400,6 @@ async def _step_generate(job_id: UUID) -> None:
     if content is None:
         raise RuntimeError("missing content row")
 
-    blueprint_dict: dict = content.blueprint or {}
-    if not blueprint_dict:
-        raise RuntimeError("blueprint not yet computed")
-
     intent = content.intent or "informational"
     sr = await _ensure_report(job_id)
     required = list(sr.required_terms or [])
@@ -395,30 +408,61 @@ async def _step_generate(job_id: UUID) -> None:
     term_targets = list(sr.term_targets or [])
     domain_host = await _load_domain_host(job.domain_id) if job.domain_id else None
 
-    generated = await generator.generate_content(
-        keyword=job.keyword,
-        intent=intent,
-        content_type=job.content_type,
-        domain=domain_host,
-        blueprint=blueprint_dict,
-        required_terms=required,
-        entities=entities,
-        content_gaps=gaps,
-        term_targets=term_targets,
-    )
-    await _add_cost(job_id, generated.llm_cost)
+    if job.mode == "rewrite":
+        # Rewrite-with-context flow: take the source content + SERP insights
+        from app.services import rewrite as rewrite_svc
+        source_html = job.source_content or ""
+        target_words = (content.blueprint or {}).get("target_words", 1500)
+        result = await rewrite_svc.rewrite_with_context(
+            keyword=job.keyword,
+            intent=intent,
+            domain=domain_host,
+            target_words=target_words,
+            source_html=source_html,
+            required_terms=required,
+            entities=entities,
+            content_gaps=gaps,
+            term_targets=term_targets,
+        )
+        title_variants = result.title_variants
+        html = result.html
+        schema_recos = result.schema_recommendations
+        image_prompt = result.image_prompt
+        cost = result.cost
+    else:
+        blueprint_dict: dict = content.blueprint or {}
+        if not blueprint_dict:
+            raise RuntimeError("blueprint not yet computed")
+        generated = await generator.generate_content(
+            keyword=job.keyword,
+            intent=intent,
+            content_type=job.content_type,
+            domain=domain_host,
+            blueprint=blueprint_dict,
+            required_terms=required,
+            entities=entities,
+            content_gaps=gaps,
+            term_targets=term_targets,
+        )
+        title_variants = generated.title_variants
+        html = generated.html
+        schema_recos = generated.schema_recommendations
+        image_prompt = generated.image_prompt or _quick_image_prompt(blueprint_dict)
+        cost = generated.llm_cost
+
+    await _add_cost(job_id, cost)
 
     async with SessionLocal() as session:
         c = await session.get(Content, content.id)
         if c is not None:
-            c.title_variants = generated.title_variants
-            if generated.title_variants:
-                c.chosen_title = generated.title_variants[0].get("title")
-                c.chosen_meta = generated.title_variants[0].get("meta")
-            c.html = generated.html
-            c.markdown = _html_to_markdown(generated.html)
-            c.schema_recommendations = generated.schema_recommendations
-            c.image_prompt = generated.image_prompt or _quick_image_prompt(blueprint_dict)
+            c.title_variants = title_variants
+            if title_variants:
+                c.chosen_title = title_variants[0].get("title")
+                c.chosen_meta = title_variants[0].get("meta")
+            c.html = html
+            c.markdown = _html_to_markdown(html)
+            c.schema_recommendations = schema_recos
+            c.image_prompt = image_prompt
             c.status = "generated"
             embed_text = (c.chosen_title or "") + " " + (c.keyword or "")
             if embed_text.strip():

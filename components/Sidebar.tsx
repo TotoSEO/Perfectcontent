@@ -8,7 +8,9 @@ type Item = { href: string; label: string; icon: string; tip?: string };
 
 const ITEMS: Item[] = [
   { href: "/dashboard", label: "Contenus", icon: "📄", tip: "Tous tes contenus générés." },
-  { href: "/new", label: "Nouveau lot", icon: "✨", tip: "Lancer une génération multi mots-clés." },
+  { href: "/new", label: "Nouveau lot", icon: "✨", tip: "Génération multi mots-clés." },
+  { href: "/rewrite", label: "Réécriture", icon: "♻️", tip: "Réécrire un contenu existant avec analyse SERP." },
+  { href: "/fusion", label: "Fusion", icon: "🧪", tip: "Fusionner 2+ contenus qui se cannibalisent." },
   { href: "/domains", label: "Domaines", icon: "🌐", tip: "Sites indexés pour le maillage interne." },
   { href: "/folders", label: "Dossiers", icon: "📁", tip: "Organiser par client / projet." },
   { href: "/console", label: "Console", icon: "🛠", tip: "Logs de debug." },

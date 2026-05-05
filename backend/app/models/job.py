@@ -27,6 +27,8 @@ class Job(Base):
     internal_linking: Mapped[bool] = mapped_column(Boolean, default=False)
     generate_image: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_validate_blueprint: Mapped[bool] = mapped_column(Boolean, default=False)
+    mode: Mapped[str] = mapped_column(String, nullable=False, default="standard")
+    source_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     batch_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True
     )

@@ -18,7 +18,9 @@ from app.schemas.job import (
     JobEstimateOut,
     JobOut,
     RegenerateSectionIn,
+    RewriteJobIn,
 )
+from app.services import fusion as fusion_sanitize  # for sanitize_html re-use
 from app.services import batch as batch_svc
 from app.services import cannibalization, cost
 from app.services import pipeline as pipeline_svc
@@ -95,6 +97,55 @@ async def batch_estimate(payload: JobBatchCreateIn) -> JobBatchEstimateOut:
         low_total=round(low, 4),
         high_total=round(high, 4),
     )
+
+
+@router.post("/rewrite", response_model=JobOut, status_code=status.HTTP_201_CREATED)
+async def create_rewrite_job(
+    payload: RewriteJobIn, db: AsyncSession = Depends(get_db)
+) -> Job:
+    """Create a rewrite job: SERP analysis + rewrite of an existing piece.
+
+    The frontend then drives this job through /api/jobs/{id}/step/{name} like
+    a normal job. Pipeline detects mode='rewrite' and branches accordingly:
+    - blueprint step produces only target_words (no full plan)
+    - generate step calls rewrite.rewrite_with_context() with source_content
+    """
+    rng = cost.estimate(
+        content_type=payload.content_type, internal_linking=payload.internal_linking
+    )
+    sanitized_source = fusion_sanitize.sanitize_html(payload.source_content)
+
+    content = Content(
+        folder_id=payload.folder_id,
+        domain_id=payload.domain_id,
+        keyword=payload.keyword,
+        content_type=payload.content_type,
+        status="analysis",
+    )
+    db.add(content)
+    await db.flush()
+
+    job = Job(
+        content_id=content.id,
+        keyword=payload.keyword,
+        content_type=payload.content_type,
+        location_code=payload.location_code,
+        language_code=payload.language_code,
+        domain_id=payload.domain_id,
+        internal_linking=payload.internal_linking,
+        auto_validate_blueprint=True,
+        mode="rewrite",
+        source_content=sanitized_source,
+        cost_estimate_low=rng.low,
+        cost_estimate_high=rng.high,
+        cost_cap=payload.cost_cap,
+        status="queued",
+        audit={"steps": []},
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+    return job
 
 
 @router.post("/batch", response_model=BatchOut, status_code=status.HTTP_201_CREATED)

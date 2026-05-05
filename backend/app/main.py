@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.routers import auth as auth_router
-from app.routers import batches, contents, domains, folders, healthz, jobs, logs
+from app.routers import batches, contents, domains, folders, fusion, healthz, jobs, logs
 
 
 @asynccontextmanager
@@ -29,5 +29,6 @@ app.include_router(domains.router, prefix="/api/domains", tags=["domains"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(batches.router, prefix="/api/batches", tags=["batches"])
 app.include_router(contents.router, prefix="/api/contents", tags=["contents"])
+app.include_router(fusion.router, prefix="/api/fusion", tags=["fusion"])
 app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 app.include_router(healthz.router, prefix="/healthz", tags=["healthz"])

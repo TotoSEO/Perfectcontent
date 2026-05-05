@@ -97,3 +97,15 @@ class CannibalizationIn(BaseModel):
 
 class RegenerateSectionIn(BaseModel):
     section_id: str
+
+
+class RewriteJobIn(BaseModel):
+    keyword: str
+    source_content: str  # raw HTML pasted by the user (sanitized server-side)
+    content_type: ContentType = "blog"
+    location_code: int = 2250
+    language_code: str = "fr"
+    domain_id: UUID | None = None
+    folder_id: UUID | None = None
+    internal_linking: bool = False
+    cost_cap: float | None = None
