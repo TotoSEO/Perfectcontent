@@ -147,4 +147,28 @@ CREATE TABLE IF NOT EXISTS system_logs (
 CREATE INDEX IF NOT EXISTS ix_system_logs_ts ON system_logs (ts);
 CREATE INDEX IF NOT EXISTS ix_system_logs_level ON system_logs (level);
 
+-- 3. Silos (page pilier + satellites maillés en silo SEO)
+
+CREATE TABLE IF NOT EXISTS silos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT,
+  pillar_keyword TEXT,
+  pillar_content_id UUID REFERENCES contents(id) ON DELETE SET NULL,
+  pillar_external_url TEXT,
+  base_url TEXT NOT NULL,
+  trailing_slash BOOLEAN NOT NULL DEFAULT FALSE,
+  domain_id UUID REFERENCES domains(id),
+  folder_id UUID REFERENCES folders(id) ON DELETE SET NULL,
+  batch_id UUID,
+  status TEXT NOT NULL DEFAULT 'planning',
+  mesh_audit JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE contents ADD COLUMN IF NOT EXISTS silo_id UUID REFERENCES silos(id) ON DELETE SET NULL;
+ALTER TABLE contents ADD COLUMN IF NOT EXISTS silo_role TEXT;
+ALTER TABLE contents ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE contents ADD COLUMN IF NOT EXISTS link_manifest JSONB;
+CREATE INDEX IF NOT EXISTS ix_contents_silo_id ON contents (silo_id);
+
 -- Fini. Aucune donnée seed nécessaire.

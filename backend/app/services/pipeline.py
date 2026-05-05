@@ -160,8 +160,15 @@ async def run_step(job_id: UUID, step: str) -> dict[str, Any]:
     paused = False
     if step == PAUSE_AFTER:
         job = await _load_job(job_id)
-        # Rewrite mode has no editable blueprint, so don't pause
-        if not job.auto_validate_blueprint and job.mode != "rewrite":
+        # Pause after blueprint when:
+        #  - the user asked to validate blueprints manually (and mode != rewrite),
+        #  - OR the job is part of a silo (the orchestrator must build the link
+        #    manifest BEFORE generate runs).
+        needs_pause = (
+            (not job.auto_validate_blueprint and job.mode != "rewrite")
+            or job.mode == "silo"
+        )
+        if needs_pause:
             await _set_step(job_id, step, "paused")
             paused = True
             next_step = None
@@ -456,6 +463,13 @@ async def _step_generate(job_id: UUID) -> None:
         blueprint_dict: dict = content.blueprint or {}
         if not blueprint_dict:
             raise RuntimeError("blueprint not yet computed")
+        # Silo: a link_manifest persisted on the content row drives the strict
+        # internal mesh rules injected into the prompt.
+        link_manifest = content.link_manifest if job.mode == "silo" else None
+        if job.mode == "silo" and not link_manifest:
+            raise RuntimeError(
+                "silo job: link_manifest missing — call /srv/silos/{id}/manifest first"
+            )
         generated = await generator.generate_content(
             keyword=job.keyword,
             intent=intent,
@@ -467,6 +481,7 @@ async def _step_generate(job_id: UUID) -> None:
             content_gaps=gaps,
             term_targets=term_targets,
             use_haiku=getattr(job, "use_haiku", False),
+            link_manifest=link_manifest,
         )
         title_variants = generated.title_variants
         html = generated.html

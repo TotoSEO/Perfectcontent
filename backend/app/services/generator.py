@@ -180,9 +180,110 @@ Content gaps à exploiter (différenciation vs SERP) :
 {content_gaps}
 
 Cible totale : {target_words} mots.
-
+{silo_block}
 Réponds en JSON strict.
 """
+
+
+# ---------------------------------------------------------------------------
+# Silo prompt injection
+# ---------------------------------------------------------------------------
+
+SILO_RULES_COMMON = """
+RÈGLES DE MAILLAGE INTERNE (CONTRAINTES STRICTES — ZÉRO TOLÉRANCE) :
+- Tous les liens internes doivent être CONTEXTUELS et NATURELS, intégrés au fil
+  de la phrase autour d'un mot ou groupe de mots qui sert de pivot sémantique.
+- INTERDITS ABSOLUS sur les ancres et leur entourage :
+  "consultez notre article", "découvrez notre guide", "voir aussi", "à lire
+  également", "lire la suite", "plus d'infos ici", "cliquez ici", "en savoir
+  plus", "notre article sur", "nous avons aussi un article sur", "dans cet
+  autre article".
+- Ancres VARIÉES : pas deux ancres identiques ; varie la forme (verbe, nom,
+  expression complète, partie courte du sujet). Évite les ancres mot-clé
+  exact répétées.
+- Format HTML : <a href="URL_EXACTE">ancre courte</a>. URL à reproduire à
+  l'identique, copiée-collée depuis la liste fournie. Pas de target, pas de
+  rel, pas de classe.
+- 1 LIEN MAXIMUM par couple (article source -> article cible). Jamais 2 liens
+  vers la même URL dans tout l'article.
+- Si une URL listée ci-dessous ne s'intègre vraiment pas naturellement dans
+  le texte, NE METS PAS le lien plutôt que de forcer une transition lourde.
+"""
+
+SILO_RULES_SATELLITE = """
+TU ÉCRIS UN ARTICLE SATELLITE D'UN SILO SEO.
+
+Page pilier (URL EXACTE à utiliser) : {pillar_url}
+→ Tu DOIS placer un lien vers cette URL dans l'introduction OU dans les 3
+  premiers paragraphes <p> du texte. Ancre contextuelle, intégrée au fil de
+  la phrase. Ce lien est OBLIGATOIRE.
+
+Articles voisins du silo (lien recommandé quand l'occasion s'y prête) :
+{peer_block}
+
+Politique des liens vers les articles voisins :
+- 0 ou 1 lien max vers chaque URL voisine ci-dessus.
+- Mets le lien SEULEMENT quand le sujet voisin est mentionné naturellement
+  dans le texte (un terme, une notion, un concept liés).
+- Le PLUS de liens voisins possible TANT QUE c'est contextuel et naturel,
+  jamais forcé. Privilégie d'abord les voisins en haut de la liste
+  (similarité la plus forte).
+"""
+
+SILO_RULES_PILLAR = """
+TU ÉCRIS LA PAGE PILIER D'UN SILO SEO. Ton rôle :
+✅ donner une vue d'ensemble du sujet
+✅ introduire CHAQUE sous-thème listé ci-dessous
+✅ pousser vers la page satellite dédiée à chaque sous-thème via 1 lien
+   contextuel intégré au paragraphe d'introduction de ce sous-thème
+
+Sous-thèmes / satellites du silo :
+{satellite_block}
+
+Politique IMPÉRATIVE :
+- Pour CHAQUE satellite ci-dessus, tu DOIS créer une section (ou un paragraphe
+  dans une section plus large) qui présente le sous-thème en 2-4 phrases ET
+  contient EXACTEMENT 1 lien <a href="URL_DU_SATELLITE">ancre contextuelle</a>
+  intégré au fil du texte.
+- Le lien doit être posé sur un mot ou une expression qui désigne le concept,
+  pas sur "voir l'article" ou similaire.
+- Aucun satellite ne doit rester sans son lien.
+- Ne mentionne pas qu'il existe un article dédié — le lien parle de lui-même.
+"""
+
+
+def _format_satellite_block(peers: list[dict]) -> str:
+    if not peers:
+        return "(aucun voisin)"
+    lines = []
+    for p in peers:
+        topic = (p.get("topic") or p.get("keyword") or "").strip() or "(sans topic)"
+        lines.append(f'- {p["url"]}  — sujet : {topic}')
+    return "\n".join(lines)
+
+
+def _silo_block(link_manifest: dict | None) -> str:
+    if not link_manifest:
+        return ""
+    role = link_manifest.get("role")
+    if role == "satellite":
+        peer_block = _format_satellite_block(link_manifest.get("peer_links") or [])
+        return (
+            "\n\n=== CONTEXTE SILO ===\n"
+            + SILO_RULES_COMMON
+            + SILO_RULES_SATELLITE.format(
+                pillar_url=link_manifest.get("pillar_url", ""),
+                peer_block=peer_block,
+            )
+        )
+    if role == "pillar":
+        sat_block = _format_satellite_block(link_manifest.get("satellite_links") or [])
+        return (
+            "\n\n=== CONTEXTE SILO ===\n"
+            + SILO_RULES_COMMON
+            + SILO_RULES_PILLAR.format(satellite_block=sat_block)
+        )
+    return ""
 
 
 @dataclass
@@ -206,6 +307,7 @@ async def generate_content(
     content_gaps: list[str],
     term_targets: list[dict] | None = None,
     use_haiku: bool = False,
+    link_manifest: dict | None = None,
 ) -> Generated:
     system = SYSTEM_TEMPLATE.format(
         type_brief=PROMPTS.get(content_type, PROMPTS["blog"]),
@@ -232,6 +334,7 @@ async def generate_content(
         term_targets=targets_text,
         content_gaps="; ".join(content_gaps[:10]) or "(aucun)",
         target_words=blueprint.get("target_words", 1500),
+        silo_block=_silo_block(link_manifest),
     )
     resp = await llm.complete(
         system=system,

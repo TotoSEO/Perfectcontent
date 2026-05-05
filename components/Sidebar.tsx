@@ -10,6 +10,7 @@ const ITEMS: Item[] = [
   { href: "/dashboard", label: "Contenus", icon: "▣", group: "Bibliothèque" },
   { href: "/folders", label: "Dossiers", icon: "▫", group: "Bibliothèque" },
   { href: "/new", label: "Génération", icon: "✦", group: "Création" },
+  { href: "/new/silo", label: "Silo", icon: "◧", group: "Création" },
   { href: "/rewrite", label: "Réécriture", icon: "↻", group: "Création" },
   { href: "/fusion", label: "Fusion", icon: "⊕", group: "Création" },
   { href: "/domains", label: "Domaines", icon: "◇", group: "Système" },
