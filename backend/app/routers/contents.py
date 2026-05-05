@@ -94,6 +94,58 @@ async def regenerate_content_section(
     return {"ok": True}
 
 
+@router.get("/{content_id}/competitors")
+async def competitors_compare(
+    content_id: UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Comparative table: each top-7 competitor's metrics vs. the user's
+    current content. Pulled from the SemanticReport persisted during the
+    pipeline's parse step."""
+    content = await db.get(Content, content_id)
+    if content is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
+
+    # Most recent job tied to this content
+    job = (
+        await db.execute(
+            select(Job)
+            .where(Job.content_id == content_id)
+            .order_by(Job.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        return {"competitors": [], "current": _content_metrics(content)}
+    sr = (
+        await db.execute(select(SemanticReport).where(SemanticReport.job_id == job.id))
+    ).scalar_one_or_none()
+    competitors = list(sr.competitors or []) if sr else []
+    return {
+        "competitors": competitors,
+        "current": _content_metrics(content),
+    }
+
+
+def _content_metrics(content: Content) -> dict:
+    """Quick metrics extraction from the user's HTML (server-side mirror of
+    what the editor knows). Lightweight — no parser dependency."""
+    from bs4 import BeautifulSoup
+    html = content.html or ""
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(" ", strip=True)
+    return {
+        "title": content.chosen_title,
+        "word_count": len(text.split()),
+        "paragraphs_count": len(soup.find_all("p")),
+        "h2_count": len(soup.find_all("h2")),
+        "h3_count": len(soup.find_all("h3")),
+        "lists_count": len(soup.find_all(["ul", "ol"])),
+        "tables_count": len(soup.find_all("table")),
+        "coverage_score": float(content.coverage_score) if content.coverage_score is not None else None,
+        "internal_links_count": len(content.internal_links or []),
+    }
+
+
 @router.get("/{content_id}/semantic-targets")
 async def semantic_targets(content_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Return the top corpus terms with target / min / max frequencies.

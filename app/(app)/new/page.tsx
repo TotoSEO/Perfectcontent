@@ -56,6 +56,7 @@ type Row = {
   content_type: ContentType;
   internal_linking: boolean;
   generate_image: boolean;
+  use_haiku: boolean;
 };
 
 function parseLines(text: string): string[] {
@@ -76,7 +77,7 @@ export default function NewContentPage() {
     product: "",
     service_lp: "",
   });
-  const [overrides, setOverrides] = useState<Record<string, { internal_linking?: boolean; generate_image?: boolean }>>({});
+  const [overrides, setOverrides] = useState<Record<string, { internal_linking?: boolean; generate_image?: boolean; use_haiku?: boolean }>>({});
 
   const [locationCode, setLocationCode] = useState(2250);
   const [languageCode, setLanguageCode] = useState("fr");
@@ -84,6 +85,7 @@ export default function NewContentPage() {
   const [folderId, setFolderId] = useState<string>("");
   const [defaultLinking, setDefaultLinking] = useState(true);
   const [defaultImage, setDefaultImage] = useState(false);
+  const [defaultHaiku, setDefaultHaiku] = useState(false);
   const [autoValidate, setAutoValidate] = useState(true);
   const [costCap, setCostCap] = useState<number | "">(1.0);
 
@@ -107,11 +109,13 @@ export default function NewContentPage() {
             ov.internal_linking !== undefined ? ov.internal_linking : defaultLinking && !!domainId,
           generate_image:
             ov.generate_image !== undefined ? ov.generate_image : defaultImage,
+          use_haiku:
+            ov.use_haiku !== undefined ? ov.use_haiku : defaultHaiku,
         });
       });
     });
     return out;
-  }, [texts, overrides, defaultLinking, defaultImage, domainId]);
+  }, [texts, overrides, defaultLinking, defaultImage, defaultHaiku, domainId]);
 
   const totalCount = rows.length;
 
@@ -122,6 +126,7 @@ export default function NewContentPage() {
         ...prev[id],
         ...(patch.internal_linking !== undefined && { internal_linking: patch.internal_linking }),
         ...(patch.generate_image !== undefined && { generate_image: patch.generate_image }),
+        ...(patch.use_haiku !== undefined && { use_haiku: patch.use_haiku }),
       },
     }));
   }
@@ -141,12 +146,14 @@ export default function NewContentPage() {
               content_type: r.content_type,
               internal_linking: r.internal_linking,
               generate_image: r.generate_image,
+              use_haiku: r.use_haiku,
             })),
             location_code: locationCode,
             language_code: languageCode,
             domain_id: domainId || null,
             internal_linking: defaultLinking && !!domainId,
             generate_image: defaultImage,
+            use_haiku: defaultHaiku,
             auto_validate_blueprint: autoValidate,
             cost_cap: costCap === "" ? null : Number(costCap),
           },
@@ -268,6 +275,14 @@ export default function NewContentPage() {
                 />
                 🖼️ image (~$0.04 / kw)
               </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={defaultHaiku}
+                  onChange={(e) => setDefaultHaiku(e.target.checked)}
+                />
+                🪶 Haiku (-66 % coût)
+              </label>
             </div>
           </div>
 
@@ -284,6 +299,10 @@ export default function NewContentPage() {
                   <th className="text-center px-3 py-2 w-20">
                     🖼️
                     <HelpIcon side="bottom" content="Génération d'image automatique pour ce mot-clé (~$0.04 si OpenAI)." />
+                  </th>
+                  <th className="text-center px-3 py-2 w-20">
+                    🪶
+                    <HelpIcon side="bottom" content="Coche pour générer ce contenu avec Claude Haiku 4.5 au lieu de Sonnet 4.6 (-66 % de coût, qualité éditoriale légèrement moindre — utile pour les contenus secondaires)." />
                   </th>
                 </tr>
               </thead>
@@ -315,6 +334,14 @@ export default function NewContentPage() {
                           type="checkbox"
                           checked={r.generate_image}
                           onChange={(e) => setRow(r.id, { generate_image: e.target.checked })}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={r.use_haiku}
+                          onChange={(e) => setRow(r.id, { use_haiku: e.target.checked })}
+                          title="Génère ce contenu avec Haiku 4.5 (moins cher, légèrement moins fin)"
                         />
                       </td>
                     </tr>

@@ -9,10 +9,20 @@ from anthropic import AsyncAnthropic
 
 from app.config import get_settings
 
-# claude-sonnet pricing approx (USD per 1M tokens). Update if Anthropic changes.
-SONNET_INPUT_PER_M = 3.00
-SONNET_OUTPUT_PER_M = 15.00
-DEFAULT_MODEL = "claude-sonnet-4-6"
+# Anthropic pricing per 1M tokens (USD). Update if Anthropic changes.
+PRICING: dict[str, tuple[float, float]] = {
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
+    "claude-opus-4-7": (15.00, 75.00),
+    "claude-haiku-4-5-20251001": (0.80, 4.00),
+    "claude-haiku-4-5": (0.80, 4.00),
+}
+
+# Sensible defaults: Sonnet for the writer (quality matters), Haiku for the
+# structured-output steps (analysis + blueprint).
+SONNET = "claude-sonnet-4-6"
+HAIKU = "claude-haiku-4-5-20251001"
+DEFAULT_MODEL = SONNET
 
 
 @dataclass
@@ -56,9 +66,8 @@ async def complete(
     text = "".join(text_blocks)
     in_t = msg.usage.input_tokens
     out_t = msg.usage.output_tokens
-    cost = round(
-        in_t / 1_000_000 * SONNET_INPUT_PER_M + out_t / 1_000_000 * SONNET_OUTPUT_PER_M, 6
-    )
+    in_rate, out_rate = PRICING.get(model, PRICING[SONNET])
+    cost = round(in_t / 1_000_000 * in_rate + out_t / 1_000_000 * out_rate, 6)
     return LLMResponse(text=text, cost=cost, input_tokens=in_t, output_tokens=out_t)
 
 

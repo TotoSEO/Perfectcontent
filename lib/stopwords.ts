@@ -34,7 +34,24 @@ export const STOPWORDS_EN = new Set<string>([
   "about", "against",
 ]);
 
-const ALL_STOPWORDS = new Set<string>([...STOPWORDS_FR, ...STOPWORDS_EN]);
+export const STOPWORDS_WEB = new Set<string>([
+  "https", "http", "www", "url", "href", "src", "ftp", "mailto",
+  "com", "fr", "org", "net", "eu", "io", "co", "uk", "de", "es", "it",
+  "html", "htm", "css", "json", "xml", "rss", "pdf", "jpg", "jpeg", "png",
+  "gif", "svg", "webp", "mp4", "webm", "ico",
+  "alt", "img", "div", "span", "head", "body", "meta", "link",
+  "lang", "type", "name", "value", "id", "class",
+  "content", "markdown", "source", "title", "desc", "description",
+  "menu", "nav", "footer", "header", "aside", "main", "section",
+  "cookie", "cookies", "newsletter", "copyright", "sitemap",
+  "wp", "admin", "login", "logout", "register", "search",
+  "page", "pages", "voir", "lire", "cliquer", "cliquez", "ici",
+  "blog", "article", "articles", "post", "posts",
+  "mso", "fareast", "minor", "latin", "endnoteref",
+  "data", "info", "infos",
+]);
+
+const ALL_STOPWORDS = new Set<string>([...STOPWORDS_FR, ...STOPWORDS_EN, ...STOPWORDS_WEB]);
 
 const WORD_RE = /[a-zA-ZàâäéèêëïîôöùûüÿñçœÀÂÄÉÈÊËÏÎÔÖÙÛÜŸÑÇŒ][a-zA-ZàâäéèêëïîôöùûüÿñçœÀÂÄÉÈÊËÏÎÔÖÙÛÜŸÑÇŒ\-']*/g;
 const MIN_WORD_LEN = 3;

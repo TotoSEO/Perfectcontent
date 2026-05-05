@@ -46,7 +46,35 @@ STOPWORDS_EN = {
     "own", "same", "should", "now", "also", "any", "all", "each", "few",
     "into", "out", "up", "down", "off", "over", "under", "again", "further",
     "while", "after", "before", "between", "during", "above", "below",
-    "about", "against", "between",
+    "about", "against",
+}
+
+# Web/scraping noise — these tokens appear because of URLs, schema markup,
+# WordPress / CMS metadata leaked through the markdown extraction. They must
+# never end up as semantic targets.
+STOPWORDS_WEB = {
+    # URL fragments
+    "https", "http", "www", "url", "href", "src", "ftp", "mailto",
+    # TLDs that get tokenized
+    "com", "fr", "org", "net", "eu", "io", "co", "uk", "de", "es", "it",
+    # File / resource extensions
+    "html", "htm", "css", "json", "xml", "rss", "pdf", "jpg", "jpeg", "png",
+    "gif", "svg", "webp", "mp4", "webm", "ico",
+    # HTML / template fragments leaked from web copy
+    "alt", "img", "div", "span", "head", "body", "meta", "link",
+    "lang", "type", "name", "value", "id", "class",
+    # CMS / scraper artefacts
+    "content", "markdown", "source", "title", "desc", "description",
+    "menu", "nav", "footer", "header", "aside", "main", "section",
+    "cookie", "cookies", "newsletter", "copyright", "sitemap",
+    "wp", "admin", "login", "logout", "register", "search",
+    # Generic web vocab too vague to be useful
+    "page", "pages", "voir", "lire", "cliquer", "cliquez", "ici",
+    "blog", "article", "articles", "post", "posts",
+    # MS Office / Word / docx fragments that leak
+    "mso", "fareast", "minor", "latin", "endnoteref",
+    # Pure-tech generic filler
+    "data", "info", "infos",
 }
 
 WORD_RE = re.compile(
@@ -75,7 +103,7 @@ class TermTarget:
 
 def tokenize(text: str, stopwords: set[str] | None = None) -> list[str]:
     """Lowercase, strip accents-preserving tokens, drop stop words and short tokens."""
-    sw = stopwords if stopwords is not None else (STOPWORDS_FR | STOPWORDS_EN)
+    sw = stopwords if stopwords is not None else (STOPWORDS_FR | STOPWORDS_EN | STOPWORDS_WEB)
     out: list[str] = []
     for match in WORD_RE.finditer(text):
         w = match.group(0).lower().strip("-'")
@@ -125,10 +153,19 @@ def compute_term_targets(
         per_doc = [c.get(term, 0) for c in per_doc_counts]
         coverage = sum(1 for n in per_doc if n > 0) / n_docs
         if coverage < 0.4:
-            # require at least 40% of competitors to use the term
+            # require at least 40 % of competitors to use the term
             continue
         median_freq = statistics.median(per_doc)
         if median_freq < 1:
+            continue
+        # Anti-skew: a term that appears > 8x more in one doc than the average
+        # is almost certainly a navigation/footer artefact stuck on one site.
+        max_freq = max(per_doc)
+        avg_freq = sum(per_doc) / n_docs
+        if avg_freq > 0 and max_freq >= avg_freq * 8:
+            continue
+        # Reject pure-numeric or very short tokens that slipped through
+        if term.isdigit() or len(term) <= 3:
             continue
         importance = coverage * (1 + (median_freq / 10))
         targets.append(

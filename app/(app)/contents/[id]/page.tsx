@@ -11,6 +11,7 @@ import { CoverageBadge } from "@/components/CoverageBadge";
 import { SectionList } from "@/components/SectionList";
 import { SemanticScore } from "@/components/SemanticScore";
 import { ImagePanel } from "@/components/ImagePanel";
+import { CompetitorsPanel } from "@/components/CompetitorsPanel";
 import { useRouter } from "next/navigation";
 
 export default function ContentPage() {
@@ -161,6 +162,8 @@ export default function ContentPage() {
             Export Markdown
           </a>
         </div>
+
+        <CompetitorsPanel contentId={id!} />
       </div>
 
       <div className="col-span-1 space-y-4">

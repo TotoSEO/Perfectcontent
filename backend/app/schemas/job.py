@@ -41,6 +41,7 @@ class JobOut(BaseModel):
     domain_id: UUID | None
     internal_linking: bool
     generate_image: bool
+    use_haiku: bool
     auto_validate_blueprint: bool
     batch_id: UUID | None
     status: str
@@ -61,6 +62,7 @@ class BatchItemIn(BaseModel):
     # Per-row overrides. If None, the batch-level value applies.
     internal_linking: bool | None = None
     generate_image: bool | None = None
+    use_haiku: bool | None = None
 
 
 class JobBatchCreateIn(BaseModel):
@@ -71,6 +73,7 @@ class JobBatchCreateIn(BaseModel):
     folder_id: UUID | None = None
     internal_linking: bool = False
     generate_image: bool = False
+    use_haiku: bool = False
     auto_validate_blueprint: bool = True
     cost_cap: float | None = None
 

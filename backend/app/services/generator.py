@@ -205,6 +205,7 @@ async def generate_content(
     entities: list[str],
     content_gaps: list[str],
     term_targets: list[dict] | None = None,
+    use_haiku: bool = False,
 ) -> Generated:
     system = SYSTEM_TEMPLATE.format(
         type_brief=PROMPTS.get(content_type, PROMPTS["blog"]),
@@ -237,6 +238,7 @@ async def generate_content(
         user=user,
         max_tokens=8000,
         temperature=0.6,
+        model=llm.HAIKU if use_haiku else llm.SONNET,
     )
     data = llm.extract_json(resp.text)
     return Generated(

@@ -17,6 +17,7 @@ async def create_batch(db: AsyncSession, payload: JobBatchCreateIn) -> tuple[uui
     for item in payload.items:
         link = item.internal_linking if item.internal_linking is not None else payload.internal_linking
         gen_img = item.generate_image if item.generate_image is not None else payload.generate_image
+        haiku = item.use_haiku if item.use_haiku is not None else payload.use_haiku
         rng = cost_svc.estimate(
             content_type=item.content_type, internal_linking=link
         )
@@ -40,6 +41,7 @@ async def create_batch(db: AsyncSession, payload: JobBatchCreateIn) -> tuple[uui
             domain_id=payload.domain_id,
             internal_linking=link,
             generate_image=gen_img,
+            use_haiku=haiku,
             auto_validate_blueprint=payload.auto_validate_blueprint,
             batch_id=batch_id,
             cost_estimate_low=rng.low,

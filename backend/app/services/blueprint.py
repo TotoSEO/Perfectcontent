@@ -113,7 +113,9 @@ async def build_blueprint(
         ),
         term_targets=targets_text,
     )
-    resp = await llm.complete(system=SYSTEM, user=user, max_tokens=4000, temperature=0.4)
+    resp = await llm.complete(
+        system=SYSTEM, user=user, max_tokens=4000, temperature=0.4, model=llm.HAIKU
+    )
     data = llm.extract_json(resp.text)
     return Blueprint(
         title_target=data.get("title_target", ""),

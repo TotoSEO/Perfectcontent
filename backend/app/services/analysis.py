@@ -76,7 +76,9 @@ async def semantic_report(
         related=related_text,
         competitors=competitors_text,
     )
-    resp = await llm.complete(system=SYSTEM, user=user, max_tokens=2500, temperature=0.3)
+    resp = await llm.complete(
+        system=SYSTEM, user=user, max_tokens=2500, temperature=0.3, model=llm.HAIKU
+    )
     data = llm.extract_json(resp.text)
     return SemanticReport(
         common_subthemes=list(data.get("common_subthemes", [])),

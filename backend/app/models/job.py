@@ -26,6 +26,7 @@ class Job(Base):
     )
     internal_linking: Mapped[bool] = mapped_column(Boolean, default=False)
     generate_image: Mapped[bool] = mapped_column(Boolean, default=False)
+    use_haiku: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_validate_blueprint: Mapped[bool] = mapped_column(Boolean, default=False)
     mode: Mapped[str] = mapped_column(String, nullable=False, default="standard")
     source_content: Mapped[str | None] = mapped_column(Text, nullable=True)

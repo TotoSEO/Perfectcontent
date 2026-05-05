@@ -278,9 +278,17 @@ async def _step_parse(job_id: UUID) -> None:
                     "title": p.title,
                     "h1": p.h1,
                     "h2": p.h2,
+                    "h3_count": len(p.h3),
                     "word_count": p.word_count,
-                    "tables": p.tables_count,
+                    "paragraphs_count": len(p.paragraphs),
+                    "lists_count": p.lists_count,
+                    "tables_count": p.tables_count,
+                    "images_with_alt": p.images_with_alt,
+                    "images_without_alt": p.images_without_alt,
                     "has_faq_schema": p.has_faq_schema,
+                    "has_article_schema": p.has_article_schema,
+                    "has_product_schema": p.has_product_schema,
+                    "author": p.author,
                     "quality": q,
                 }
                 for p, q in parsed
@@ -447,6 +455,7 @@ async def _step_generate(job_id: UUID) -> None:
             entities=entities,
             content_gaps=gaps,
             term_targets=term_targets,
+            use_haiku=getattr(job, "use_haiku", False),
         )
         title_variants = generated.title_variants
         html = generated.html
