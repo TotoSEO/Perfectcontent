@@ -11,7 +11,8 @@ from app import cache
 from app.config import get_settings
 
 SERP_LIVE_URL = "https://api.dataforseo.com/v3/serp/google/organic/live/advanced"
-RELATED_URL = "https://api.dataforseo.com/v3/keywords_data/google/related_keywords/live"
+# Related keywords moved under DataForSEO Labs.
+RELATED_URL = "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live"
 TTL = 60 * 60 * 24
 
 # DataForSEO charges per task; values reflect realistic costs for cap accounting
@@ -78,31 +79,45 @@ async def fetch_related(keyword: str, location_code: int, language_code: str) ->
     if get_settings().mock_external:
         items = _mock_related(keyword)
     else:
-        async with httpx.AsyncClient(timeout=30, auth=_auth()) as client:
-            resp = await client.post(
-                RELATED_URL,
-                json=[{
-                    "keyword": keyword,
-                    "location_code": location_code,
-                    "language_code": language_code,
-                    "limit": 50,
-                }],
-            )
-            resp.raise_for_status()
-            payload = resp.json()
-        items = _parse_related(payload)
+        try:
+            async with httpx.AsyncClient(timeout=30, auth=_auth()) as client:
+                resp = await client.post(
+                    RELATED_URL,
+                    json=[{
+                        "keyword": keyword,
+                        "location_code": location_code,
+                        "language_code": language_code,
+                        "limit": 50,
+                    }],
+                )
+                resp.raise_for_status()
+                payload = resp.json()
+            items = _parse_related(payload)
+        except (httpx.HTTPError, KeyError, ValueError):
+            # Related keywords endpoint may not be enabled on this account
+            # (DataForSEO Labs is a separate subscription tier). Don't fail
+            # the whole pipeline — proceed with no related kws.
+            items = []
 
-    await cache.set(key, [rk.__dict__ for rk in items], ttl_seconds=TTL, cost_usd=RELATED_COST)
+    await cache.set(key, [rk.__dict__ for rk in items], ttl_seconds=TTL, cost_usd=RELATED_COST if items else 0)
     return items
 
 
 async def fetch_serp_and_related(
     keyword: str, location_code: int, language_code: str
 ) -> tuple[SerpResult, list[RelatedKw]]:
-    return await asyncio.gather(  # type: ignore[return-value]
+    """SERP must succeed (it drives the rest of the pipeline). Related is
+    nice-to-have — if it fails we proceed with an empty list."""
+    serp_result, related = await asyncio.gather(
         fetch_serp(keyword, location_code, language_code),
         fetch_related(keyword, location_code, language_code),
+        return_exceptions=True,
     )
+    if isinstance(serp_result, BaseException):
+        raise serp_result
+    if isinstance(related, BaseException):
+        related = []
+    return serp_result, related
 
 
 def _parse_serp(keyword: str, payload: dict) -> SerpResult:
