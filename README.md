@@ -96,16 +96,16 @@ instructions (usually one CNAME). HTTPS auto.
 ## Local dev
 
 ```bash
-# Backend
-cd backend && cp .env.example .env
+# Python backend (FastAPI on :8000)
+cp backend/.env.example backend/.env
 # fill DATABASE_URL pointing to local Postgres or Supabase
-pip install -e .
-alembic upgrade head
-uvicorn app.main:app --reload  # serves on :8000
+pip install -r requirements.txt
+cd backend && alembic upgrade head && cd ..
+PYTHONPATH=backend uvicorn app.main:app --reload --app-dir backend
 
-# Frontend
-cd frontend && cp .env.example .env.local  # NEXT_PUBLIC_API_BASE=http://localhost:8000
-pnpm install && pnpm dev  # :3000
+# Next.js frontend (:3000)
+cp .env.example .env.local  # set NEXT_PUBLIC_API_BASE=http://localhost:8000
+pnpm install && pnpm dev
 ```
 
 Set `MOCK_EXTERNAL=1` in backend `.env` to test the full pipeline offline
@@ -116,9 +116,10 @@ without paying any external API.
 ```
 api/index.py              ← Vercel Python entry (FastAPI ASGI)
 backend/app/              ← FastAPI app, services, models, routers
-frontend/                 ← Next.js App Router
+backend/alembic/          ← migrations
+app/, components/, lib/   ← Next.js (App Router) at the repo root
 vercel.json               ← routes /api/* and /healthz/* to api/index.py
-requirements.txt          ← Python deps for Vercel build
+requirements.txt          ← Python deps for the Vercel build
 ```
 
 ## Crawler protection
