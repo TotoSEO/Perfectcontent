@@ -1,99 +1,18 @@
 # PerfectContent
 
-Solo single-user SEO content platform. Pipeline: SERP → scrape → semantic analysis → blueprint → generation → image → internal linking → coverage scoring.
+Solo single-user SEO content platform. Pipeline: SERP → scrape → semantic
+analysis → blueprint → generation → image → internal linking → coverage scoring.
+
+The browser orchestrates each pipeline step against serverless Python
+functions. No worker, no Redis, no Docker — just **Vercel + Supabase**, free.
 
 ## Stack
 
-- **Backend**: FastAPI, SQLAlchemy async, RQ workers, Redis, PostgreSQL + pgvector
-- **Frontend**: Next.js (App Router), Tailwind, TipTap, Zustand
-- **AI**: Anthropic (Claude Sonnet), OpenAI (embeddings), Fal.ai (Flux Pro)
-- **External APIs**: DataForSEO, Firecrawl, Jina
-
-## Quick start (dev)
-
-```bash
-docker compose up -d postgres redis
-
-cd backend
-cp .env.example .env
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-alembic upgrade head
-uvicorn app.main:app --reload &
-rq worker default index &
-
-cd ../frontend
-cp .env.example .env.local
-pnpm install
-pnpm dev
-```
-
-Open http://localhost:3000 — login with `APP_PASSWORD` from `.env`.
-
-## Production deploy (Oracle Cloud Free + Supabase)
-
-Two services total. Free forever.
-
-### 1. Supabase (database)
-
-1. Create a project on [supabase.com](https://supabase.com).
-2. SQL editor → run once: `CREATE EXTENSION IF NOT EXISTS vector;`
-3. Project Settings → Database → **Session pooler** connection string → copy.
-4. Replace the scheme prefix `postgresql://` with `postgresql+asyncpg://`.
-5. Save it for step 4 below as `DATABASE_URL`.
-
-### 2. Oracle Cloud Free VM
-
-1. Sign up on [cloud.oracle.com](https://cloud.oracle.com) (CC required for verification, never charged).
-2. Create a Compute instance: shape **VM.Standard.A1.Flex** (ARM Ampere), 2 OCPU / 12GB RAM is plenty.
-3. Image: **Ubuntu 22.04**.
-4. Open ports 80 and 443 in the VCN security list (ingress, source `0.0.0.0/0`).
-5. Note the public IP.
-
-### 3. DNS
-
-Point an A record (e.g. `pc.exemple.com`) to the VM's public IP.
-
-### 4. App on the VM
-
-SSH into the VM:
-
-```bash
-# Docker
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER && newgrp docker
-
-# Code
-git clone https://github.com/totoseo/perfectcontent.git
-cd perfectcontent
-cp .env.prod.example .env.prod
-nano .env.prod   # fill DOMAIN, PUBLIC_URL, DATABASE_URL, APP_PASSWORD, all API keys
-
-# Migrate the Supabase DB once
-docker compose -f compose.prod.yml --env-file .env.prod run --rm api alembic upgrade head
-
-# Start
-docker compose -f compose.prod.yml --env-file .env.prod up -d --build
-```
-
-Caddy auto-issues an HTTPS cert via Let's Encrypt on first request.
-
-Open `https://pc.exemple.com`, log in with `APP_PASSWORD`. Done.
-
-### Update / redeploy
-
-```bash
-git pull && docker compose -f compose.prod.yml --env-file .env.prod up -d --build
-```
-
-### Why crawl-blocking is enough
-
-The app is opt-in (login wall + signed cookie). On top of that:
-- Meta `robots: noindex, nofollow, nocache` on every page (set in `app/layout.tsx`).
-- `/robots.txt` returns a global `Disallow: /`.
-- Caddy returns 403 for any User-Agent matching `bot|crawler|spider|scraper`.
-
-If you ever need a hardened public URL (paranoid mode), put Cloudflare Access in front — free up to 50 users, blocks unknown emails before hitting the VM.
+- **Frontend** : Next.js (App Router), Tailwind, TipTap, SWR
+- **Backend** : FastAPI, exposed as Vercel Python serverless functions
+- **DB** : Supabase Postgres + pgvector
+- **AI** : Anthropic (Claude Sonnet), OpenAI (embeddings), Fal.ai (Flux Pro)
+- **External APIs** : DataForSEO, Firecrawl, Jina
 
 ## Pipeline steps
 
@@ -102,24 +21,113 @@ If you ever need a hardened public URL (paranoid mode), put Cloudflare Access in
 | 1 | SERP + related keywords | DataForSEO, parallel, cached 24h |
 | 2 | Scrape competitors | Firecrawl + Jina fallback, tolerance 4/7 |
 | 3 | Parse structure | H1/H2/H3, lists, tables, FAQ, schema |
-| 4 | Semantic report | Claude analyzes coverage, gaps, entities |
+| 4 | Semantic report + top-40 corpus terms | Claude analysis + term frequencies |
 | 5 | Blueprint | Editable plan H2/H3 + word target + angle |
 | 6 | Generate content | Type-specific prompts, 3 title/meta variants |
 | 7 | Image | Fal.ai Flux Pro, parallel with step 6 |
-| 8 | Internal linking | pgvector kNN against domain index |
+| 8 | Internal linking | pgvector kNN against the domain's indexed pages |
 | 9 | Coverage scoring | Embedding cosine vs expected terms |
+
+The browser drives the pipeline (each step is a serverless call ≤ 60 s).
+**Keep the tab open during a generation** (~1 min/keyword). State is fully
+persisted in Supabase, so closing mid-batch just pauses — re-open to resume.
+
+## Deploy (Vercel + Supabase, ~15 min)
+
+### 1. Supabase database
+
+1. Sign up at [supabase.com](https://supabase.com) → New project.
+2. SQL editor → run once :
+
+   ```sql
+   create extension if not exists vector;
+   ```
+
+3. Project Settings → Database → **Connection string** → URI **Session pooler**
+   → reveal password → copy.
+
+   You'll plug it into Vercel as `DATABASE_URL` after replacing the prefix
+   `postgresql://` with `postgresql+asyncpg://`.
+
+### 2. Vercel project
+
+1. Push this repo to GitHub if not already.
+2. Sign up at [vercel.com](https://vercel.com) with GitHub.
+3. **Add New… → Project** → import the `perfectcontent` repo.
+4. Framework preset: **Next.js** (auto-detected).
+5. **Environment Variables** — add :
+
+   ```
+   DATABASE_URL=postgresql+asyncpg://...
+   APP_PASSWORD=choose-a-strong-password
+   SESSION_SECRET=run-`openssl rand -hex 32`
+   CORS_ORIGINS=https://your-app.vercel.app
+   ENV=prod
+
+   DATAFORSEO_LOGIN=...
+   DATAFORSEO_PASSWORD=...
+   FIRECRAWL_API_KEY=...
+   ANTHROPIC_API_KEY=...
+   OPENAI_API_KEY=...
+   FAL_API_KEY=...
+   ```
+
+6. **Deploy**.
+
+### 3. Run migrations once
+
+The Vercel build doesn't auto-migrate. Run Alembic against your Supabase
+project from your laptop (one-off) :
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+DATABASE_URL='postgresql+asyncpg://...' alembic upgrade head
+```
+
+Then click **Redeploy** in Vercel so the new tables are picked up.
+
+### 4. Custom domain (optional)
+
+Vercel project → Settings → Domains → add `pc.yourdomain.com`. Follow the DNS
+instructions (usually one CNAME). HTTPS auto.
+
+## Local dev
+
+```bash
+# Backend
+cd backend && cp .env.example .env
+# fill DATABASE_URL pointing to local Postgres or Supabase
+pip install -e .
+alembic upgrade head
+uvicorn app.main:app --reload  # serves on :8000
+
+# Frontend
+cd frontend && cp .env.example .env.local  # NEXT_PUBLIC_API_BASE=http://localhost:8000
+pnpm install && pnpm dev  # :3000
+```
+
+Set `MOCK_EXTERNAL=1` in backend `.env` to test the full pipeline offline
+without paying any external API.
 
 ## Project layout
 
 ```
-backend/
-  app/
-    main.py, config.py, auth.py, db.py, cache.py, audit.py
-    models/   schemas/   routers/   services/   workers/
-  alembic/   tests/
-frontend/
-  app/  components/  lib/
-docker-compose.yml
+api/index.py              ← Vercel Python entry (FastAPI ASGI)
+backend/app/              ← FastAPI app, services, models, routers
+frontend/                 ← Next.js App Router
+vercel.json               ← routes /api/* and /healthz/* to api/index.py
+requirements.txt          ← Python deps for Vercel build
 ```
 
-See `/root/.claude/plans/ok-oublions-ce-qui-lucky-goose.md` for the full design plan.
+## Crawler protection
+
+The app is gated behind a single password. On top of that :
+
+- Every page sets `<meta name="robots" content="noindex,nofollow,nocache">`
+- `/robots.txt` returns a global `Disallow: /`
+- The Next.js `app/(app)/*` pages are private after login
+
+If you ever want hardened access, put **Cloudflare Access** in front
+(free up to 50 users) or password-protect at the Vercel level.

@@ -1,28 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { subscribeSSE } from "@/lib/sse";
+import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
 
 type State = {
   status: string;
-  pages_done: number;
   pages_total: number;
+  pages_done: number;
   cost: number;
   error?: string | null;
 };
 
-export function DomainProgress({ id }: { id: string }) {
+/**
+ * Browser-driven chunked domain indexing.
+ *
+ * Calls POST /api/domains/{id}/index-chunk repeatedly (~30 URLs per call,
+ * fits within Vercel's 60s function budget) until status becomes "ready".
+ */
+export function DomainProgress({ id, autoStart = true }: { id: string; autoStart?: boolean }) {
   const [state, setState] = useState<State | null>(null);
+  const cancelled = useRef(false);
 
   useEffect(() => {
-    const unsub = subscribeSSE<State>(`/api/domains/${id}/progress`, setState);
-    return unsub;
-  }, [id]);
+    if (!autoStart) return;
+    cancelled.current = false;
+    let stopped = false;
 
-  if (!state) return <p className="text-xs text-zinc-500">En attente…</p>;
+    (async () => {
+      while (!stopped && !cancelled.current) {
+        try {
+          const next = await api<State>(`/api/domains/${id}/index-chunk?limit=30`, {
+            method: "POST",
+          });
+          setState(next);
+          if (["ready", "error"].includes(next.status)) break;
+          // Tiny pause to avoid hammering Vercel if a chunk completes super fast
+          await new Promise((r) => setTimeout(r, 500));
+        } catch {
+          // Network blip: back off and retry
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+    })();
+
+    return () => {
+      stopped = true;
+      cancelled.current = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, autoStart]);
+
+  if (!state) return <p className="text-xs text-zinc-500">Démarrage de l'indexation…</p>;
 
   const pct =
-    state.pages_total > 0 ? Math.round((state.pages_done / state.pages_total) * 100) : 0;
+    state.pages_total > 0
+      ? Math.round((state.pages_done / state.pages_total) * 100)
+      : 0;
 
   return (
     <div className="space-y-1">

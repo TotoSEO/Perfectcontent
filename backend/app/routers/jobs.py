@@ -1,13 +1,10 @@
-import json
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_session
-from app.cache import get_redis
 from app.db import get_db
 from app.models import Content, Job
 from app.schemas.job import (
@@ -24,11 +21,8 @@ from app.schemas.job import (
 )
 from app.services import batch as batch_svc
 from app.services import cannibalization, cost
-from app.workers.queue import (
-    enqueue_regenerate_section,
-    enqueue_resume_job,
-    enqueue_run_job,
-)
+from app.services import pipeline as pipeline_svc
+from app.services import regenerate as regen_svc
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -56,7 +50,6 @@ async def create_job(payload: JobCreateIn, db: AsyncSession = Depends(get_db)) -
     rng = cost.estimate(
         content_type=payload.content_type, internal_linking=payload.internal_linking
     )
-
     content = Content(
         folder_id=payload.folder_id,
         domain_id=payload.domain_id,
@@ -85,7 +78,6 @@ async def create_job(payload: JobCreateIn, db: AsyncSession = Depends(get_db)) -
     db.add(job)
     await db.commit()
     await db.refresh(job)
-    enqueue_run_job(job.id)
     return job
 
 
@@ -110,8 +102,6 @@ async def create_batch(
     payload: JobBatchCreateIn, db: AsyncSession = Depends(get_db)
 ) -> BatchOut:
     batch_id, jobs = await batch_svc.create_batch(db, payload)
-    for j in jobs:
-        enqueue_run_job(j.id)
     return BatchOut(
         batch_id=batch_id,
         jobs=[JobOut.model_validate(j) for j in jobs],
@@ -126,31 +116,15 @@ async def get_job(job_id: UUID, db: AsyncSession = Depends(get_db)) -> Job:
     return job
 
 
-@router.get("/{job_id}/events")
-async def job_events(job_id: UUID) -> StreamingResponse:
-    async def gen():
-        r = get_redis()
-        pubsub = r.pubsub()
-        await pubsub.subscribe(f"pc:job:{job_id}:events")
-        try:
-            snap = await r.get(f"pc:job:{job_id}:state")
-            if snap:
-                yield f"data: {snap}\n\n"
-            while True:
-                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15)
-                if msg is None:
-                    yield ": keepalive\n\n"
-                    continue
-                yield f"data: {msg['data']}\n\n"
-                payload = json.loads(msg["data"])
-                if payload.get("status") in {"done", "failed", "capped", "paused"}:
-                    if payload.get("status") != "paused":
-                        break
-        finally:
-            await pubsub.unsubscribe()
-            await pubsub.close()
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
+@router.post("/{job_id}/step/{step}")
+async def run_step(job_id: UUID, step: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Run a single pipeline step. The browser orchestrates by calling this
+    sequentially for each step in the canonical order, polling /api/jobs/{id}
+    between calls if it wants extra detail."""
+    job = await db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    return await pipeline_svc.run_step(job_id, step)
 
 
 @router.post("/{job_id}/blueprint", response_model=JobOut)
@@ -166,10 +140,9 @@ async def edit_blueprint(
     if content is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     content.blueprint = payload.blueprint
-    job.status = "queued"
+    job.status = "running"
     await db.commit()
     await db.refresh(job)
-    enqueue_resume_job(job.id, from_step="generate")
     return job
 
 
@@ -184,44 +157,29 @@ async def regenerate_section(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     if job.content_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "no content attached")
-    enqueue_regenerate_section(job.id, payload.section_id)
+    await regen_svc.regenerate_section(job.content_id, payload.section_id)
     return job
 
 
 @router.post("/{job_id}/retry", response_model=JobOut)
 async def retry_job(job_id: UUID, db: AsyncSession = Depends(get_db)) -> Job:
-    """Re-run a failed/capped/cancelled job from the start of its pipeline.
-
-    The cache makes it cheap: cached SERP / scrape / embeddings results don't
-    re-bill. Only the steps that actually re-execute count against cost_actual.
-    """
     job = await db.get(Job, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     if job.status not in {"failed", "capped"}:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "only failed or capped jobs can be retried")
-    job.status = "queued"
-    job.error = None
-    job.current_step = None
-    audit = dict(job.audit or {})
-    history = list(audit.get("retries", []))
-    history.append({"at": datetime.now(timezone.utc).isoformat(), "previous_steps": audit.get("steps", [])})
-    audit["retries"] = history
-    audit["steps"] = []
-    job.audit = audit
-    await db.commit()
+    await pipeline_svc.reset_for_retry(job_id)
     await db.refresh(job)
-    enqueue_run_job(job.id)
     return job
 
 
 @router.post("/{job_id}/cancel", response_model=JobOut)
 async def cancel_job(job_id: UUID, db: AsyncSession = Depends(get_db)) -> Job:
+    """Mark a job as failed by user choice. The browser-driven model means we
+    just stop calling next steps; setting status here gives a clean record."""
     job = await db.get(Job, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
-    r = get_redis()
-    await r.set(f"pc:job:{job_id}:cancel", "1", ex=3600)
     job.status = "failed"
     job.error = "cancelled by user"
     await db.commit()

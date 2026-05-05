@@ -1,26 +1,20 @@
-"""Two-tier cache: Redis (fast) + Postgres api_cache table (durable)."""
+"""Single-tier cache backed by Postgres api_cache table.
+
+In the Vercel serverless model there's no persistent Redis to share state
+between invocations, so we collapse the previous two-tier cache to use
+Supabase Postgres directly. Idempotency for expensive API calls (SERP,
+scrape, embeddings) is preserved across cold starts because state is in DB.
+"""
 from __future__ import annotations
 
 import hashlib
-import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import redis.asyncio as aioredis
 from sqlalchemy import delete, select
 
-from app.config import get_settings
 from app.db import SessionLocal
 from app.models.api_cache import ApiCache
-
-_redis: aioredis.Redis | None = None
-
-
-def get_redis() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(get_settings().redis_url, decode_responses=True)
-    return _redis
 
 
 def cache_key(*parts: Any) -> str:
@@ -29,16 +23,11 @@ def cache_key(*parts: Any) -> str:
 
 
 async def get(key: str) -> Any | None:
-    r = get_redis()
-    raw = await r.get(f"pc:cache:{key}")
-    if raw is not None:
-        return json.loads(raw)
     async with SessionLocal() as session:
         row = (
             await session.execute(select(ApiCache).where(ApiCache.cache_key == key))
         ).scalar_one_or_none()
         if row and row.expires_at > datetime.now(timezone.utc):
-            await r.set(f"pc:cache:{key}", json.dumps(row.payload), ex=600)
             return row.payload
     return None
 
@@ -46,10 +35,36 @@ async def get(key: str) -> Any | None:
 async def set(  # noqa: A001 - intentional name
     key: str, payload: Any, ttl_seconds: int, cost_usd: float = 0.0
 ) -> None:
-    r = get_redis()
-    await r.set(f"pc:cache:{key}", json.dumps(payload), ex=min(ttl_seconds, 3600))
     expires = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     async with SessionLocal() as session:
         await session.execute(delete(ApiCache).where(ApiCache.cache_key == key))
         session.add(ApiCache(cache_key=key, payload=payload, cost_usd=cost_usd, expires_at=expires))
         await session.commit()
+
+
+# --- compatibility shim so legacy code paths that referenced Redis don't break ---
+
+
+class _NoopPubSub:
+    async def subscribe(self, *_a, **_kw): pass
+    async def unsubscribe(self, *_a, **_kw): pass
+    async def get_message(self, *_a, **_kw): return None
+    async def close(self): pass
+
+
+class _NoopRedis:
+    """Stand-in used by code paths that still try to call Redis after the
+    refactor. Browsers now drive the pipeline by polling, so pubsub/SSE are
+    no longer used. We keep these no-ops so any remaining import compiles."""
+
+    async def get(self, *_a, **_kw): return None
+    async def set(self, *_a, **_kw): return True
+    async def delete(self, *_a, **_kw): return 0
+    async def publish(self, *_a, **_kw): return 0
+
+    def pubsub(self):  # noqa: ANN201
+        return _NoopPubSub()
+
+
+def get_redis() -> _NoopRedis:
+    return _NoopRedis()

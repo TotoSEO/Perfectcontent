@@ -1,7 +1,8 @@
-// Empty string = same-origin relative URLs (works behind Caddy reverse proxy in prod).
-// Override only when frontend and backend are on different domains (dev separate ports).
+// Empty string = same-origin relative URLs.
+// On Vercel, frontend and Python serverless functions share the same domain
+// (vercel.json routes /api/* to api/index.py), so no base URL is needed in
+// production. In dev, set NEXT_PUBLIC_API_BASE=http://localhost:8000.
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
-export const SSE_BASE = process.env.NEXT_PUBLIC_SSE_BASE ?? API_BASE;
 
 export type ApiOptions = Omit<RequestInit, "body"> & { json?: unknown };
 

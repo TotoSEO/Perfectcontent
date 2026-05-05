@@ -9,6 +9,7 @@ const items = [
   { href: "/new", label: "+ Nouveau lot" },
   { href: "/domains", label: "Domaines" },
   { href: "/folders", label: "Dossiers" },
+  { href: "/console", label: "Console" },
 ];
 
 export function Sidebar() {

@@ -1,20 +1,25 @@
-"""Pipeline orchestrator: state machine, idempotent steps, hard cap, audit, SSE events."""
+"""Browser-driven pipeline: each step is a stand-alone function that hydrates
+state from Postgres, runs ONE step, and persists results back to Postgres.
+
+The browser orchestrates by calling POST /api/jobs/{id}/step/{name} in order.
+No worker, no Redis, no SSE — just stateless serverless steps backed by
+the api_cache table (idempotent, cheap on retry).
+"""
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from typing import Any
 from uuid import UUID
 
 from bs4 import BeautifulSoup
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import cache
 from app.audit import log_step
-from app.cache import get_redis
 from app.db import SessionLocal
 from app.models import Content, Domain, Job, SemanticReport
+from app.services import logger as syslog
 from app.services import (
     analysis,
     blueprint as blueprint_svc,
@@ -46,108 +51,16 @@ PAUSE_AFTER = "blueprint"
 MIN_COMPETITORS_OK = 4
 
 
-async def _publish(job_id: UUID, payload: dict) -> None:
-    r = get_redis()
-    data = json.dumps(payload, default=str)
-    await r.set(f"pc:job:{job_id}:state", data, ex=3600)
-    await r.publish(f"pc:job:{job_id}:events", data)
+# ---------- shared helpers ----------
 
 
-async def _is_cancelled(job_id: UUID) -> bool:
-    return bool(await get_redis().get(f"pc:job:{job_id}:cancel"))
-
-
-async def run_pipeline(job_id: UUID, *, from_step: str | None = None) -> None:
-    async with SessionLocal() as session:
-        job = await session.get(Job, job_id)
-        if job is None:
-            return
-        job.status = "running"
-        if from_step is None:
-            job.current_step = STEPS[0]
-        else:
-            job.current_step = from_step
-        await session.commit()
-
-    start_index = STEPS.index(from_step) if from_step else 0
-    state: dict[str, Any] = {}
-
-    try:
-        for step in STEPS[start_index:]:
-            if await _is_cancelled(job_id):
-                await _finalize(job_id, status="failed", error="cancelled by user")
-                return
-            await _set_step(job_id, step)
-            await log_step(job_id, step, "running")
-            await _publish(job_id, {"status": "running", "step": step})
-
-            handler = _HANDLERS[step]
-            await handler(job_id, state)
-
-            if not await _check_cap(job_id):
-                await _finalize(job_id, status="capped", error="cost cap reached")
-                return
-
-            await log_step(job_id, step, "done")
-
-            if step == PAUSE_AFTER and not state.get("blueprint_validated"):
-                async with SessionLocal() as session:
-                    job = await session.get(Job, job_id)
-                    if job is None:
-                        return
-                    if job.auto_validate_blueprint:
-                        # Skip the pause; mark validated and continue.
-                        state["blueprint_validated"] = True
-                    else:
-                        job.status = "paused"
-                        await session.commit()
-                        await _publish(job_id, {"status": "paused", "step": step})
-                        return
-                    await session.commit()
-
-        await _finalize(job_id, status="done")
-    except Exception as exc:  # noqa: BLE001
-        await log_step(job_id, "error", "failed", {"error": str(exc)})
-        await _finalize(job_id, status="failed", error=str(exc))
-
-
-async def resume_pipeline(job_id: UUID, from_step: str = "generate") -> None:
-    # Mark blueprint as validated so we don't pause again
-    async with SessionLocal() as session:
-        job = await session.get(Job, job_id)
-        if job is None:
-            return
-        job.status = "running"
-        await session.commit()
-
-    state: dict[str, Any] = {"blueprint_validated": True}
-    await _hydrate_state_from_db(job_id, state)
-    try:
-        start = STEPS.index(from_step)
-        for step in STEPS[start:]:
-            if await _is_cancelled(job_id):
-                await _finalize(job_id, status="failed", error="cancelled by user")
-                return
-            await _set_step(job_id, step)
-            await log_step(job_id, step, "running")
-            await _publish(job_id, {"status": "running", "step": step})
-            await _HANDLERS[step](job_id, state)
-            if not await _check_cap(job_id):
-                await _finalize(job_id, status="capped", error="cost cap reached")
-                return
-            await log_step(job_id, step, "done")
-        await _finalize(job_id, status="done")
-    except Exception as exc:  # noqa: BLE001
-        await log_step(job_id, "error", "failed", {"error": str(exc)})
-        await _finalize(job_id, status="failed", error=str(exc))
-
-
-async def _set_step(job_id: UUID, step: str) -> None:
+async def _set_step(job_id: UUID, step: str, status: str) -> None:
     async with SessionLocal() as session:
         job = await session.get(Job, job_id)
         if job is None:
             return
         job.current_step = step
+        job.status = status
         await session.commit()
 
 
@@ -162,14 +75,14 @@ async def _add_cost(job_id: UUID, amount: float) -> None:
         await session.commit()
 
 
-async def _check_cap(job_id: UUID) -> bool:
+async def _is_capped(job_id: UUID) -> bool:
     async with SessionLocal() as session:
         job = await session.get(Job, job_id)
         if job is None:
             return False
         if job.cost_cap is None:
-            return True
-        return float(job.cost_actual or 0) < float(job.cost_cap)
+            return False
+        return float(job.cost_actual or 0) >= float(job.cost_cap)
 
 
 async def _finalize(job_id: UUID, *, status: str, error: str | None = None) -> None:
@@ -180,72 +93,181 @@ async def _finalize(job_id: UUID, *, status: str, error: str | None = None) -> N
         job.status = status
         job.error = error
         await session.commit()
-    await get_redis().delete(f"pc:job:{job_id}:cancel")
-    await _publish(job_id, {"status": status, "error": error})
 
 
-async def _get_job(session: AsyncSession, job_id: UUID) -> Job:
-    job = await session.get(Job, job_id)
+async def _ensure_report(job_id: UUID) -> SemanticReport:
+    async with SessionLocal() as session:
+        sr = (
+            await session.execute(
+                select(SemanticReport).where(SemanticReport.job_id == job_id)
+            )
+        ).scalar_one_or_none()
+        if sr is None:
+            sr = SemanticReport(job_id=job_id)
+            session.add(sr)
+            await session.commit()
+            await session.refresh(sr)
+        return sr
+
+
+async def _load_job(job_id: UUID) -> Job:
+    async with SessionLocal() as session:
+        job = await session.get(Job, job_id)
     if job is None:
         raise RuntimeError(f"job {job_id} not found")
     return job
 
 
-# ---------- Step handlers ----------
-
-async def _step_serp(job_id: UUID, state: dict) -> None:
+async def _load_content(content_id: UUID) -> Content | None:
     async with SessionLocal() as session:
-        job = await _get_job(session, job_id)
-        keyword, loc, lang = job.keyword, job.location_code, job.language_code
+        return await session.get(Content, content_id)
 
-    serp_result, related = await serp.fetch_serp_and_related(keyword, loc, lang)
-    state["serp"] = serp_result
-    state["related"] = related
+
+# ---------- public API: run_step ----------
+
+
+async def run_step(job_id: UUID, step: str) -> dict[str, Any]:
+    """Execute ONE pipeline step. Idempotent (cached) and short.
+
+    Returns a small status dict the API layer surfaces to the browser:
+      { "ok": True, "step": "...", "next": "..." | None, "paused": bool }
+    """
+    if step not in STEPS:
+        raise ValueError(f"unknown step: {step}")
+    if await _is_capped(job_id):
+        await _finalize(job_id, status="capped", error="cost cap reached")
+        return {"ok": False, "step": step, "next": None, "paused": False, "capped": True}
+
+    await _set_step(job_id, step, "running")
+    await log_step(job_id, step, "running")
+
+    handler = _HANDLERS[step]
+    try:
+        await handler(job_id)
+    except Exception as exc:  # noqa: BLE001
+        await log_step(job_id, step, "failed", {"error": str(exc)})
+        await syslog.error(f"step {step} failed", module="pipeline", job_id=str(job_id), error=str(exc))
+        await _finalize(job_id, status="failed", error=f"{step}: {exc}")
+        return {"ok": False, "step": step, "error": str(exc)}
+
+    await log_step(job_id, step, "done")
+
+    if await _is_capped(job_id):
+        await _finalize(job_id, status="capped", error="cost cap reached")
+        return {"ok": False, "step": step, "next": None, "paused": False, "capped": True}
+
+    next_step = _next_step(step)
+    paused = False
+    if step == PAUSE_AFTER:
+        job = await _load_job(job_id)
+        if not job.auto_validate_blueprint:
+            await _set_step(job_id, step, "paused")
+            paused = True
+            next_step = None
+
+    if next_step is None and not paused:
+        await _finalize(job_id, status="done")
+
+    return {"ok": True, "step": step, "next": next_step, "paused": paused}
+
+
+def _next_step(current: str) -> str | None:
+    i = STEPS.index(current)
+    return STEPS[i + 1] if i + 1 < len(STEPS) else None
+
+
+async def reset_for_retry(job_id: UUID) -> None:
+    """Clear the previous run state so the job can be re-driven from step 1."""
+    async with SessionLocal() as session:
+        job = await session.get(Job, job_id)
+        if job is None:
+            return
+        history = list((job.audit or {}).get("retries", []))
+        history.append({"previous_steps": (job.audit or {}).get("steps", [])})
+        job.audit = {"steps": [], "retries": history}
+        job.status = "queued"
+        job.error = None
+        job.current_step = None
+        await session.commit()
+
+
+# ---------- step handlers (each loads its own state from DB / cache) ----------
+
+
+async def _step_serp(job_id: UUID) -> None:
+    job = await _load_job(job_id)
+    serp_result, related = await serp.fetch_serp_and_related(
+        job.keyword, job.location_code, job.language_code
+    )
     await _add_cost(job_id, serp_result.cost + (serp.RELATED_COST if related else 0))
 
+    sr = await _ensure_report(job_id)
     async with SessionLocal() as session:
-        job = await _get_job(session, job_id)
-        report = SemanticReport(
-            job_id=job.id,
-            serp_raw=serp_result.raw,
-            related_keywords=[r.__dict__ for r in related],
-        )
-        session.add(report)
-        await session.commit()
-        state["report_id"] = report.id
+        sr_db = await session.get(SemanticReport, sr.id)
+        if sr_db is not None:
+            sr_db.serp_raw = serp_result.raw or {
+                "organic_top7": serp_result.organic_top7,
+                "paa": serp_result.paa,
+                "features": serp_result.features,
+                "keyword": serp_result.keyword,
+            }
+            sr_db.related_keywords = [r.__dict__ for r in related]
+            await session.commit()
 
 
-async def _step_scrape(job_id: UUID, state: dict) -> None:
-    serp_result = state["serp"]
-    urls = [o["url"] for o in serp_result.organic_top7 if o.get("url")]
+async def _step_scrape(job_id: UUID) -> None:
+    """Scrape competitor URLs. Re-uses the URL-level api_cache (TTL 72h)."""
+    serp_result = await _hydrate_serp(job_id)
+    urls = [o["url"] for o in serp_result.get("organic_top7", []) if o.get("url")]
+    if not urls:
+        raise RuntimeError("no organic URLs from SERP")
     batch = await scraper.scrape_urls(urls, min_success=MIN_COMPETITORS_OK)
-    state["scraped"] = batch
     await _add_cost(job_id, batch.cost)
     if len(batch.pages) < MIN_COMPETITORS_OK:
         raise RuntimeError(
             f"scrape tolerance breached: {len(batch.pages)}/{len(urls)} pages OK"
         )
+    # Persist scraped pages on the semantic_reports row so the next steps don't
+    # need to re-fetch them from cache (and so we have a permanent record).
+    sr = await _ensure_report(job_id)
+    async with SessionLocal() as session:
+        sr_db = await session.get(SemanticReport, sr.id)
+        if sr_db is not None:
+            payload = (sr_db.serp_raw or {}).copy()
+            payload["scraped"] = [
+                {
+                    "url": p.url,
+                    "title": p.title,
+                    "markdown": p.markdown,
+                    "html": p.html,
+                    "source": p.source,
+                }
+                for p in batch.pages
+            ]
+            sr_db.serp_raw = payload
+            await session.commit()
 
 
-async def _step_parse(job_id: UUID, state: dict) -> None:  # noqa: ARG001
-    batch = state["scraped"]
+async def _step_parse(job_id: UUID) -> None:
+    pages = await _hydrate_scraped(job_id)
+    serp_result = await _hydrate_serp(job_id)
+
     parsed: list[tuple[parser.ParsedPage, float]] = []
-    for raw in batch.pages:
-        p = parser.parse_page(raw.url, raw.html, raw.markdown)
+    for raw in pages:
+        p = parser.parse_page(raw["url"], raw.get("html"), raw.get("markdown"))
         q = quality.score_competitor(p)
         parsed.append((p, q))
-    state["parsed"] = parsed
 
-    serp_result = state["serp"]
     intent = intent_svc.classify_intent(
-        serp_result.features, [o.get("title", "") for o in serp_result.organic_top7]
+        serp_result.get("features", []),
+        [o.get("title", "") for o in serp_result.get("organic_top7", [])],
     )
-    state["intent"] = intent
 
+    sr = await _ensure_report(job_id)
     async with SessionLocal() as session:
-        report = await session.get(SemanticReport, state["report_id"])
-        if report is not None:
-            report.competitors = [
+        sr_db = await session.get(SemanticReport, sr.id)
+        if sr_db is not None:
+            sr_db.competitors = [
                 {
                     "url": p.url,
                     "title": p.title,
@@ -259,91 +281,119 @@ async def _step_parse(job_id: UUID, state: dict) -> None:  # noqa: ARG001
                 for p, q in parsed
             ]
             await session.commit()
+        # Persist intent on content for downstream steps
+        job = await session.get(Job, job_id)
+        if job and job.content_id:
+            content = await session.get(Content, job.content_id)
+            if content:
+                content.intent = intent
+                await session.commit()
 
 
-async def _step_analyze(job_id: UUID, state: dict) -> None:
+async def _step_analyze(job_id: UUID) -> None:
+    job = await _load_job(job_id)
+    content = await _load_content(job.content_id) if job.content_id else None
+    parsed_payload = await _hydrate_parsed(job_id)
+    related = await _hydrate_related(job_id)
+    intent = (content.intent if content else None) or "informational"
+
+    parsed: list[tuple[parser.ParsedPage, float]] = []
+    for c in parsed_payload:
+        p = parser.ParsedPage(
+            url=c.get("url", ""),
+            title=c.get("title"),
+            h1=c.get("h1"),
+            h2=list(c.get("h2") or []),
+            word_count=int(c.get("word_count") or 0),
+            tables_count=int(c.get("tables") or 0),
+            has_faq_schema=bool(c.get("has_faq_schema")),
+        )
+        parsed.append((p, float(c.get("quality") or 0)))
+
     report = await analysis.semantic_report(
-        keyword=state["serp"].keyword,
-        intent=state["intent"],
-        parsed=state["parsed"],
-        related=[r.keyword for r in state["related"]],
+        keyword=job.keyword,
+        intent=intent,
+        parsed=parsed,
+        related=related,
     )
-    state["analysis"] = report
     await _add_cost(job_id, report.llm_cost)
 
-    # Persist + embed expected terms for coverage scoring later
     expected_text = " ; ".join(report.required_terms[:50] + report.entities[:20])
     expected_vec: list[float] | None = None
     if expected_text.strip():
         vecs = await embeddings.embed([expected_text])
         expected_vec = vecs[0] if vecs else None
 
-    # YourTextGuru-style top 40 corpus terms with target frequencies
-    competitor_texts = []
-    for raw in state.get("scraped").pages:  # type: ignore[union-attr]
-        if raw.markdown:
-            competitor_texts.append(raw.markdown)
+    competitor_texts = [p.get("markdown", "") for p in await _hydrate_scraped(job_id)]
     targets = term_freq.compute_term_targets(competitor_texts, top_n=40)
 
+    sr = await _ensure_report(job_id)
     async with SessionLocal() as session:
-        sr = await session.get(SemanticReport, state["report_id"])
-        if sr is not None:
-            sr.common_subthemes = report.common_subthemes
-            sr.rare_subthemes = report.rare_subthemes
-            sr.entities = report.entities
-            sr.required_terms = report.required_terms
-            sr.content_gaps = report.content_gaps
-            sr.term_targets = [t.to_dict() for t in targets]
+        sr_db = await session.get(SemanticReport, sr.id)
+        if sr_db is not None:
+            sr_db.common_subthemes = report.common_subthemes
+            sr_db.rare_subthemes = report.rare_subthemes
+            sr_db.entities = report.entities
+            sr_db.required_terms = report.required_terms
+            sr_db.content_gaps = report.content_gaps
+            sr_db.term_targets = [t.to_dict() for t in targets]
             if expected_vec is not None:
-                sr.expected_terms_embedding = expected_vec
+                sr_db.expected_terms_embedding = expected_vec
             await session.commit()
 
 
-async def _step_blueprint(job_id: UUID, state: dict) -> None:
+async def _step_blueprint(job_id: UUID) -> None:
     job = await _load_job(job_id)
+    sr = await _ensure_report(job_id)
+    content = await _load_content(job.content_id) if job.content_id else None
+    intent = (content.intent if content else None) or "informational"
+
+    # Re-construct a SemanticReport view for blueprint_svc.build_blueprint
+    fake_report = analysis.SemanticReport(
+        common_subthemes=list(sr.common_subthemes or []),
+        rare_subthemes=list(sr.rare_subthemes or []),
+        entities=list(sr.entities or []),
+        required_terms=list(sr.required_terms or []),
+        content_gaps=list(sr.content_gaps or []),
+        structural_signals={},
+        llm_cost=0.0,
+    )
     bp = await blueprint_svc.build_blueprint(
         keyword=job.keyword,
-        intent=state["intent"],
+        intent=intent,
         content_type=job.content_type,
-        report=state["analysis"],
+        report=fake_report,
     )
-    state["blueprint"] = bp
     await _add_cost(job_id, bp.llm_cost)
 
-    async with SessionLocal() as session:
-        if job.content_id:
-            content = await session.get(Content, job.content_id)
-            if content is not None:
-                content.blueprint = bp.to_dict()
-                content.intent = state["intent"]
+    if content is not None:
+        async with SessionLocal() as session:
+            db_content = await session.get(Content, content.id)
+            if db_content:
+                db_content.blueprint = bp.to_dict()
+                if not db_content.intent:
+                    db_content.intent = intent
                 await session.commit()
 
 
-async def _step_generate(job_id: UUID, state: dict) -> None:
+async def _step_generate(job_id: UUID) -> None:
     job = await _load_job(job_id)
-    content = await _load_content(job.content_id)
+    content = await _load_content(job.content_id) if job.content_id else None
     if content is None:
         raise RuntimeError("missing content row")
 
-    blueprint_dict: dict
-    if content.blueprint:
-        blueprint_dict = content.blueprint
-    elif "blueprint" in state:
-        blueprint_dict = state["blueprint"].to_dict()
-    else:
-        blueprint_dict = {}
-    intent = content.intent or state.get("intent", "informational")
+    blueprint_dict: dict = content.blueprint or {}
+    if not blueprint_dict:
+        raise RuntimeError("blueprint not yet computed")
 
-    if "analysis" in state:
-        report = state["analysis"]
-        required = report.required_terms
-        entities = report.entities
-        gaps = report.content_gaps
-    else:
-        required, entities, gaps = await _load_report_terms(job_id)
-
+    intent = content.intent or "informational"
+    sr = await _ensure_report(job_id)
+    required = list(sr.required_terms or [])
+    entities = list(sr.entities or [])
+    gaps = list(sr.content_gaps or [])
     domain_host = await _load_domain_host(job.domain_id) if job.domain_id else None
 
+    image_prompt = _quick_image_prompt(blueprint_dict)
     gen_task = generator.generate_content(
         keyword=job.keyword,
         intent=intent,
@@ -354,43 +404,39 @@ async def _step_generate(job_id: UUID, state: dict) -> None:
         entities=entities,
         content_gaps=gaps,
     )
-    image_prompt = _quick_image_prompt(blueprint_dict)
     image_task = image.generate_image(image_prompt)
-
     generated, img = await asyncio.gather(gen_task, image_task)
-    state["generated"] = generated
-    state["image"] = img
+
     await _add_cost(job_id, generated.llm_cost + img.cost)
 
     async with SessionLocal() as session:
-        content_db = await session.get(Content, job.content_id)
-        if content_db is not None:
-            content_db.title_variants = generated.title_variants
+        c = await session.get(Content, content.id)
+        if c is not None:
+            c.title_variants = generated.title_variants
             if generated.title_variants:
-                content_db.chosen_title = generated.title_variants[0].get("title")
-                content_db.chosen_meta = generated.title_variants[0].get("meta")
-            content_db.html = generated.html
-            content_db.markdown = _html_to_markdown(generated.html)
-            content_db.schema_recommendations = generated.schema_recommendations
-            content_db.image_url = img.url
-            content_db.image_prompt = generated.image_prompt or image_prompt
-            content_db.status = "generated"
-            # Embed for cannibalization / cross-linking
-            embed_text = (content_db.chosen_title or "") + " " + (content_db.keyword or "")
+                c.chosen_title = generated.title_variants[0].get("title")
+                c.chosen_meta = generated.title_variants[0].get("meta")
+            c.html = generated.html
+            c.markdown = _html_to_markdown(generated.html)
+            c.schema_recommendations = generated.schema_recommendations
+            c.image_url = img.url
+            c.image_prompt = generated.image_prompt or image_prompt
+            c.status = "generated"
+            embed_text = (c.chosen_title or "") + " " + (c.keyword or "")
             if embed_text.strip():
                 vecs = await embeddings.embed([embed_text])
                 if vecs:
-                    content_db.embedding = vecs[0]
+                    c.embedding = vecs[0]
             await session.commit()
 
 
-async def _step_image(job_id: UUID, state: dict) -> None:
-    # Image is generated in the `generate` step in parallel; this is a no-op
-    # unless we ever decouple them. Kept for symmetry with the documented pipeline.
+async def _step_image(job_id: UUID) -> None:
+    """Image already generated in step `generate` (parallel with content).
+    Kept as a no-op step for symmetry with the documented pipeline."""
     return
 
 
-async def _step_link(job_id: UUID, state: dict) -> None:
+async def _step_link(job_id: UUID) -> None:
     job = await _load_job(job_id)
     if not job.internal_linking:
         await log_step(job_id, "link", "skipped", {"reason": "internal_linking disabled"})
@@ -398,7 +444,7 @@ async def _step_link(job_id: UUID, state: dict) -> None:
     if not job.domain_id:
         await log_step(job_id, "link", "skipped", {"reason": "no domain selected"})
         return
-    content = await _load_content(job.content_id)
+    content = await _load_content(job.content_id) if job.content_id else None
     if content is None or not content.html:
         await log_step(job_id, "link", "skipped", {"reason": "no content html"})
         return
@@ -430,9 +476,9 @@ async def _step_link(job_id: UUID, state: dict) -> None:
             await session.commit()
 
 
-async def _step_score(job_id: UUID, state: dict) -> None:
+async def _step_score(job_id: UUID) -> None:
     job = await _load_job(job_id)
-    content = await _load_content(job.content_id)
+    content = await _load_content(job.content_id) if job.content_id else None
     if content is None or not content.html:
         return
 
@@ -442,7 +488,7 @@ async def _step_score(job_id: UUID, state: dict) -> None:
                 select(SemanticReport).where(SemanticReport.job_id == job_id)
             )
         ).scalar_one_or_none()
-        expected_terms = sr.required_terms if sr and sr.required_terms else []
+        expected_terms = list(sr.required_terms or []) if sr else []
 
     plain = BeautifulSoup(content.html, "lxml").get_text(" ", strip=True)
     score = await coverage.coverage_score(expected_terms=expected_terms, content_text=plain)
@@ -468,55 +514,34 @@ _HANDLERS = {
 }
 
 
-# ---------- helpers ----------
-
-async def _load_job(job_id: UUID) -> Job:
-    async with SessionLocal() as session:
-        job = await session.get(Job, job_id)
-        if job is None:
-            raise RuntimeError(f"job {job_id} not found")
-        return job
+# ---------- DB hydration helpers ----------
 
 
-async def _load_content(content_id: UUID | None) -> Content | None:
-    if content_id is None:
-        return None
-    async with SessionLocal() as session:
-        return await session.get(Content, content_id)
+async def _hydrate_serp(job_id: UUID) -> dict:
+    sr = await _ensure_report(job_id)
+    return sr.serp_raw or {}
+
+
+async def _hydrate_scraped(job_id: UUID) -> list[dict]:
+    sr = await _ensure_report(job_id)
+    return list((sr.serp_raw or {}).get("scraped", []) or [])
+
+
+async def _hydrate_parsed(job_id: UUID) -> list[dict]:
+    sr = await _ensure_report(job_id)
+    return list(sr.competitors or [])
+
+
+async def _hydrate_related(job_id: UUID) -> list[str]:
+    sr = await _ensure_report(job_id)
+    raw = list(sr.related_keywords or [])
+    return [r["keyword"] for r in raw if r.get("keyword")]
 
 
 async def _load_domain_host(domain_id: UUID) -> str | None:
     async with SessionLocal() as session:
         d = await session.get(Domain, domain_id)
         return d.hostname if d else None
-
-
-async def _load_report_terms(job_id: UUID) -> tuple[list[str], list[str], list[str]]:
-    from sqlalchemy import select
-
-    async with SessionLocal() as session:
-        sr = (
-            await session.execute(select(SemanticReport).where(SemanticReport.job_id == job_id))
-        ).scalar_one_or_none()
-        if sr is None:
-            return [], [], []
-        return (
-            list(sr.required_terms or []),
-            list(sr.entities or []),
-            list(sr.content_gaps or []),
-        )
-
-
-async def _hydrate_state_from_db(job_id: UUID, state: dict) -> None:
-    """When resuming a job, load enough state to skip re-running expensive steps."""
-    from sqlalchemy import select
-
-    async with SessionLocal() as session:
-        sr = (
-            await session.execute(select(SemanticReport).where(SemanticReport.job_id == job_id))
-        ).scalar_one_or_none()
-        if sr:
-            state["report_id"] = sr.id
 
 
 def _quick_image_prompt(blueprint: dict) -> str:
@@ -526,7 +551,6 @@ def _quick_image_prompt(blueprint: dict) -> str:
 
 
 def _html_to_markdown(html: str) -> str:
-    """Minimal HTML→Markdown for export. Not a full converter — preserves headings, lists, links."""
     soup = BeautifulSoup(html or "", "lxml")
     out: list[str] = []
     for el in soup.descendants:

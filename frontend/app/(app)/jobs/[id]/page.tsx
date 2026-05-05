@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
 import { Blueprint, Content, Job } from "@/lib/types";
 import { JobTimeline } from "@/components/JobTimeline";
 import { BlueprintEditor } from "@/components/BlueprintEditor";
-import { subscribeSSE } from "@/lib/sse";
+import { runJobToCompletion } from "@/lib/pipeline";
 
 export default function JobPage() {
   const router = useRouter();
@@ -15,24 +15,36 @@ export default function JobPage() {
   const id = params.id;
 
   const { data: job, mutate } = useSWR<Job>(id ? `/api/jobs/${id}` : null, fetcher, {
-    refreshInterval: 3000,
+    refreshInterval: 2000,
   });
   const { data: content } = useSWR<Content>(
     job?.content_id ? `/api/contents/${job.content_id}` : null,
     fetcher,
-    { refreshInterval: 3000 }
+    { refreshInterval: 2500 }
   );
 
   const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState(false);
+  const cancelled = useRef(false);
 
+  // Auto-drive a queued job from the start
   useEffect(() => {
-    if (!id) return;
-    const unsub = subscribeSSE(`/api/jobs/${id}/events`, () => {
-      mutate();
-    });
-    return unsub;
-  }, [id, mutate]);
+    if (!job || running || busy) return;
+    if (job.status !== "queued") return;
+    setRunning(true);
+    cancelled.current = false;
+    runJobToCompletion(job.id, {
+      onStep: () => mutate(),
+      cancelled: () => cancelled.current,
+    })
+      .finally(() => {
+        setRunning(false);
+        mutate();
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.status]);
 
+  // Once done, jump to the editor
   useEffect(() => {
     if (job?.status === "done" && job.content_id) {
       router.push(`/contents/${job.content_id}`);
@@ -44,7 +56,9 @@ export default function JobPage() {
     setBusy(true);
     try {
       await api(`/api/jobs/${id}/blueprint`, { method: "POST", json: { blueprint: bp } });
-      mutate();
+      // Resume from "generate" client-side
+      runJobToCompletion(id, { fromStep: "generate", onStep: () => mutate() })
+        .finally(() => mutate());
     } finally {
       setBusy(false);
     }
@@ -52,6 +66,7 @@ export default function JobPage() {
 
   async function cancel() {
     if (!id) return;
+    cancelled.current = true;
     await api(`/api/jobs/${id}/cancel`, { method: "POST" });
     mutate();
   }
@@ -91,6 +106,11 @@ export default function JobPage() {
           <div className="bg-red-900/30 border border-red-700 text-red-100 p-3 rounded text-sm">
             <div className="font-semibold mb-1">Erreur — étape « {job.current_step || "inconnue"} »</div>
             <div className="text-xs opacity-90">{job.error}</div>
+          </div>
+        )}
+        {running && (
+          <div className="text-xs text-zinc-500">
+            Garde cet onglet ouvert pendant la génération.
           </div>
         )}
       </div>

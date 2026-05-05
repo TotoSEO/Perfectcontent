@@ -9,7 +9,8 @@ from app.auth import require_session
 from app.db import get_db
 from app.models import Content, Job, SemanticReport
 from app.schemas.content import ContentOut, ContentPatch, RegenerateContentSectionIn
-from app.workers.queue import enqueue_regenerate_content_section, enqueue_regenerate_image
+from app.services import image as image_svc
+from app.services import regenerate as regen_svc
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -51,8 +52,12 @@ async def regenerate_image(content_id: UUID, db: AsyncSession = Depends(get_db))
     content = await db.get(Content, content_id)
     if content is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
-    enqueue_regenerate_image(content.id)
-    return {"ok": True}
+    if not content.image_prompt:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no image prompt")
+    img = await image_svc.generate_image(content.image_prompt)
+    content.image_url = img.url
+    await db.commit()
+    return {"ok": True, "image_url": img.url}
 
 
 @router.post("/{content_id}/regenerate-section")
@@ -64,7 +69,7 @@ async def regenerate_content_section(
     content = await db.get(Content, content_id)
     if content is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
-    enqueue_regenerate_content_section(content.id, payload.section_id)
+    await regen_svc.regenerate_section(content_id, payload.section_id)
     return {"ok": True}
 
 
