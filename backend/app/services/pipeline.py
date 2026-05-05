@@ -338,7 +338,18 @@ async def _step_analyze(job_id: UUID) -> None:
         expected_vec = vecs[0] if vecs else None
 
     competitor_texts = [p.get("markdown", "") for p in await _hydrate_scraped(job_id)]
-    targets = term_freq.compute_term_targets(competitor_texts, top_n=40)
+    # Headings carry the strongest editorial signal: any candidate term that
+    # surfaces in any competitor's H1/H2 gets a 1.4× heading boost in BM25.
+    headings_text = " . ".join(
+        " ".join(filter(None, [c.get("h1") or ""] + list(c.get("h2") or [])))
+        for c in parsed_payload
+    )
+    targets = term_freq.compute_term_targets(
+        competitor_texts,
+        keyword=job.keyword,
+        headings_text=headings_text,
+        top_n=40,
+    )
 
     sr = await _ensure_report(job_id)
     async with SessionLocal() as session:

@@ -80,6 +80,39 @@ export function countTerms(text: string): Map<string, number> {
   return counts;
 }
 
+const ESCAPE_RE = /[.*+?^${}()|[\]\\]/g;
+function escapeRegex(s: string): string {
+  return s.replace(ESCAPE_RE, "\\$&");
+}
+
+/**
+ * Count whole-word occurrences of any of the given surface forms in a plain
+ * text. Used to mirror the BM25 backend targets, which carry a list of
+ * surfaces (so "agence", "agences" both count toward the same target).
+ *
+ * For multi-word surfaces (n-grams), the match is also case-insensitive but
+ * with whitespace-tolerant separators so HTML→text quirks don't drop hits.
+ */
+export function countSurfaces(plainText: string, surfaces: string[]): number {
+  if (!surfaces.length || !plainText) return 0;
+  const lowered = plainText.toLowerCase();
+  let total = 0;
+  for (const s of surfaces) {
+    const surface = s.toLowerCase().trim();
+    if (!surface) continue;
+    let pattern: RegExp;
+    if (surface.includes(" ")) {
+      const tokens = surface.split(/\s+/).map(escapeRegex);
+      pattern = new RegExp(`\\b${tokens.join("\\s+")}\\b`, "gu");
+    } else {
+      pattern = new RegExp(`(?<![\\p{L}-])${escapeRegex(surface)}(?![\\p{L}-])`, "gu");
+    }
+    const matches = lowered.match(pattern);
+    if (matches) total += matches.length;
+  }
+  return total;
+}
+
 export function htmlToPlain(html: string): string {
   if (typeof window === "undefined") return html;
   const doc = new DOMParser().parseFromString(html, "text/html");

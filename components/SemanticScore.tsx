@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
-import { countTerms, htmlToPlain } from "@/lib/stopwords";
+import { countSurfaces, htmlToPlain } from "@/lib/stopwords";
 
 export type TermTarget = {
   term: string;
@@ -11,6 +11,8 @@ export type TermTarget = {
   min: number;
   max: number;
   importance: number;
+  is_ngram?: boolean;
+  surface_forms?: string[];
 };
 
 type Status = "missing" | "low" | "ok" | "over";
@@ -50,10 +52,19 @@ export function SemanticScore({
     return () => clearTimeout(t);
   }, [html]);
 
-  const counts = useMemo(
-    () => countTerms(htmlToPlain(debouncedHtml || "")),
+  const plain = useMemo(
+    () => htmlToPlain(debouncedHtml || ""),
     [debouncedHtml],
   );
+
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of targets) {
+      const surfaces = t.surface_forms?.length ? t.surface_forms : [t.term];
+      m.set(t.term, countSurfaces(plain, surfaces));
+    }
+    return m;
+  }, [targets, plain]);
 
   const summary = useMemo(() => {
     const breakdown: Record<Status, number> = { missing: 0, low: 0, ok: 0, over: 0 };
@@ -117,7 +128,14 @@ export function SemanticScore({
             >
               <div className="min-w-0">
                 <div className="flex justify-between items-baseline gap-2">
-                  <span className="truncate font-medium">{t.term}</span>
+                  <span className="truncate font-medium">
+                    {t.is_ngram && (
+                      <span className="text-[9px] uppercase tracking-wider text-accent-400/70 mr-1">
+                        ◆
+                      </span>
+                    )}
+                    {t.term}
+                  </span>
                   <span className={`tabular-nums ${TONE[st].chip}`}>
                     {count}/{t.target}
                   </span>
