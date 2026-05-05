@@ -63,31 +63,100 @@ async def complete(
 
 
 def extract_json(text: str) -> dict:
-    """Extract the first JSON object/array from a Claude response."""
+    """Extract the first JSON object/array from a Claude response.
+
+    Handles three cases:
+    1. Clean JSON wrapped in a ```json ... ``` fence
+    2. JSON inline in the response (the most common case for our prompts)
+    3. JSON that got truncated by max_tokens — we try to repair it by
+       balancing the open braces/brackets with closes.
+    """
     fence = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", text, flags=re.DOTALL)
-    candidate = fence.group(1) if fence else _find_first_json(text)
-    return json.loads(candidate)
+    if fence:
+        return json.loads(fence.group(1))
+    candidate, was_complete = _find_first_json(text)
+    if was_complete:
+        return json.loads(candidate)
+    # Truncated: try to repair by closing remaining open structures
+    repaired = _repair_truncated_json(candidate)
+    return json.loads(repaired)
 
 
-def _find_first_json(text: str) -> str:
+def _find_first_json(text: str) -> tuple[str, bool]:
+    """Return (substring, complete?). complete=False means we hit the end of
+    the text mid-structure — caller should try to repair it."""
     depth = 0
     start = -1
-    opener = None
+    in_string = False
+    escape = False
     for i, ch in enumerate(text):
         if start == -1 and ch in "{[":
             start = i
-            opener = ch
             depth = 1
             continue
         if start == -1:
+            continue
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
             continue
         if ch in "{[":
             depth += 1
         elif ch in "}]":
             depth -= 1
             if depth == 0:
-                return text[start : i + 1]
-    raise ValueError("no JSON found in LLM response")
+                return text[start : i + 1], True
+    if start == -1:
+        raise ValueError("no JSON found in LLM response")
+    # Reached EOF mid-structure
+    return text[start:], False
+
+
+def _repair_truncated_json(snippet: str) -> str:
+    """Best-effort repair of a JSON snippet that got cut mid-stream.
+
+    Trims back to the last complete value (string / number / closing bracket)
+    and balances the opening { [ with the right number of closes."""
+    # 1. Strip trailing whitespace + a trailing comma if present
+    s = snippet.rstrip()
+    # 2. If we're inside a string, terminate it (heuristic: closing quote)
+    in_string = False
+    escape = False
+    last_safe = 0
+    stack: list[str] = []
+    for i, ch in enumerate(s):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if stack and stack[-1] == ch:
+                stack.pop()
+        if not in_string and ch in '}]"0123456789truefalsenul':
+            last_safe = i + 1
+    # If we ended inside a string, cut back to the last safe position
+    if in_string:
+        s = s[:last_safe]
+    # Drop any trailing comma we might leave behind
+    s = s.rstrip().rstrip(",").rstrip()
+    # Close remaining open structures
+    return s + "".join(reversed(stack))
 
 
 def _mock_response(system: str, user: str) -> LLMResponse:
