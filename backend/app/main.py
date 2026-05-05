@@ -46,24 +46,71 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 @app.get("/srv/diag/db")
 async def diag_db() -> dict:
-    """Test the database connection and return the result."""
+    """Comprehensive DB diagnostic. Tests both the SQLAlchemy stack and
+    raw psycopg connection so we can pinpoint where the failure is.
+    """
+    import os
+    from urllib.parse import urlparse
     from sqlalchemy import text
-    from app.db import SessionLocal
+    from app.db import SessionLocal, _clean_url, _ssl_extra
+
+    raw = os.environ.get("DATABASE_URL", "")
+    parsed = urlparse(raw)
+    masked = (
+        f"{parsed.scheme}://{parsed.username}:***@"
+        f"{parsed.hostname}:{parsed.port}{parsed.path}"
+        f"{'?' + parsed.query if parsed.query else ''}"
+    )
+
+    out: dict = {
+        "raw_scheme": parsed.scheme,
+        "raw_host": parsed.hostname,
+        "raw_port": parsed.port,
+        "raw_db": parsed.path,
+        "raw_user": parsed.username,
+        "raw_query": parsed.query,
+        "masked_url": masked,
+        "normalized_url": _clean_url.split("@")[-1] if "@" in _clean_url else _clean_url,
+        "connect_args_keys": list(_ssl_extra.keys()),
+        "tests": {},
+    }
+
+    # Test 1: SQLAlchemy SELECT 1
     try:
         async with SessionLocal() as session:
             result = await session.execute(text("SELECT 1 AS ok"))
             row = result.first()
-            return {"ok": True, "result": row[0] if row else None}
+            out["tests"]["sqlalchemy"] = {"ok": True, "result": row[0] if row else None}
     except Exception as exc:  # noqa: BLE001
-        return {
+        out["tests"]["sqlalchemy"] = {
             "ok": False,
             "error_type": type(exc).__name__,
-            "error": str(exc),
-            "hint": (
-                "Le scheme doit être 'postgresql+asyncpg://...'. Si t'as gardé "
-                "'postgresql://...' (sans +asyncpg), c'est ça l'erreur."
-            ),
+            "error": str(exc)[:500],
         }
+
+    # Test 2: raw psycopg (bypasses SQLAlchemy entirely)
+    try:
+        import psycopg
+        from urllib.parse import urlunparse, urlparse as _up
+        # strip the +psycopg suffix from scheme — psycopg wants plain postgresql://
+        plain_scheme_url = raw
+        if "+psycopg" in raw:
+            plain_scheme_url = raw.replace("+psycopg", "")
+        if "+asyncpg" in plain_scheme_url:
+            plain_scheme_url = plain_scheme_url.replace("+asyncpg", "")
+        async with await psycopg.AsyncConnection.connect(plain_scheme_url, connect_timeout=8) as conn:  # type: ignore[arg-type]
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT 1")
+                row = await cur.fetchone()
+                out["tests"]["psycopg_raw"] = {"ok": True, "result": row[0] if row else None}
+    except Exception as exc:  # noqa: BLE001
+        out["tests"]["psycopg_raw"] = {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:500],
+        }
+
+    return out
 
 
 app.include_router(auth_router.router, prefix="/srv/auth", tags=["auth"])
