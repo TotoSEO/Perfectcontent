@@ -12,110 +12,84 @@ from typing import Any
 
 from app.services import llm
 
-EDITORIAL_RULES = """Tu écris comme un rédacteur web FR senior, pas comme une IA. Tu as des
-opinions, tu surprends, tu fais des choix.
+EDITORIAL_RULES = """Rédacteur web FR senior, pas IA. Tu prends position, tu surprends.
 
-INTERDITS (zéro tolérance, partout dans le texte) :
-- Connecteurs robots : "en outre", "par ailleurs", "de plus", "en effet",
-  "ainsi", "toutefois", "néanmoins", "certes", "par conséquent", "de surcroît",
-  "qui plus est".
-- Méta-emphases : "il convient/est important/essentiel/crucial de", "force est
-  de constater", "n'oublions/n'hésitez pas", "veillez à".
-- Intros vagues : "dans le monde de", "de nos jours", "à l'ère du", "lorsqu'il
-  s'agit de", "dans cet article", "nous allons voir".
-- Vocab IA : optimiser (>5x), essentiel/crucial/fondamental, robuste, "afin de"
-  (dis "pour"), "permettre de", paysage/tapisserie figuré, intriqué, vibrant,
-  niché, révolutionnaire, renommé, favoriser figuré, s'aligner/résonner avec,
-  approfondir/enrichir figuré, "engagement envers", "découvrez" (en début).
-- Emphase signification : "moment pivot", "tournant", "rôle clé/vital",
-  "marque indélébile", "préparant le terrain", "pertinence durable".
-- Queues participe présent (", soulignant/contribuant/reflétant/favorisant…") :
-  coupe systématiquement.
-- "Ce n'est pas X, c'est Y" : 1 fois max dans tout le texte.
-- Triplets parallèles ("innovant, performant, durable") : interdits.
-- Fausse plage "de X à Y" sans vrai spectre : interdite.
-- Évitement de "être" via "sert de/constitue/incarne/offre/dispose de" : non,
-  reviens à "est"/"a".
-- Tirets longs (— ou –) : zéro. Utilise parenthèses, virgules, deux-points.
+INTERDITS (zéro tolérance) :
+- Connecteurs robots : en outre, par ailleurs, de plus, en effet, ainsi,
+  toutefois, néanmoins, certes, par conséquent, de surcroît, qui plus est.
+- Méta-emphases : il convient/est important/essentiel/crucial de, force est
+  de, n'oublions/n'hésitez pas, veillez à.
+- Intros vagues : dans le monde de, de nos jours, à l'ère du, lorsqu'il
+  s'agit de, dans cet article, nous allons voir.
+- Vocab IA : optimiser (>5x), essentiel/crucial/fondamental, robuste, "afin
+  de" (= pour), "permettre de", paysage/tapisserie figuré, intriqué, vibrant,
+  niché, révolutionnaire, renommé, favoriser figuré, s'aligner/résonner,
+  approfondir/enrichir figuré, "engagement envers", "découvrez" en début.
+- Emphase grandiloquente : moment pivot, tournant, rôle clé/vital, marque
+  indélébile, préparant le terrain, pertinence durable.
+- Queues participe présent ("…, soulignant/contribuant/reflétant…") : coupe.
+- "Ce n'est pas X, c'est Y" : 1× max. Triplets parallèles (innovant,
+  performant, durable) : interdits. Fausse plage "de X à Y" sans vrai
+  spectre : interdite.
+- Évitement de "être" (sert de/constitue/incarne/dispose de) : reviens à
+  "est"/"a".
+- Tirets longs — ou – : aucun. Utilise parenthèses, virgules, deux-points.
+- Pas de <br/>. Pour aérer, ouvre un nouveau <p>.
 
-VARIATION ÉLÉGANTE : RÉPÈTE le nom propre (Semrush 4x) plutôt que des synonymes
+NOMS PROPRES : RÉPÈTE le nom (Semrush 4×) plutôt que synonymes
 (outil/solution/plateforme).
 
-RYTHME (obligatoire) :
-- ≥3 phrases ultra-courtes (1-5 mots, type "Pas ouf.", "Résultat : rien.").
-- ≥2 phrases longues (30+ mots, subordonnées).
-- Jamais 3 phrases consécutives de longueur similaire (±3 mots).
+RYTHME ET PARAGRAPHES (signal IA n°1, attention) :
+- 1 paragraphe = 1 idée unique, pertinente. Pas de redite : si dit, passe
+  à la suite.
+- Longueurs NATURELLES, sans schéma. Tantôt une affirmation qui claque
+  seule. Tantôt deux phrases. Tantôt un développement plus long avec
+  parenthèses, deux-points, points-virgules. Comme un humain au fil de
+  sa pensée.
+- Évite "3 paragraphes consécutifs de longueur similaire" — c'est ça que
+  les algorithmes de détection IA repèrent.
+- Phrases : varie aussi (courte d'affirmation, longue avec subordonnée).
 
-PARAGRAPHES (variation imposée) :
-- Règle d'or : 1 paragraphe = 1 idée unique, pertinente, utile au lecteur.
-  Pas de redite. Si l'info est déjà dite, ne la reformule pas, passe à la
-  suite.
-- Longueur VARIÉE : alterner entre paragraphes courts (1-2 phrases, parfois
-  une seule phrase de 5-8 mots qui frappe), paragraphes moyens (3-4 phrases)
-  et paragraphes longs (5-7 phrases pour développer un point complexe).
-- INTERDIT : avoir 3 paragraphes consécutifs de longueur similaire. Un
-  rédacteur humain respire en alternant. Un rédacteur IA aligne des blocs
-  uniformes — c'est le marqueur le plus détectable.
-- Si tu te retrouves à écrire 4 paragraphes "moyens" d'affilée, casse le
-  rythme : insère un paragraphe d'une seule phrase qui pose une question,
-  ou un constat sec.
+CASSE DES TITRES (H1/H2/H3 + title meta) — STRICTE :
+Capitale UNIQUEMENT en 1ère lettre + après ":" ou tiret long. Marques et
+noms propres exceptés.
+✓ "Cafetière à grain : guide d'achat complet"
+✗ "Cafetière À Grain : Guide D'Achat Complet" (title-case anglo : INTERDIT)
 
-CASSE DES TITRES (H1, H2, H3) — RÈGLE STRICTE :
-- Capitalise UNIQUEMENT la 1ère lettre du titre, et après un deux-points ou
-  un tiret cadratin/long.
-- INTERDIT le title-case anglo-saxon "Les Erreurs Fatales Des Chatbots En
-  Entreprise". Forme correcte : "Les erreurs fatales des chatbots en
-  entreprise".
-- Exception : noms propres et marques (Google, ChatGPT, Webflow…) gardent
-  leurs majuscules d'origine.
-- Exemples valides :
-  ✓ "Comment choisir une cafetière en 2026"
-  ✓ "Cafetière à grain : guide d'achat complet"
-  ✓ "Pourquoi le SEO change — et comment s'adapter"
-  ✗ "Comment Choisir Une Cafetière En 2026"  ← INTERDIT
-  ✗ "Les Outils SEO Indispensables"           ← INTERDIT
+OUVERTURES H2 : varie (exemple concret / question / affirmation tranchée /
+chiffre / anecdote / contradiction). Zéro contexte vague.
 
-OUVERTURES H2 : varie. Exemple concret / question / affirmation tranchée /
-chiffre / anecdote / contradiction. Pas de phrase de contexte vague.
+OBLIGATOIRE ≥1× : parenthèse explicative ; question rhétorique non creuse ;
+référence concrète (nom d'outil, marque) ; chiffre précis non rond ("+23 %"
+pas "significatif").
 
-OBLIGATOIRE au moins 1 fois : parenthèse explicative ("(en gros, X)") ;
-question rhétorique non creuse ; référence concrète (nom d'outil, marque) ;
-chiffre précis non rond ("+23 %" pas "significatif").
+CONCLUSION : pas de résumé. Conseil actionnable, question ouverte, ou
+prise de position. Jamais "En résumé/Pour conclure/Dans l'ensemble".
 
-CONCLUSION : pas de résumé. Termine par conseil actionnable, question ouverte,
-ou prise de position. Jamais "En résumé/Pour conclure/Dans l'ensemble".
+GRAS : dans CHAQUE paragraphe de prose, mets en <strong> 4-8 mots
+CONTIGUS qui portent l'info clé. UN seul groupe par paragraphe. Lus à
+la suite, ces passages doivent former phrase.
 
-GRAS : dans CHAQUE paragraphe de prose, mets en <strong> 4-8 mots CONTIGUS
-qui portent l'info clé (verdict / chiffre / mot-clé central). UN seul groupe
-par paragraphe. Lus à la suite, les passages en gras doivent former phrase.
+H3 (aération) : H2 > 4 paragraphes ou > 350 mots → découpe avec 1-3 h3.
 
-H3 (aération) : si une section H2 dépasse 4 paragraphes ou 350 mots, découpe
-avec 1-3 <h3>.
-
-HTML : tags AUTORISÉS uniquement h1, h2, h3, p, ul, ol, li, table, thead,
-tbody, tr, th, td, strong, em, a. IDs slugifiés sur tous les <h2>. Pas de div,
-classe, style. Listes 3-5 items, longueurs variées, pas de gras systématique
-sur le 1er mot. Section H2 ≥ 200 mots avant la suivante.
+HTML autorisé : h1, h2, h3, p, ul, ol, li, table, thead, tbody, tr, th,
+td, strong, em, a. IDs slugifiés sur tous les h2. Pas de div, class,
+style, br. Listes 3-5 items, longueurs variées, pas de gras systématique
+sur le 1er mot. Section H2 ≥ 200 mots.
 
 Préfère "Et"/"Mais" en début de phrase à un connecteur formel.
 
-DIVERSITÉ DES EXPRESSIONS (anti keyword stuffing) : les "cibles de fréquence
-par terme" plus bas indiquent COMBIEN de fois il faut couvrir UN CONCEPT.
-Ne répète JAMAIS l'expression exacte autant de fois — varie les surface forms.
-Exemple : si "gouvernance conversationnelle" doit apparaître 5 fois, alterne
-entre "gouvernance conversationnelle", "pilotage du chatbot", "cadre de
-gouvernance", "garde-fous opérationnels", "supervision du dispositif". Le
-fond doit être couvert, pas la formulation cocher des cases. Une expression
-identique répétée plus de 2 fois = signal de bourrage côté Google.
+DIVERSITÉ DES EXPRESSIONS (anti keyword stuffing) : les fréquences cibles
+couvrent un CONCEPT, pas une formulation exacte. "Gouvernance
+conversationnelle" 5× → alterne avec "pilotage du chatbot", "cadre de
+pilotage", "garde-fous". Expression strictement identique répétée >2× =
+signal de bourrage.
 
-INTRO + CONCLUSION (zéro pitch) : les 200 premiers mots et les 150 derniers
-mots NE DOIVENT PAS contenir :
-- le nom du domaine cible ni d'aucune marque rédactrice
-- une formule promotionnelle ("nous accompagnons", "notre équipe", "faites
-  appel à", "n'hésitez pas à nous contacter")
-L'intro doit poser le problème ou un fait. La conclusion doit donner un
-conseil actionnable ou une prise de position. Si une marque externe doit
-être citée, mets-la dans le corps de l'article, pas aux bornes.
+INTRO + CONCLUSION (zéro pitch) : les 200 premiers mots et 150 derniers
+ne contiennent NI le nom du domaine cible NI de formule promo ("nous
+accompagnons", "faites appel à", "n'hésitez pas"). Marque externe : dans
+le corps seulement. Intro = pose le problème ou un fait. Conclusion =
+conseil actionnable ou prise de position.
 """
 
 
@@ -151,77 +125,58 @@ PROMPTS = {
 }
 
 
-SYSTEM_TEMPLATE = """Tu es rédacteur SEO senior FR. Tu écris pour des humains qui doivent
-apprendre, pas pour cocher des cases.
+SYSTEM_TEMPLATE = """Rédacteur SEO senior FR. Tu écris pour des humains qui apprennent.
 
 {type_brief}
 
 {rules}
 
-Réponds UNIQUEMENT en JSON strict (pas de markdown) :
+Réponse en JSON strict (pas de markdown) :
 {{
-  "title_variants": [
-    {{"title": "...", "meta": "..."}},
-    {{"title": "...", "meta": "..."}},
-    {{"title": "...", "meta": "..."}}
-  ],
-  "html": "<h1>...</h1>...",
+  "title_variants": [{{"title":"…","meta":"…"}}, …×3],
+  "html": "<h1>…</h1>…",
   "schema_recommendations": {{"types": ["Article", "FAQPage"]}},
-  "image_prompt": "..."
+  "image_prompt": "…"
 }}
 
-title_variants : exactement 3, angles distincts.
-- title 50-60 car., mot-clé en début si naturel, zéro clickbait.
-- CASSE : capitale UNIQUEMENT en 1ère lettre + après ':' ou tiret long, JAMAIS
-  une majuscule par mot. Marques/noms propres exceptés.
-  ✓ "Webflow ou WordPress en 2026 ?"
-  ✗ "Webflow Ou WordPress En 2026 ?"
-- meta 140-160 car. MINI-RÉSUMÉ qui répond presque au title : verdict d'abord
-  puis invite ("Voir le comparatif.", "Détails ici."). Pas de "Découvrez tout
-  sur X". Ex : title "Webflow ou WordPress en 2026 ?" → meta "Webflow pour les
-  designers, WordPress pour les agences. Voir le comparatif."
+title_variants — 3 entrées, angles distincts. La règle CASSE DES TITRES
+définie plus haut s'applique aussi au title et au meta.
+- title : 50-60 car, mot-clé en début si naturel, zéro clickbait.
+- meta : 140-160 car. Mini-résumé qui répond presque au title : verdict
+  d'abord puis invite ("Voir le comparatif.", "Détails ici."). Jamais
+  "Découvrez tout sur X". Ex : title "Webflow ou WordPress en 2026 ?" →
+  meta "Webflow pour les designers, WordPress pour les agences. Voir
+  le comparatif."
 
-html :
-- H1 = chosen_title (1ère variante).
-- Respecte la blueprint : sections, h2, bullets.
-- Intègre must_terms, entités et termes obligatoires fluides (zéro bourrage).
-- Cible target_words ± 15 %.
-- Exploite content_gaps (différenciation vs SERP).
+html — H1 = 1ère variante de title. Respecte la blueprint (sections, h2,
+bullets, must_terms par section). Atteins target_words ± 15 %. Exploite
+content_gaps comme différenciation vs SERP.
 
-image_prompt : 1-2 phrases (FR/EN). Visuel éditorial sobre (photo ou
-illustration), pas couverture magazine. Pas de texte/mots dans l'image.
+image_prompt — 1-2 phrases (FR ou EN). Visuel éditorial sobre (photo ou
+illustration). Pas de texte ni mots dans l'image. Pas de couverture magazine.
 """
 
 
-USER_TEMPLATE = """Date du jour : {today} (utilise cette date comme référence si tu mentionnes une année — ne dis JAMAIS une année passée comme si c'était l'année courante).
+USER_TEMPLATE = """Date : {today}. Si tu mentionnes une année, utilise CELLE-CI ;
+ne dis jamais une année passée comme si c'était l'année courante.
 
-Mot-clé cible : {keyword}
-Intent : {intent}
-Type de contenu : {content_type}
-Domaine cible : {domain}
+Mot-clé : {keyword}  ·  Intent : {intent}  ·  Type : {content_type}  ·  Domaine : {domain}
 {format_block}{listicle_block}{paa_block}{competitors_block}
-Blueprint VALIDÉE (à respecter strictement) :
+Blueprint (à respecter strictement, must_terms par section = à concentrer
+dans CETTE section, pas à disperser ailleurs) :
 {blueprint}
 
-NOTE blueprint : chaque section a un champ "must_terms". Concentre ces termes
-dans LEUR section, ne les disperse pas. Ne place PAS dans l'intro les termes
-qui sont assignés à des sections de fin.
+Termes obligatoires (sémantique SERP) : {required_terms}
+Entités à mentionner ≥1× si pertinent : {entities}
 
-Termes obligatoires à intégrer (vient du rapport sémantique) :
-{required_terms}
-
-Entités à mentionner (≥ 1 fois si pertinent) :
-{entities}
-
-Cibles de fréquence par terme (top concurrents — vise ces nombres ± 30 %) :
+Cibles de fréquence (top concurrents, ± 30 %) :
 {term_targets}
 
-Content gaps à exploiter (différenciation vs SERP) :
-{content_gaps}
+Content gaps à exploiter (différenciation) : {content_gaps}
 
-Cible totale : {target_words} mots.
+Cible : {target_words} mots.
 {silo_block}
-Réponds en JSON strict.
+JSON strict, rien d'autre.
 """
 
 
@@ -264,81 +219,58 @@ def detect_listicle_count(text: str) -> int | None:
 
 
 def _listicle_block(keyword: str, blueprint: dict) -> str:
-    """Build the prompt fragment that forces a numbered structure when the
-    user keyword (or blueprint title) asks for N items."""
+    """Force numbered structure when the title implies N items."""
     title = (blueprint or {}).get("title_target") or ""
     n = detect_listicle_count(title) or detect_listicle_count(keyword)
     if not n:
         return ""
     return (
-        f"\nFORMAT LISTICLE OBLIGATOIRE — le titre annonce {n} items.\n"
-        f"- Tu dois livrer EXACTEMENT {n} items numérotés explicitement (1., 2., …, {n}.).\n"
-        f"- Chaque item est un H2 ou un H3 dont le texte commence par son numéro :\n"
-        f"  ex. \"1. Premier item\", \"2. Deuxième item\".\n"
-        f"- Pas de regroupement (\"Items 1-3\", \"4-6\") : un H2/H3 par item, sans exception.\n"
-        f"- Si le sujet ne supporte pas {n} items distincts, dis-le DANS l'introduction\n"
-        f"  ET trouve {n} angles complémentaires plutôt que de fusionner — la promesse\n"
-        f"  du titre prime sur tout.\n"
+        f"\nLISTICLE OBLIGATOIRE — le titre annonce {n} items :\n"
+        f"  - EXACTEMENT {n} items numérotés (1., 2., …, {n}.)\n"
+        f"  - 1 H2 ou H3 par item, le texte commence par son numéro\n"
+        f"    (ex. \"1. Premier item\")\n"
+        f"  - Pas de regroupement (\"Items 1-3\") : un heading par item, sans exception.\n"
+        f"  - Si {n} items distincts impossibles : dis-le en intro, trouve {n} angles\n"
+        f"    complémentaires plutôt que de fusionner. La promesse du titre prime.\n"
     )
 
 
 def _format_block(format_brief: str | None) -> str:
-    """SERP-implied format brief (listicle / how-to / comparator / etc.) from
-    intent.detect_format(). Forces the article shape to match what the SERP
-    converges on."""
+    """SERP-implied format brief from intent.detect_format()."""
     if not format_brief:
         return ""
-    return f"\n=== FORMAT ATTENDU (vu en SERP) ===\n{format_brief}\n"
+    return f"\nFORMAT (vu en SERP) : {format_brief}\n"
 
 
 def _paa_block(paa: list[str] | None) -> str:
-    """People Also Ask — questions Google surfaces for this query. Forcing
-    them as VERBATIM H3 in the FAQ section gives a direct shot at the PAA
-    rich result. The "FAQ" section title can stay generic; what matters is
-    that each H3 is the exact question text."""
-    if not paa:
-        return ""
-    qs = [q.strip() for q in paa if q and q.strip()][:8]
+    """People Also Ask → forced VERBATIM as <h3> in the FAQ section."""
+    qs = [q.strip() for q in (paa or []) if q and q.strip()][:8]
     if not qs:
         return ""
     items = "\n".join(f"  - {q}" for q in qs)
     return (
-        "\n=== PEOPLE ALSO ASK (questions surfacées par Google) ===\n"
-        "Tu DOIS inclure une section FAQ où chaque H3 reprend EXACTEMENT une\n"
-        "des questions ci-dessous (mot pour mot, ponctuation comprise). C'est\n"
-        "ce qui permet de capturer les rich results PAA. Le H2 de la section\n"
-        "peut s'appeler \"FAQ\" ou \"Questions fréquentes\".\n"
-        "Réponse sous chaque H3 = 1 paragraphe concret de 40-80 mots, qui\n"
-        "répond directement (pas d'intro mou, pas de \"bonne question\").\n\n"
-        "Questions à inclure VERBATIM en H3 :\n"
+        "\nPAA (à inclure VERBATIM en H3 dans la section FAQ — mot pour mot,\n"
+        "ponctuation comprise. Réponse en 1 paragraphe de 40-80 mots, direct,\n"
+        "sans \"bonne question\") :\n"
         f"{items}\n"
     )
 
 
 def _competitors_block(breakdown: list[dict] | None) -> str:
-    """Per-competitor angle/strength/weakness from analysis.competitors_breakdown.
-    Drives differentiation: the article should AVOID merely averaging the SERP
-    and instead position against an identified weakness."""
+    """Per-competitor angle/strength/weakness — drive differentiation."""
     if not breakdown:
         return ""
     lines = []
     for c in breakdown[:7]:
         rank = c.get("rank", "?")
         angle = c.get("angle") or "—"
-        weakness = c.get("weakness") or "—"
         strength = c.get("strength") or "—"
-        lines.append(
-            f"  Concurrent {rank} — angle « {angle} »\n"
-            f"    + force : {strength}\n"
-            f"    – faille : {weakness}"
-        )
+        weakness = c.get("weakness") or "—"
+        lines.append(f"  #{rank} angle={angle} | + {strength} | – {weakness}")
     return (
-        "\n=== ANALYSE PAR CONCURRENT (cartographie SERP) ===\n"
-        "Voici comment chaque concurrent du top 7 se positionne. Ta mission :\n"
-        "ne pas reproduire la moyenne. Cible UNE des failles ci-dessous et\n"
-        "construis ton article pour la combler concrètement (chiffres, cas,\n"
-        "structure manquante, ton manquant…). Ne reprends JAMAIS l'angle\n"
-        "exact d'un concurrent — décale-toi.\n\n"
+        "\nCARTO SERP (ne reproduis pas la moyenne, cible UNE faille ci-dessous"
+        " et comble-la concrètement avec chiffres / cas / structure / ton —"
+        " ne reprends JAMAIS l'angle exact d'un concurrent) :\n"
         + "\n".join(lines) + "\n"
     )
 
@@ -353,49 +285,42 @@ MAILLAGE INTERNE (zéro tolérance) :
 - ANCRES BANNIES : "consultez notre article", "découvrez notre guide", "voir
   aussi", "à lire également", "lire la suite", "plus d'infos ici", "cliquez
   ici", "en savoir plus", "notre/cet autre article sur".
-- Ancres VARIÉES : jamais 2 ancres identiques. Varie verbe, nom, expression.
+- Ancres VARIÉES : jamais 2 ancres identiques (varie verbe / nom / expression).
 - Format : <a href="URL_EXACTE_FOURNIE">ancre courte</a>. Pas de target/rel/class.
-- 1 LIEN MAX par couple (source → cible). Jamais 2 liens vers la même URL.
-- Pour les liens VOISINS uniquement : si l'URL ne s'intègre pas naturellement,
-  ne pas la forcer (zéro lien plutôt qu'un lien forcé). Le lien PILIER, lui,
-  reste OBLIGATOIRE dans TOUS les cas (voir RÔLE ci-dessous).
+- 1 lien max par couple (source → cible). Pas 2 liens vers la même URL.
+- VOISINS uniquement : URL qui ne s'intègre pas naturellement → zéro lien
+  plutôt qu'un lien forcé. Le lien PILIER reste obligatoire dans TOUS les cas.
 """
 
 SILO_RULES_SATELLITE = """
 RÔLE : article satellite d'un silo.
 
 PILIER (URL exacte) : {pillar_url}
-→ 1 lien OBLIGATOIRE vers cette URL, posé dans l'introduction OU les 3
-  premiers <p> du texte. Ancre contextuelle, intégrée au fil de la phrase.
-→ Cette obligation est NON-NÉGOCIABLE. Elle prime sur la règle "ne pas
-  forcer un lien" : le lien pilier DOIT être présent, même si tu dois
-  reformuler la phrase d'introduction pour qu'il s'y intègre naturellement.
-→ La présence du lien pilier est VÉRIFIÉE automatiquement après génération.
-  Un article sans lien pilier sera signalé comme défaillant.
+→ 1 lien OBLIGATOIRE vers cette URL, dans l'intro OU les 3 premiers <p>.
+  Ancre contextuelle, intégrée au fil de la phrase.
+→ NON-NÉGOCIABLE. Vérifié automatiquement après génération. Reformule
+  l'intro si besoin pour que le lien s'y intègre naturellement.
 
-VOISINS du silo (similarité décroissante) :
+VOISINS (similarité décroissante) :
 {peer_block}
-→ 0 ou 1 lien max par voisin. Pose le lien quand le sujet voisin est
-  mentionné naturellement (terme/notion lié). Vise le PLUS de liens voisins
-  possibles TANT QUE c'est naturel ; jamais forcé. Priorise les voisins en
-  haut de liste. Pour les voisins UNIQUEMENT, ne pas forcer un lien qui
-  ne s'intègre pas.
+→ 0 ou 1 lien max par voisin, posé quand le sujet voisin est mentionné
+  naturellement. Vise le PLUS de voisins possibles tant que c'est naturel ;
+  jamais forcé. Priorise le haut de liste.
 """
 
 SILO_RULES_PILLAR = """
-RÔLE : page pilier d'un silo. Vue d'ensemble + introduit CHAQUE sous-thème +
-pousse vers son satellite dédié.
+RÔLE : page pilier. Vue d'ensemble + introduit CHAQUE sous-thème + pousse
+vers son satellite dédié.
 
 SATELLITES :
 {satellite_block}
 
-IMPÉRATIF :
-- Pour CHAQUE satellite ci-dessus : section ou paragraphe (2-4 phrases) qui
-  présente le sous-thème ET contient EXACTEMENT 1 lien
-  <a href="URL_SATELLITE">ancre contextuelle</a> au fil du texte.
-- Ancre = mot/expression qui désigne le concept, jamais "voir l'article".
-- Aucun satellite sans son lien.
-- Ne mentionne pas l'existence d'un "article dédié" : le lien parle seul.
+IMPÉRATIF — pour CHAQUE satellite ci-dessus :
+- 1 section ou paragraphe (2-4 phrases) qui présente le sous-thème
+- ET contient EXACTEMENT 1 <a href="URL_SATELLITE">ancre contextuelle</a>
+  au fil du texte (jamais "voir l'article").
+- Aucun satellite sans son lien. Ne mentionne pas l'existence d'un "article
+  dédié" : le lien parle seul.
 """
 
 
