@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.routers import auth as auth_router
-from app.routers import batches, contents, domains, folders, fusion, healthz, jobs, logs, silos
+from app.routers import audits, batches, contents, domains, folders, fusion, healthz, jobs, logs, silos
 
 
 @asynccontextmanager
@@ -122,4 +122,5 @@ app.include_router(contents.router, prefix="/srv/contents", tags=["contents"])
 app.include_router(fusion.router, prefix="/srv/fusion", tags=["fusion"])
 app.include_router(logs.router, prefix="/srv/logs", tags=["logs"])
 app.include_router(silos.router, prefix="/srv/silos", tags=["silos"])
+app.include_router(audits.router, prefix="/srv/audits", tags=["audits"])
 app.include_router(healthz.router, prefix="/healthz", tags=["healthz"])

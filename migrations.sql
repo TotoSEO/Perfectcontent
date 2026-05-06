@@ -108,6 +108,7 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS batch_id UUID;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'standard';
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS source_content TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS use_haiku BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS prompts JSONB;
 
 CREATE TABLE IF NOT EXISTS semantic_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -170,5 +171,21 @@ ALTER TABLE contents ADD COLUMN IF NOT EXISTS silo_role TEXT;
 ALTER TABLE contents ADD COLUMN IF NOT EXISTS slug TEXT;
 ALTER TABLE contents ADD COLUMN IF NOT EXISTS link_manifest JSONB;
 CREATE INDEX IF NOT EXISTS ix_contents_silo_id ON contents (silo_id);
+
+-- 4. Audits techniques (import Screaming Frog)
+
+CREATE TABLE IF NOT EXISTS audits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  folder_id UUID REFERENCES folders(id) ON DELETE SET NULL,
+  source_filename TEXT,
+  crawl_date TIMESTAMPTZ,
+  url_count INT NOT NULL DEFAULT 0,
+  score NUMERIC(5, 2),
+  summary JSONB,
+  issues JSONB,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
 -- Fini. Aucune donnée seed nécessaire.

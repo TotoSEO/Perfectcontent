@@ -33,7 +33,8 @@ export type IconName =
   | "filter"
   | "download"
   | "edit"
-  | "lock";
+  | "lock"
+  | "audit";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   library: (
@@ -194,6 +195,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="4" y="11" width="16" height="10" rx="2" />
       <path d="M8 11V8a4 4 0 1 1 8 0v3" />
+    </>
+  ),
+  audit: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 3v2h8V3M8 11h8M8 15h6M8 19h4" />
     </>
   ),
 };

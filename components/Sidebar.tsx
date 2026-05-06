@@ -14,11 +14,12 @@ const ITEMS: Item[] = [
   { href: "/new/silo", label: "Silo SEO", icon: "silo", group: "Création" },
   { href: "/rewrite", label: "Réécriture", icon: "rewrite", group: "Création" },
   { href: "/fusion", label: "Fusion", icon: "fusion", group: "Création" },
+  { href: "/audits", label: "Audit technique", icon: "audit", group: "Audit" },
   { href: "/domains", label: "Domaines", icon: "globe", group: "Système" },
   { href: "/console", label: "Console", icon: "terminal", group: "Système" },
 ];
 
-const GROUPS = ["Bibliothèque", "Création", "Système"];
+const GROUPS = ["Bibliothèque", "Création", "Audit", "Système"];
 
 export function Sidebar() {
   const pathname = usePathname();

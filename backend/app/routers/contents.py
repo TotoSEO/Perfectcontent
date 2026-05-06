@@ -146,6 +146,27 @@ def _content_metrics(content: Content) -> dict:
     }
 
 
+@router.get("/{content_id}/prompts")
+async def get_prompts(content_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Return the prompts (system + user) actually sent to the LLM at each step
+    of the most recent job tied to this content."""
+    job = (
+        await db.execute(
+            select(Job)
+            .where(Job.content_id == content_id)
+            .order_by(Job.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        return {"job_id": None, "mode": None, "prompts": {}}
+    return {
+        "job_id": str(job.id),
+        "mode": job.mode,
+        "prompts": job.prompts or {},
+    }
+
+
 @router.get("/{content_id}/semantic-targets")
 async def semantic_targets(content_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Return the top corpus terms with target / min / max frequencies.

@@ -12,6 +12,7 @@ import { SectionList } from "@/components/SectionList";
 import { SemanticScore } from "@/components/SemanticScore";
 import { ImagePanel } from "@/components/ImagePanel";
 import { CompetitorsPanel } from "@/components/CompetitorsPanel";
+import { PromptViewerButton } from "@/components/PromptViewer";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 
@@ -109,6 +110,7 @@ export default function ContentPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <CoverageBadge score={content.coverage_score} />
+            <PromptViewerButton contentId={id!} />
             <button
               onClick={archive}
               className="btn-ghost px-2.5 py-1.5 text-xs"

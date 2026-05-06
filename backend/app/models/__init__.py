@@ -1,4 +1,5 @@
 from app.models.api_cache import ApiCache
+from app.models.audit import Audit
 from app.models.content import Content
 from app.models.domain import Domain
 from app.models.folder import Folder
@@ -10,6 +11,7 @@ from app.models.system_log import SystemLog
 
 __all__ = [
     "ApiCache",
+    "Audit",
     "Content",
     "Domain",
     "Folder",

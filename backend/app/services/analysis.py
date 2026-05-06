@@ -67,6 +67,7 @@ async def semantic_report(
     intent: str,
     parsed: list[tuple[ParsedPage, float]],
     related: list[str],
+    capture: dict | None = None,
 ) -> SemanticReport:
     competitors_text = _format_competitors(parsed)
     related_text = ", ".join(related[:30]) if related else "(aucun)"
@@ -79,6 +80,8 @@ async def semantic_report(
     resp = await llm.complete(
         system=SYSTEM, user=user, max_tokens=2500, temperature=0.3, model=llm.HAIKU
     )
+    if capture is not None:
+        capture.update(system=SYSTEM, user=user, model=llm.HAIKU, cost=resp.cost)
     data = llm.extract_json(resp.text)
     return SemanticReport(
         common_subthemes=list(data.get("common_subthemes", [])),

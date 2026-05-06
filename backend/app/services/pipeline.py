@@ -75,6 +75,34 @@ async def _add_cost(job_id: UUID, amount: float) -> None:
         await session.commit()
 
 
+async def _record_prompt(
+    job_id: UUID,
+    step: str,
+    *,
+    system: str,
+    user: str,
+    model: str,
+    cost: float | None = None,
+) -> None:
+    """Persist the prompts actually sent to the LLM at this step on Job.prompts.
+    Lets the user inspect what got sent in production via /jobs/{id}/prompts."""
+    async with SessionLocal() as session:
+        job = await session.get(Job, job_id)
+        if job is None:
+            return
+        prompts = dict(job.prompts or {})
+        prompts[step] = {
+            "system": system,
+            "user": user,
+            "model": model,
+            "cost": cost,
+            "system_chars": len(system),
+            "user_chars": len(user),
+        }
+        job.prompts = prompts
+        await session.commit()
+
+
 async def _is_capped(job_id: UUID) -> bool:
     async with SessionLocal() as session:
         job = await session.get(Job, job_id)
@@ -330,13 +358,17 @@ async def _step_analyze(job_id: UUID) -> None:
         )
         parsed.append((p, float(c.get("quality") or 0)))
 
+    cap: dict = {}
     report = await analysis.semantic_report(
         keyword=job.keyword,
         intent=intent,
         parsed=parsed,
         related=related,
+        capture=cap,
     )
     await _add_cost(job_id, report.llm_cost)
+    if cap:
+        await _record_prompt(job_id, "analyze", **cap)
 
     expected_text = " ; ".join(report.required_terms[:50] + report.entities[:20])
     expected_vec: list[float] | None = None
@@ -405,14 +437,18 @@ async def _step_blueprint(job_id: UUID) -> None:
         structural_signals={},
         llm_cost=0.0,
     )
+    cap_bp: dict = {}
     bp = await blueprint_svc.build_blueprint(
         keyword=job.keyword,
         intent=intent,
         content_type=job.content_type,
         report=fake_report,
         term_targets=list(sr.term_targets or []),
+        capture=cap_bp,
     )
     await _add_cost(job_id, bp.llm_cost)
+    if cap_bp:
+        await _record_prompt(job_id, "blueprint", **cap_bp)
 
     if content is not None:
         async with SessionLocal() as session:
@@ -443,6 +479,7 @@ async def _step_generate(job_id: UUID) -> None:
         from app.services import rewrite as rewrite_svc
         source_html = job.source_content or ""
         target_words = (content.blueprint or {}).get("target_words", 1500)
+        cap_gen: dict = {}
         result = await rewrite_svc.rewrite_with_context(
             keyword=job.keyword,
             intent=intent,
@@ -453,6 +490,7 @@ async def _step_generate(job_id: UUID) -> None:
             entities=entities,
             content_gaps=gaps,
             term_targets=term_targets,
+            capture=cap_gen,
         )
         title_variants = result.title_variants
         html = result.html
@@ -470,6 +508,7 @@ async def _step_generate(job_id: UUID) -> None:
             raise RuntimeError(
                 "silo job: link_manifest missing — call /srv/silos/{id}/manifest first"
             )
+        cap_gen = {}
         generated = await generator.generate_content(
             keyword=job.keyword,
             intent=intent,
@@ -482,6 +521,7 @@ async def _step_generate(job_id: UUID) -> None:
             term_targets=term_targets,
             use_haiku=getattr(job, "use_haiku", False),
             link_manifest=link_manifest,
+            capture=cap_gen,
         )
         title_variants = generated.title_variants
         html = generated.html
@@ -490,6 +530,8 @@ async def _step_generate(job_id: UUID) -> None:
         cost = generated.llm_cost
 
     await _add_cost(job_id, cost)
+    if cap_gen:
+        await _record_prompt(job_id, "generate", **cap_gen)
 
     async with SessionLocal() as session:
         c = await session.get(Content, content.id)

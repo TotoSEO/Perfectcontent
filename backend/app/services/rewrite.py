@@ -151,6 +151,7 @@ async def rewrite_with_context(
     entities: list[str],
     content_gaps: list[str],
     term_targets: list[dict],
+    capture: dict | None = None,
 ) -> RewriteResult:
     targets_text = (
         "\n".join(
@@ -172,6 +173,8 @@ async def rewrite_with_context(
         term_targets=targets_text,
     )
     resp = await llm.complete(system=REWRITE_SYSTEM, user=user, max_tokens=8000, temperature=0.55)
+    if capture is not None:
+        capture.update(system=REWRITE_SYSTEM, user=user, model=llm.SONNET, cost=resp.cost)
     data = llm.extract_json(resp.text)
     return RewriteResult(
         title_variants=list(data.get("title_variants", []))[:3],

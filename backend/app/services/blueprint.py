@@ -86,6 +86,7 @@ async def build_blueprint(
     content_type: str,
     report: SemanticReport,
     term_targets: list[dict] | None = None,
+    capture: dict | None = None,
 ) -> Blueprint:
     targets_text = (
         ", ".join(f"{t.get('term')} (~{t.get('target')})" for t in (term_targets or [])[:30])
@@ -113,6 +114,8 @@ async def build_blueprint(
     resp = await llm.complete(
         system=SYSTEM, user=user, max_tokens=4000, temperature=0.4, model=llm.HAIKU
     )
+    if capture is not None:
+        capture.update(system=SYSTEM, user=user, model=llm.HAIKU, cost=resp.cost)
     data = llm.extract_json(resp.text)
     return Blueprint(
         title_target=data.get("title_target", ""),

@@ -274,6 +274,7 @@ async def generate_content(
     term_targets: list[dict] | None = None,
     use_haiku: bool = False,
     link_manifest: dict | None = None,
+    capture: dict | None = None,
 ) -> Generated:
     system = SYSTEM_TEMPLATE.format(
         type_brief=PROMPTS.get(content_type, PROMPTS["blog"]),
@@ -302,13 +303,16 @@ async def generate_content(
         target_words=blueprint.get("target_words", 1500),
         silo_block=_silo_block(link_manifest),
     )
+    model = llm.HAIKU if use_haiku else llm.SONNET
     resp = await llm.complete(
         system=system,
         user=user,
         max_tokens=8000,
         temperature=0.6,
-        model=llm.HAIKU if use_haiku else llm.SONNET,
+        model=model,
     )
+    if capture is not None:
+        capture.update(system=system, user=user, model=model, cost=resp.cost)
     data = llm.extract_json(resp.text)
     return Generated(
         title_variants=list(data.get("title_variants", []))[:3],
