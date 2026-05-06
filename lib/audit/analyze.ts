@@ -18,7 +18,12 @@ const COLORS = {
 // ---------- helpers --------------------------------------------------------
 
 const isHtml = (r: UrlRow) => r.content_type !== null && /text\/html/i.test(r.content_type);
-const isIndexable = (r: UrlRow) => (r.indexability || "").toLowerCase() === "indexable";
+const isIndexable = (r: UrlRow) => /^indexable$/i.test((r.indexability || "").trim());
+
+// Cell-value matchers that also work on French Screaming Frog exports.
+const RE_NOINDEX   = /noindex|no.?index|non.?index/i;
+const RE_CANON     = /canonical|canonis[eé]e?|canonique/i;
+const RE_ROBOTS    = /robots|bloqu[eé]/i;
 
 function pct(part: number, total: number): number {
   return total === 0 ? 0 : Math.round((part / total) * 1000) / 10;
@@ -115,9 +120,9 @@ function checkHttp(rows: UrlRow[]): CategoryReport {
 function checkIndexability(rows: UrlRow[]): CategoryReport {
   const html = rows.filter(isHtml);
   const indexable = html.filter(isIndexable).length;
-  const noindex = html.filter((r) => /noindex/i.test(r.indexability_status || "")).length;
-  const blocked = html.filter((r) => /robots/i.test(r.indexability_status || "")).length;
-  const canonicalized = html.filter((r) => /canonical/i.test(r.indexability_status || "")).length;
+  const noindex = html.filter((r) => RE_NOINDEX.test(r.indexability_status || "")).length;
+  const blocked = html.filter((r) => RE_ROBOTS.test(r.indexability_status || "")).length;
+  const canonicalized = html.filter((r) => RE_CANON.test(r.indexability_status || "")).length;
   const issues: IssueRow[] = [];
   for (const r of html) {
     if (isIndexable(r)) continue;
@@ -130,7 +135,7 @@ function checkIndexability(rows: UrlRow[]): CategoryReport {
     });
   }
   const total = html.length || 1;
-  const noindexWithLinks = issues.filter((i) => Number(i.inlinks) > 0 && /noindex/i.test(String(i.reason))).length;
+  const noindexWithLinks = issues.filter((i) => Number(i.inlinks) > 0 && RE_NOINDEX.test(String(i.reason))).length;
   const score = scoreFromRatio(noindexWithLinks / total);
   return {
     id: "indexability",

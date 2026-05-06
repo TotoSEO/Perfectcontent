@@ -36,45 +36,154 @@ export type UrlRow = {
 };
 
 const COL_ALIASES: Record<keyof UrlRow, string[]> = {
-  url:                     ["address", "url", "uri", "page", "page url"],
-  status_code:             ["status code", "http status", "status"],
-  status:                  ["status", "http status text"],
-  content_type:            ["content type", "content-type"],
-  indexability:            ["indexability"],
-  indexability_status:     ["indexability status"],
-  title:                   ["title 1", "title", "page title", "title tag"],
-  title_length:            ["title 1 length", "title length", "title 1 (length)"],
-  meta_description:        ["meta description 1", "meta description", "description"],
-  meta_description_length: ["meta description 1 length", "meta description length"],
-  h1:                      ["h1-1", "h1", "h1 1"],
-  h1_length:               ["h1-1 length", "h1 length", "h1-1 (length)"],
-  h1_2:                    ["h1-2", "h1 2"],
-  h2_1:                    ["h2-1", "h2", "h2 1"],
-  word_count:              ["word count", "words", "word-count"],
-  crawl_depth:             ["crawl depth", "depth", "level"],
-  inlinks:                 ["inlinks", "internal inlinks", "in links"],
-  unique_inlinks:          ["unique inlinks"],
-  outlinks:                ["outlinks", "internal outlinks", "out links"],
-  unique_outlinks:         ["unique outlinks"],
-  canonical:               ["canonical link element 1", "canonical link element", "canonical", "canonical url"],
-  redirect_url:            ["redirect url", "redirect uri", "redirect to"],
-  size_bytes:              ["size (bytes)", "size", "size bytes"],
-  response_time:           ["response time", "response time (s)"],
-  hash:                    ["hash"],
+  url:                     [
+    "address", "url", "uri", "page", "page url",
+    // FR
+    "adresse",
+  ],
+  status_code:             [
+    "status code", "http status", "status",
+    // FR
+    "code http", "code de statut", "code de statut http",
+  ],
+  status:                  [
+    "status", "http status text",
+    // FR
+    "statut", "statut http",
+  ],
+  content_type:            [
+    "content type", "content-type",
+    // FR
+    "type de contenu", "type contenu", "type mime",
+  ],
+  indexability:            [
+    "indexability",
+    // FR
+    "indexabilite", "indexabilité",
+  ],
+  indexability_status:     [
+    "indexability status",
+    // FR — apostrophe variations: ' ’ ´
+    "statut d indexabilite", "statut d'indexabilite", "statut d’indexabilite",
+    "statut d indexabilité", "statut d'indexabilité", "statut d’indexabilité",
+    "statut de l indexabilite", "statut de l'indexabilite",
+  ],
+  title:                   [
+    "title 1", "title", "page title", "title tag",
+    // FR — Screaming Frog FR keeps the column name "title 1"
+    "balise title 1", "balise title",
+  ],
+  title_length:            [
+    "title 1 length", "title length", "title 1 (length)",
+    // FR
+    "longueur du title 1", "longueur du title", "longueur title 1",
+    "longueur de la balise title 1", "longueur de la balise title",
+  ],
+  meta_description:        [
+    "meta description 1", "meta description", "description",
+    // FR (often kept in English)
+  ],
+  meta_description_length: [
+    "meta description 1 length", "meta description length",
+    // FR
+    "longueur de la meta description 1", "longueur de la meta description",
+    "longueur meta description 1",
+  ],
+  h1:                      [
+    "h1-1", "h1", "h1 1",
+  ],
+  h1_length:               [
+    "h1-1 length", "h1 length", "h1-1 (length)",
+    // FR
+    "longueur du h1-1", "longueur du h1", "longueur h1-1", "longueur h1",
+  ],
+  h1_2:                    [
+    "h1-2", "h1 2",
+  ],
+  h2_1:                    [
+    "h2-1", "h2", "h2 1",
+  ],
+  word_count:              [
+    "word count", "words", "word-count",
+    // FR
+    "nombre de mots", "nb de mots", "nb mots", "comptage de mots",
+  ],
+  crawl_depth:             [
+    "crawl depth", "depth", "level",
+    // FR
+    "profondeur de crawl", "profondeur d exploration", "profondeur d'exploration",
+    "profondeur d’exploration", "profondeur", "niveau",
+  ],
+  inlinks:                 [
+    "inlinks", "internal inlinks", "in links",
+    // FR
+    "liens entrants", "liens internes entrants", "nombre de liens entrants",
+  ],
+  unique_inlinks:          [
+    "unique inlinks",
+    // FR
+    "liens entrants uniques", "liens entrants distincts",
+  ],
+  outlinks:                [
+    "outlinks", "internal outlinks", "out links",
+    // FR
+    "liens sortants", "liens internes sortants", "nombre de liens sortants",
+  ],
+  unique_outlinks:         [
+    "unique outlinks",
+    // FR
+    "liens sortants uniques", "liens sortants distincts",
+  ],
+  canonical:               [
+    "canonical link element 1", "canonical link element", "canonical", "canonical url",
+    // FR
+    "element de lien canonique 1", "élément de lien canonique 1",
+    "element de lien canonique", "élément de lien canonique",
+    "lien canonique 1", "lien canonique", "url canonique", "canonique",
+  ],
+  redirect_url:            [
+    "redirect url", "redirect uri", "redirect to",
+    // FR
+    "url de redirection", "url redirigee", "url redirigée", "redirection",
+  ],
+  size_bytes:              [
+    "size (bytes)", "size", "size bytes",
+    // FR
+    "taille (octets)", "taille octets", "taille en octets", "taille",
+  ],
+  response_time:           [
+    "response time", "response time (s)",
+    // FR
+    "temps de reponse", "temps de réponse", "temps de reponse (s)",
+  ],
+  hash:                    [
+    "hash",
+  ],
 };
 
 // Some SF exports prepend a banner row (file name, generated date) before the
 // real header. We detect the header row by looking for a row that contains an
-// "Address" or "URL" column.
-const URL_HEADERS = new Set(["address", "url", "uri", "page", "page url"]);
+// "Address" or "URL" / "Adresse" column.
+const URL_HEADERS = new Set(["address", "url", "uri", "page", "page url", "adresse"]);
 
 function normalizeKey(s: string): string {
-  return s.toLowerCase().replace(/^﻿/, "").trim();
+  // Lower-case, strip BOM, strip diacritics, normalize apostrophe-like
+  // characters and collapse whitespace — so "Indexabilité" and "indexabilite"
+  // both resolve to "indexabilite".
+  return s
+    .toLowerCase()
+    .replace(/^﻿/, "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[‘’‚‛ʼ]/g, "'")  // smart apostrophes → '
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function pick(rec: Record<string, string>, aliases: string[]): string | null {
   for (const a of aliases) {
-    const v = rec[a];
+    const key = normalizeKey(a);
+    const v = rec[key];
     if (v !== undefined && v !== "" && v !== "—") return v;
   }
   return null;
@@ -116,14 +225,21 @@ export function parseInternalCsvText(textRaw: string, filename: string | null): 
   let banner_skipped = 0;
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < Math.min(5, lines.length); i++) {
-    const probe = lines[i].toLowerCase();
-    if (URL_HEADERS.has(probe.split(/[,;\t]/)[0]?.replace(/^"|"$/g, "").trim() || "")) {
+    const probe = normalizeKey(lines[i]);
+    const firstCol = probe.split(/[,;\t]/)[0]?.replace(/^"|"$/g, "").trim() || "";
+    if (URL_HEADERS.has(firstCol)) {
       // already at header
       break;
     }
-    // Detect "header-y" line (contains both "address" or "url" AND another known col)
-    if ((probe.includes("address") || probe.includes("url") || probe.includes("uri")) &&
-        (probe.includes("status") || probe.includes("title") || probe.includes("indexability"))) {
+    // Detect "header-y" line (contains both a URL column AND another known col).
+    // Works for both English and French Screaming Frog exports.
+    const hasUrlCol =
+      probe.includes("address") || probe.includes("url") || probe.includes("uri") ||
+      probe.includes("adresse");
+    const hasOtherCol =
+      probe.includes("status") || probe.includes("title") || probe.includes("indexability") ||
+      probe.includes("statut") || probe.includes("indexabilite") || probe.includes("code http");
+    if (hasUrlCol && hasOtherCol) {
       banner_skipped = i;
       break;
     }
