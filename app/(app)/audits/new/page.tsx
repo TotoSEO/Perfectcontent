@@ -59,12 +59,30 @@ export default function NewAuditPage() {
     if (f) onPickFile(f);
   }
 
+  // Vercel serverless functions cap request bodies at ~4.5 MB. A massive
+  // crawl (50k URLs, all broken) could blow past that if we shipped every
+  // issue verbatim. Cap each category to 500 rows after sorting by severity
+  // — far more than enough for client deliverables, and the Excel export
+  // works off this same persisted set so it stays under the limit too.
+  const MAX_ISSUES_PER_CAT = 500;
+  const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
+
   async function save() {
     if (!report) return;
     setBusy(true);
     setStage("saving");
     setErr(null);
     try {
+      const cappedIssues: Record<string, typeof report.categories[number]["issues_full"]> = {};
+      let truncated = 0;
+      for (const c of report.categories) {
+        const sorted = [...c.issues_full].sort(
+          (a, b) =>
+            SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
+        );
+        if (sorted.length > MAX_ISSUES_PER_CAT) truncated += sorted.length - MAX_ISSUES_PER_CAT;
+        cappedIssues[c.id] = sorted.slice(0, MAX_ISSUES_PER_CAT);
+      }
       const res = await api<{ id: string }>("/srv/audits", {
         method: "POST",
         json: {
@@ -80,10 +98,10 @@ export default function NewAuditPage() {
             global_score: report.global_score,
             categories: report.categories.map(({ issues_full, ...c }) => c),
           },
-          issues: {
-            // store FULL issues (uncapped) for Excel export later
-            categories: Object.fromEntries(report.categories.map((c) => [c.id, c.issues_full])),
-          },
+          issues: { categories: cappedIssues },
+          notes: truncated > 0
+            ? `${truncated} problèmes ont été tronqués (cap à ${MAX_ISSUES_PER_CAT} par catégorie pour rester sous la limite serveur).`
+            : null,
         },
       });
       router.push(`/audits/${res.id}`);

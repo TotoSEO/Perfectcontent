@@ -1,39 +1,36 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-htmlcov/
-.coverage
-
-# Node
-node_modules/
-.next/
-out/
-dist/
-.turbo/
-
-# Env
-.env
-.env.dev
-.env.prod
-.env.local
-*.local
-
-# IDE / OS
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
 
 # Build artefacts
-backend/alembic/versions/__pycache__/
+# Env
+# IDE / OS
+# Logs
+# Node
+# Python
+*.egg-info/
+*.local
+*.log
+*.py[cod]
+.DS_Store
+.coverage
+.env
+.env.dev
+.env.local
+.env.prod
+.idea/
+.mypy_cache/
+.next/
+.pytest_cache/
+.ruff_cache/
+.turbo/
+.venv/
 .vercel
+.vscode/
+Thumbs.db
+__pycache__/
+backend/alembic/versions/__pycache__/
+dist/
+htmlcov/
+node_modules/
+out/
+package-lock.json
 tsconfig.tsbuildinfo
+venv/

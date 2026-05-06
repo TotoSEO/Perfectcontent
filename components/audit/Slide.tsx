@@ -1,14 +1,16 @@
 "use client";
 
 import { ReactNode } from "react";
+import { VbtLogo } from "./Logo";
+import { VBT } from "@/lib/audit/brand";
 
 /**
- * Fixed-aspect 16:9 slide. Designed to be screenshot-ready: when the user
- * captures a slide and pastes it into Google Slides, it should look clean
- * with no UI chrome around it.
+ * Visibili'tea-branded 16:9 slide. Designed to be screenshot-ready: when the
+ * user captures a slide and pastes it into Google Slides, it should look
+ * native to the brand (Montserrat title, Poppins body, terracotta accents).
  *
- * The slide content is sized to a 1600×900 design canvas; CSS scales it
- * down responsively while preserving the ratio.
+ * The slide content is sized to a 1600×900 design canvas; CSS scales it down
+ * responsively while preserving the ratio.
  */
 export function Slide({
   index,
@@ -18,6 +20,7 @@ export function Slide({
   rightHeader,
   children,
   footer,
+  variant = "default",
 }: {
   index: number;
   total: number;
@@ -26,33 +29,86 @@ export function Slide({
   rightHeader?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  variant?: "default" | "cover";
 }) {
+  const isCover = variant === "cover";
   return (
     <div className="w-full" style={{ aspectRatio: "16 / 9" }}>
-      <div className="w-full h-full bg-white text-zinc-900 rounded-2xl shadow-[0_20px_60px_-30px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col"
-           style={{ fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" }}>
-        {/* Slide top bar */}
-        <header className="px-10 pt-8 pb-4 flex items-start justify-between gap-6">
-          <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
-              {subtitle || `Slide ${index + 1} / ${total}`}
+      <div
+        className="w-full h-full rounded-2xl overflow-hidden flex flex-col relative"
+        style={{
+          background: isCover
+            ? `linear-gradient(135deg, ${VBT.paper} 0%, ${VBT.paper} 60%, ${VBT.terracotta50} 100%)`
+            : VBT.paper,
+          color: VBT.ink,
+          fontFamily: "var(--font-vbt-body), 'Poppins', system-ui, sans-serif",
+          boxShadow: "0 24px 60px -28px rgba(36,23,18,0.45)",
+          border: `1px solid ${VBT.paperEdge}`,
+        }}
+      >
+        {/* Decorative corner band on every slide */}
+        <span
+          aria-hidden
+          className="absolute top-0 left-0 h-1.5 w-full"
+          style={{
+            background: `linear-gradient(90deg, ${VBT.terracotta600}, ${VBT.terracotta400}, ${VBT.amber300})`,
+          }}
+        />
+
+        {!isCover && (
+          <header className="px-12 pt-9 pb-4 flex items-start justify-between gap-6">
+            <div className="min-w-0">
+              <div
+                className="text-[11px] uppercase tracking-[0.22em]"
+                style={{ color: VBT.terracotta600, fontWeight: 600 }}
+              >
+                {subtitle || `Slide ${index + 1} / ${total}`}
+              </div>
+              <h2
+                className="mt-2 truncate"
+                style={{
+                  fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                  fontWeight: 700,
+                  fontSize: 36,
+                  letterSpacing: "-0.015em",
+                  color: VBT.ink,
+                }}
+              >
+                {title}
+              </h2>
             </div>
-            <h2 className="text-3xl font-semibold mt-1.5 tracking-tight text-zinc-900 truncate">
-              {title}
-            </h2>
-          </div>
-          <div className="shrink-0">{rightHeader}</div>
-        </header>
+            <div className="shrink-0 flex items-center gap-3">
+              {rightHeader}
+              <VbtLogo size={44} />
+            </div>
+          </header>
+        )}
 
         {/* Body */}
-        <main className="flex-1 px-10 min-h-0 flex flex-col">
+        <main className={`flex-1 ${isCover ? "px-14 py-10" : "px-12"} min-h-0 flex flex-col`}>
           {children}
         </main>
 
         {/* Footer */}
-        <footer className="px-10 py-4 border-t border-zinc-100 flex items-center justify-between text-[11px] text-zinc-400">
-          <div>{footer}</div>
-          <div className="tabular-nums">
+        <footer
+          className="px-12 py-3.5 flex items-center justify-between text-[11px]"
+          style={{ color: VBT.zinc, borderTop: `1px solid ${VBT.paperEdge}` }}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="font-semibold"
+              style={{
+                fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                color: VBT.terracotta600,
+                letterSpacing: "0.02em",
+              }}
+            >
+              Visibili'tea
+            </span>
+            <span style={{ color: VBT.paperEdge }}>·</span>
+            <span>{footer || "Audit technique SEO"}</span>
+          </div>
+          <div className="tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>
             {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
           </div>
         </footer>
@@ -63,13 +119,35 @@ export function Slide({
 
 export function ScoreBadge({ score }: { score: number }) {
   const tone =
-    score >= 80 ? { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-200" } :
-    score >= 50 ? { bg: "bg-amber-50",   text: "text-amber-600",   border: "border-amber-200" } :
-                  { bg: "bg-red-50",     text: "text-red-600",     border: "border-red-200" };
+    score >= 80
+      ? { bg: "#EAF2E0", text: VBT.good, border: "#C6D9B0" }
+      : score >= 50
+      ? { bg: VBT.amber50, text: VBT.amber600, border: "#E5CD83" }
+      : { bg: VBT.brick50, text: VBT.brick500, border: "#E5BDB5" };
   return (
-    <div className={`text-center px-4 py-2 rounded-xl border ${tone.bg} ${tone.border}`}>
-      <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Score</div>
-      <div className={`text-2xl font-semibold tabular-nums ${tone.text}`}>{score}<span className="text-sm text-zinc-400">/100</span></div>
+    <div
+      className="text-center px-4 py-2 rounded-xl border"
+      style={{ background: tone.bg, borderColor: tone.border }}
+    >
+      <div
+        className="text-[10px] uppercase tracking-[0.18em]"
+        style={{ color: VBT.zinc, fontWeight: 600 }}
+      >
+        Score
+      </div>
+      <div
+        className="text-2xl tabular-nums"
+        style={{
+          color: tone.text,
+          fontWeight: 700,
+          fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+        }}
+      >
+        {score}
+        <span className="text-sm" style={{ color: VBT.zinc, fontWeight: 500 }}>
+          /100
+        </span>
+      </div>
     </div>
   );
 }
@@ -83,14 +161,33 @@ export function KpiTile({
   value: number | string;
   tone?: "ok" | "warn" | "bad";
 }) {
-  const colors =
-    tone === "bad"  ? "bg-red-50 text-red-600 border-red-200" :
-    tone === "warn" ? "bg-amber-50 text-amber-600 border-amber-200" :
-                      "bg-emerald-50 text-emerald-600 border-emerald-200";
+  const palette =
+    tone === "bad"
+      ? { bg: VBT.brick50, text: VBT.brick500, border: "#E5BDB5" }
+      : tone === "warn"
+      ? { bg: VBT.amber50, text: VBT.amber600, border: "#E5CD83" }
+      : { bg: "#EAF2E0", text: VBT.good, border: "#C6D9B0" };
   return (
-    <div className={`px-3 py-2.5 rounded-lg border ${colors}`}>
-      <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">{label}</div>
-      <div className="text-xl font-semibold tabular-nums mt-0.5">{value}</div>
+    <div
+      className="px-3.5 py-2.5 rounded-xl border"
+      style={{ background: palette.bg, borderColor: palette.border }}
+    >
+      <div
+        className="text-[10px] uppercase tracking-[0.14em]"
+        style={{ color: VBT.zinc, fontWeight: 600 }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-xl tabular-nums mt-0.5"
+        style={{
+          color: palette.text,
+          fontWeight: 700,
+          fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 }

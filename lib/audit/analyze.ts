@@ -3,14 +3,16 @@
 // bottom assembles them and computes the global score.
 
 import type { UrlRow } from "./parse";
+import { VBT } from "./brand";
 import type { CategoryReport, IssueRow, Report, Severity } from "./types";
 
+// Palette aligned to Visibili'tea brand (terracotta / amber / brick).
 const COLORS = {
-  ok: "#10b981",      // emerald-500
-  warn: "#f59e0b",    // amber-500
-  bad: "#ef4444",     // red-500
-  info: "#6366f1",    // accent
-  muted: "#52525b",   // zinc-600
+  ok: VBT.good,            // sage green that fits the warm palette
+  warn: VBT.amber500,      // amber 500
+  bad: VBT.brick500,       // brick 500
+  info: VBT.terracotta500, // terracotta 500
+  muted: VBT.paperEdge,    // warm paper edge
 };
 
 // ---------- helpers --------------------------------------------------------

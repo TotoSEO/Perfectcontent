@@ -1,22 +1,32 @@
 // Excel export with colored cells. Lazy-loaded so exceljs doesn't bloat the
-// main bundle.
+// main bundle. Palette aligned to Visibili'tea brand so the .xlsx looks
+// native to the consultant's deliverables when imported into Google Sheets.
 
+import { SEVERITY as SEV } from "./brand";
 import type { CategoryReport, IssueRow } from "./types";
 
 const SEVERITY_BG: Record<string, string> = {
-  critical: "FFFEE2E2",  // red-100
-  high:     "FFFFEDD5",  // orange-100
-  medium:   "FFFEF3C7",  // amber-100
-  low:      "FFFEFCE8",  // yellow-50
-  info:     "FFF4F4F5",  // zinc-100
+  critical: SEV.critical.argbBg,
+  high:     SEV.high.argbBg,
+  medium:   SEV.medium.argbBg,
+  low:      SEV.low.argbBg,
+  info:     SEV.info.argbBg,
 };
 const SEVERITY_FG: Record<string, string> = {
-  critical: "FFB91C1C",
-  high:     "FFC2410C",
-  medium:   "FFB45309",
-  low:      "FF854D0E",
-  info:     "FF52525B",
+  critical: SEV.critical.argbFg,
+  high:     SEV.high.argbFg,
+  medium:   SEV.medium.argbFg,
+  low:      SEV.low.argbFg,
+  info:     SEV.info.argbFg,
 };
+const HEADER_BG = "FF7E411A"; // terracotta 700
+const SCORE_GOOD_BG = "FFEAF2E0";
+const SCORE_GOOD_FG = "FF3F6336";
+const SCORE_WARN_BG = "FFFBF4DE";
+const SCORE_WARN_FG = "FF7C621A";
+const SCORE_BAD_BG  = "FFF8E4E0";
+const SCORE_BAD_FG  = "FF642720";
+const HYPERLINK_FG  = "FFC46B30"; // terracotta 500
 
 const SEVERITY_RANK: Record<string, number> = {
   critical: 0, high: 1, medium: 2, low: 3, info: 4,
@@ -86,14 +96,14 @@ export async function exportIssuesToXlsx(
     // Score color
     const scoreCell = row.getCell("score");
     if (c.score >= 80) {
-      scoreCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
-      scoreCell.font = { color: { argb: "FF065F46" }, bold: true };
+      scoreCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: SCORE_GOOD_BG } };
+      scoreCell.font = { color: { argb: SCORE_GOOD_FG }, bold: true };
     } else if (c.score >= 50) {
-      scoreCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
-      scoreCell.font = { color: { argb: "FF92400E" }, bold: true };
+      scoreCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: SCORE_WARN_BG } };
+      scoreCell.font = { color: { argb: SCORE_WARN_FG }, bold: true };
     } else {
-      scoreCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
-      scoreCell.font = { color: { argb: "FF991B1B" }, bold: true };
+      scoreCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: SCORE_BAD_BG } };
+      scoreCell.font = { color: { argb: SCORE_BAD_FG }, bold: true };
     }
   }
   synth.autoFilter = { from: "A1", to: `H${synth.rowCount}` };
@@ -140,7 +150,7 @@ export async function exportIssuesToXlsx(
       const urlVal = data.url;
       if (typeof urlVal === "string" && /^https?:\/\//.test(urlVal)) {
         urlCell.value = { text: urlVal, hyperlink: urlVal };
-        urlCell.font = { color: { argb: "FF2563EB" }, underline: true };
+        urlCell.font = { color: { argb: HYPERLINK_FG }, underline: true };
       }
     }
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: ws.columnCount } };
@@ -156,10 +166,10 @@ export async function exportIssuesToXlsx(
 }
 
 function styleHeader(row: any) {
-  row.height = 22;
+  row.height = 24;
   row.eachCell((cell: any) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF18181B" } };
-    cell.font = { color: { argb: "FFFFFFFF" }, bold: true, size: 11 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+    cell.font = { color: { argb: "FFFFFCF7" }, bold: true, size: 11, name: "Montserrat" };
     cell.alignment = { vertical: "middle", horizontal: "left" };
   });
 }
