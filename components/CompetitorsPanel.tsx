@@ -79,7 +79,7 @@ export function CompetitorsPanel({ contentId }: { contentId: string }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-[#25252a] flex items-baseline justify-between gap-3">
+      <div className="px-5 py-4 border-b border-[var(--border)] flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-300">
           Comparaison vs concurrents
         </h3>
@@ -89,7 +89,7 @@ export function CompetitorsPanel({ contentId }: { contentId: string }) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="text-[10px] uppercase tracking-wider text-zinc-500 bg-[#1a1a1e]">
+          <thead className="text-[10px] uppercase tracking-wider text-zinc-500 bg-white/[0.05]">
             <tr>
               <th className="text-left px-4 py-2.5">Site</th>
               <th className="text-right px-2 py-2.5">Mots</th>
@@ -109,7 +109,7 @@ export function CompetitorsPanel({ contentId }: { contentId: string }) {
               return (
                 <tr
                   key={i}
-                  className="border-t border-[#1f1f24] hover:bg-[#1a1a1e]"
+                  className="border-t border-[var(--border)] hover:bg-white/[0.05]"
                 >
                   <td className="px-4 py-2 truncate max-w-[280px]">
                     <a
@@ -146,7 +146,7 @@ export function CompetitorsPanel({ contentId }: { contentId: string }) {
               );
             })}
             {/* Average row */}
-            <tr className="border-t border-[#25252a] bg-[#15151a] text-zinc-400">
+            <tr className="border-t border-[var(--border)] bg-white/[0.04] text-zinc-400">
               <td className="px-4 py-2 italic">Moyenne concurrents</td>
               <td className="text-right px-2 py-2 tabular-nums">{avgWords}</td>
               <td className="text-right px-2 py-2 tabular-nums">{avgParas}</td>

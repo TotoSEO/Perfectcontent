@@ -136,7 +136,7 @@ export default function FusionPage() {
             <div key={s.id} className="card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="label inline-flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#13141a] border border-[var(--border)] inline-flex items-center justify-center text-[10px] text-zinc-300 tabular-nums">
+                  <span className="w-5 h-5 rounded-full bg-white/[0.04] border border-[var(--border)] inline-flex items-center justify-center text-[10px] text-zinc-300 tabular-nums">
                     {i + 1}
                   </span>
                   Contenu {i + 1}

@@ -135,7 +135,7 @@ export function SemanticScore({
                       {count}/{t.target}
                     </span>
                   </div>
-                  <div className="h-1.5 mt-1 bg-[#15161b] rounded overflow-hidden">
+                  <div className="h-1.5 mt-1 bg-white/[0.04] rounded overflow-hidden">
                     <div
                       className={`h-full ${TONE[st].bar} transition-all`}
                       style={{ width: `${fill}%` }}

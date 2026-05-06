@@ -93,7 +93,7 @@ export default function ConsolePage() {
             className="input pl-9"
           />
         </div>
-        <div className="inline-flex bg-[#13141a] border border-[var(--border)] rounded-lg p-0.5 gap-0.5">
+        <div className="inline-flex bg-white/[0.04] border border-[var(--border)] rounded-lg p-0.5 gap-0.5">
           {(["all", "info", "warn", "error"] as const).map((lv) => (
             <button
               key={lv}
@@ -121,7 +121,7 @@ export default function ConsolePage() {
         <div className="card overflow-hidden">
           <ul className="divide-y divide-[var(--border)] font-mono text-xs max-h-[72vh] overflow-y-auto">
             {filtered.map((l) => (
-              <li key={l.id} className="px-4 py-2.5 hover:bg-[#13141a] transition-colors">
+              <li key={l.id} className="px-4 py-2.5 hover:bg-white/[0.04] transition-colors">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full self-center ${DOT[l.level]}`} />
                   <span className="text-zinc-600 tabular-nums">

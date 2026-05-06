@@ -108,7 +108,7 @@ export default function BatchPage() {
             <span className="label">Progression</span>
             <span className="tabular-nums text-zinc-300">{done} / {total} · {pct}%</span>
           </div>
-          <div className="h-2 bg-[#15161b] rounded-full overflow-hidden">
+          <div className="h-2 bg-white/[0.04] rounded-full overflow-hidden">
             <div
               className="h-2 bg-gradient-to-r from-accent-500 to-accent-400 rounded-full transition-all"
               style={{ width: `${pct}%` }}
@@ -145,7 +145,7 @@ function BatchRow({ job }: { job: Job }) {
   return (
     <Link
       href={href}
-      className="group grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-5 py-3.5 hover:bg-[#13141a] transition-colors"
+      className="group grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-5 py-3.5 hover:bg-white/[0.04] transition-colors"
     >
       <div className="min-w-0">
         <div className="font-medium truncate text-zinc-100">{job.keyword}</div>

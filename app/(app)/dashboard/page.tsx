@@ -94,7 +94,7 @@ export default function DashboardPage() {
             className="input pl-9"
           />
         </div>
-        <div className="inline-flex bg-[#13141a] border border-[var(--border)] rounded-lg p-0.5 gap-0.5">
+        <div className="inline-flex bg-white/[0.04] border border-[var(--border)] rounded-lg p-0.5 gap-0.5">
           {(["active", "archived", "all"] as const).map((k) => (
             <button
               key={k}
@@ -124,7 +124,7 @@ export default function DashboardPage() {
               <li key={c.id}>
                 <Link
                   href={`/contents/${c.id}`}
-                  className="group flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-[#13141a] transition-colors"
+                  className="group flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-white/[0.04] transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate text-[14px] text-zinc-100 group-hover:text-white">

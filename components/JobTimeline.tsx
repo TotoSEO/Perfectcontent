@@ -54,7 +54,7 @@ export function JobTimeline({ job }: { job: Job }) {
             className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${tone}`}
           >
             <span className={`w-5 h-5 inline-flex items-center justify-center rounded-full ${
-              isDone ? "bg-emerald-500/15" : isCurrent ? "bg-accent-500/15" : isFailed ? "bg-red-500/15" : "bg-[#15161b]"
+              isDone ? "bg-emerald-500/15" : isCurrent ? "bg-accent-500/15" : isFailed ? "bg-red-500/15" : "bg-white/[0.04]"
             }`}>
               {indicator}
             </span>

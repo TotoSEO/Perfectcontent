@@ -31,7 +31,7 @@ export function Tooltip({
       {open && (
         <span
           role="tooltip"
-          className={`absolute z-50 max-w-xs whitespace-normal rounded-md border border-[var(--border-strong)] bg-[#0c0d10] px-2.5 py-1.5 text-[11px] leading-snug text-zinc-200 shadow-card pointer-events-none ${positions[side]} animate-fadein`}
+          className={`absolute z-50 max-w-xs whitespace-normal rounded-md glass-stronger px-2.5 py-1.5 text-[11px] leading-snug text-zinc-100 shadow-glass pointer-events-none ${positions[side]} animate-fadein`}
         >
           {content}
         </span>

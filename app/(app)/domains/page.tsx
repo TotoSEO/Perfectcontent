@@ -126,7 +126,7 @@ export default function DomainsPage() {
             <li key={d.id} className="card card-hover p-5 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-3">
-                  <span className="w-9 h-9 rounded-lg bg-[#13141a] border border-[var(--border)] flex items-center justify-center text-zinc-400 shrink-0">
+                  <span className="w-9 h-9 rounded-lg bg-white/[0.04] border border-[var(--border)] flex items-center justify-center text-zinc-400 shrink-0">
                     <Icon name="globe" size={16} />
                   </span>
                   <div className="min-w-0">

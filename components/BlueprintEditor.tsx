@@ -78,14 +78,14 @@ export function BlueprintEditor({
               <input
                 value={s.h2}
                 onChange={(e) => updateSection(i, { h2: e.target.value })}
-                className="flex-1 min-w-[200px] bg-[#13141a] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
+                className="flex-1 min-w-[200px] bg-white/[0.04] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
               />
               <select
                 value={s.element || ""}
                 onChange={(e) =>
                   updateSection(i, { element: (e.target.value || undefined) as Section["element"] })
                 }
-                className="bg-[#13141a] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
+                className="bg-white/[0.04] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
               >
                 <option value="">prose</option>
                 <option value="table">tableau</option>
@@ -108,7 +108,7 @@ export function BlueprintEditor({
                 updateSection(i, { bullets: e.target.value.split("\n").filter(Boolean) })
               }
               placeholder="bullet points (un par ligne)"
-              className="w-full bg-[#13141a] border border-[var(--border)] rounded-lg px-3 py-2 text-sm min-h-[64px] focus:outline-none focus:border-accent-500 leading-relaxed"
+              className="w-full bg-white/[0.04] border border-[var(--border)] rounded-lg px-3 py-2 text-sm min-h-[64px] focus:outline-none focus:border-accent-500 leading-relaxed"
             />
           </div>
         ))}

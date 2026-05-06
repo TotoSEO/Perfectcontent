@@ -107,7 +107,7 @@ export default function FoldersPage() {
           {folders?.map((f) => (
             <li
               key={f.id}
-              className="px-5 py-3.5 flex items-center justify-between hover:bg-[#13141a] transition-colors"
+              className="px-5 py-3.5 flex items-center justify-between hover:bg-white/[0.04] transition-colors"
             >
               <span className="flex items-center gap-3 min-w-0">
                 <Icon name="folder" size={16} className="text-zinc-500 shrink-0" />

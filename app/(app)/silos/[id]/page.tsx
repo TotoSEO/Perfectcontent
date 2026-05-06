@@ -61,9 +61,9 @@ const STATUS_TONE: Record<string, string> = {
   paused: "border-amber-700/50 text-amber-200 bg-amber-500/10",
   failed: "border-red-700/50 text-red-300 bg-red-500/10",
   capped: "border-orange-700/50 text-orange-300 bg-orange-500/10",
-  queued: "border-[#34343b] text-zinc-400 bg-[#1c1c20]",
-  analysis: "border-[#34343b] text-zinc-400 bg-[#1c1c20]",
-  planning: "border-[#34343b] text-zinc-400 bg-[#1c1c20]",
+  queued: "border-[var(--border-strong)] text-zinc-400 bg-white/[0.04]",
+  analysis: "border-[var(--border-strong)] text-zinc-400 bg-white/[0.04]",
+  planning: "border-[var(--border-strong)] text-zinc-400 bg-white/[0.04]",
   blueprinting: "border-accent-500/50 text-accent-200 bg-accent-500/10",
   generating: "border-accent-500/50 text-accent-200 bg-accent-500/10",
   partial: "border-amber-700/50 text-amber-200 bg-amber-500/10",
@@ -179,7 +179,7 @@ export default function SiloPage() {
              "Le pipeline tourne — chaque article passe SERP → blueprint → génération → validation."}
           </div>
         </div>
-        <div className="w-40 h-2 bg-[#1c1c20] rounded-full overflow-hidden">
+        <div className="w-40 h-2 bg-white/[0.04] rounded-full overflow-hidden">
           <div
             className="h-full bg-accent-500 transition-all"
             style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
@@ -189,19 +189,19 @@ export default function SiloPage() {
 
       {/* Members list */}
       <section className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-[#25252a] flex items-baseline justify-between">
+        <div className="px-5 py-3 border-b border-[var(--border)] flex items-baseline justify-between">
           <h2 className="label">Membres du silo</h2>
           <span className="text-xs text-zinc-500">
             {pillar ? "1 pilier + " : ""}{sats.length} satellite{sats.length > 1 ? "s" : ""}
           </span>
         </div>
-        <ul className="divide-y divide-[#1f1f24]">
+        <ul className="divide-y divide-[var(--border)]">
           {silo.members.map((m) => (
             <li key={m.content_id}>
               <Link
                 href={m.has_html ? `/contents/${m.content_id}` : "#"}
                 className={`group flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors ${
-                  m.has_html ? "hover:bg-[#13141a]" : "cursor-default"
+                  m.has_html ? "hover:bg-white/[0.04]" : "cursor-default"
                 }`}
               >
                 <span className={`chip ${
@@ -257,7 +257,7 @@ function PhaseBar({ current, status }: { current: string | null; status: string 
                     ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
                     : isCurrent
                     ? "bg-accent-500/20 text-accent-200 border border-accent-500/50 animate-pulse-soft"
-                    : "bg-[#13141a] text-zinc-500 border border-[var(--border-strong)]"
+                    : "bg-white/[0.04] text-zinc-500 border border-[var(--border-strong)]"
                 }`}
               >
                 {isDone ? <Icon name="check" size={12} /> : i + 1}
@@ -291,7 +291,7 @@ function MeshAuditPanel({
 }) {
   return (
     <section className="card overflow-hidden">
-      <div className="px-5 py-3 border-b border-[#25252a] flex items-baseline justify-between">
+      <div className="px-5 py-3 border-b border-[var(--border)] flex items-baseline justify-between">
         <h2 className="label">Mesh status</h2>
         <span
           className={`chip ${
@@ -305,7 +305,7 @@ function MeshAuditPanel({
             : `${audit.summary.issues} problème${audit.summary.issues > 1 ? "s" : ""} à corriger`}
         </span>
       </div>
-      <ul className="divide-y divide-[#1f1f24]">
+      <ul className="divide-y divide-[var(--border)]">
         {audit.rows.map((row) => (
           <li key={row.content_id} className="px-5 py-4">
             <details open={row.issues.length > 0}>

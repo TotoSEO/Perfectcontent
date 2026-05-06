@@ -92,7 +92,7 @@ export function ImagePanel({
                 )}
               </button>
             </div>
-            <p className="text-xs leading-relaxed text-zinc-300 bg-[#13141a] border border-[var(--border)] rounded-lg p-3 font-mono whitespace-pre-wrap">
+            <p className="text-xs leading-relaxed text-zinc-300 bg-white/[0.04] border border-[var(--border)] rounded-lg p-3 font-mono whitespace-pre-wrap">
               {imagePrompt}
             </p>
           </div>
