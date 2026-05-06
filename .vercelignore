@@ -17,3 +17,4 @@ backend/.env.example
 node_modules
 .next
 .vercel
+.claude
