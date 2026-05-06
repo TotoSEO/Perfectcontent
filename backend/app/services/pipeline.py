@@ -264,11 +264,15 @@ async def _step_scrape(job_id: UUID) -> None:
     batch = await scraper.scrape_urls(urls, min_success=MIN_COMPETITORS_OK)
     await _add_cost(job_id, batch.cost)
     if len(batch.pages) < MIN_COMPETITORS_OK:
+        details = ", ".join(f"{f['url']} ({f['error']})" for f in batch.failed[:3])
         raise RuntimeError(
-            f"scrape tolerance breached: {len(batch.pages)}/{len(urls)} pages OK"
+            f"scrape tolerance breached: {len(batch.pages)}/{len(urls)} pages OK. "
+            f"Failures: {details}"
         )
     # Persist scraped pages on the semantic_reports row so the next steps don't
     # need to re-fetch them from cache (and so we have a permanent record).
+    # Failures are persisted alongside so the SERP viewer can show the user
+    # which URLs were skipped and why (bot block, paywall, empty body…).
     sr = await _ensure_report(job_id)
     async with SessionLocal() as session:
         sr_db = await session.get(SemanticReport, sr.id)
@@ -284,6 +288,7 @@ async def _step_scrape(job_id: UUID) -> None:
                 }
                 for p in batch.pages
             ]
+            payload["scrape_failures"] = list(batch.failed)
             sr_db.serp_raw = payload
             await session.commit()
 

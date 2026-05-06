@@ -189,20 +189,21 @@ async def get_serp_analysis(content_id: UUID, db: AsyncSession = Depends(get_db)
         )
     ).scalar_one_or_none()
     if job is None:
-        return {"job_id": None, "competitors": [], "paa": [], "format": None, "related": []}
+        return {"job_id": None, "competitors": [], "paa": [], "format": None, "related": [], "scrape_failures": []}
     sr = (
         await db.execute(
             select(SemanticReport).where(SemanticReport.job_id == job.id)
         )
     ).scalar_one_or_none()
     if sr is None:
-        return {"job_id": str(job.id), "competitors": [], "paa": [], "format": None, "related": []}
+        return {"job_id": str(job.id), "competitors": [], "paa": [], "format": None, "related": [], "scrape_failures": []}
 
     serp_raw = sr.serp_raw or {}
     organic = serp_raw.get("organic_top7", []) or []
     scraped = serp_raw.get("scraped", []) or []
     paa_raw = serp_raw.get("paa", []) or []
     fmt_payload = serp_raw.get("serp_format") or {}
+    scrape_failures = serp_raw.get("scrape_failures", []) or []
 
     # Index scraped pages by URL for quick lookup
     scraped_by_url = {p.get("url"): p for p in scraped if isinstance(p, dict)}
@@ -270,6 +271,10 @@ async def get_serp_analysis(content_id: UUID, db: AsyncSession = Depends(get_db)
         "organic_top7": [
             {"url": o.get("url"), "title": o.get("title"), "description": o.get("description")}
             for o in organic if isinstance(o, dict)
+        ],
+        "scrape_failures": [
+            {"url": f.get("url"), "error": f.get("error"), "source": f.get("source")}
+            for f in scrape_failures if isinstance(f, dict)
         ],
         "paa": paa,
         "format": {

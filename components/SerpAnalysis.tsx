@@ -30,11 +30,18 @@ type Competitor = {
   weakness: string | null;
 };
 
+type ScrapeFailure = {
+  url: string | null;
+  error: string | null;
+  source: string | null;
+};
+
 type SerpResponse = {
   job_id: string | null;
   keyword?: string;
   competitors: Competitor[];
   organic_top7: { url: string; title: string; description?: string }[];
+  scrape_failures: ScrapeFailure[];
   paa: string[];
   format: { format: string | null; votes: Record<string, number>; brief: string };
   related: string[];
@@ -111,7 +118,16 @@ function SerpModal({ contentId, onClose }: { contentId: string; onClose: () => v
           <>
             <div className="flex border-b border-[#25252a] bg-[#0e0e11] overflow-x-auto">
               <TabBtn id="competitors" tab={tab} setTab={setTab}>
-                Concurrents ({data.competitors.length})
+                Concurrents ({data.competitors.length}
+                {data.scrape_failures.length > 0 && (
+                  <>
+                    {" "}
+                    <span className="text-amber-400">
+                      / {data.scrape_failures.length} skip
+                    </span>
+                  </>
+                )}
+                )
               </TabBtn>
               <TabBtn id="paa" tab={tab} setTab={setTab}>
                 People Also Ask ({data.paa.length})
@@ -127,7 +143,12 @@ function SerpModal({ contentId, onClose }: { contentId: string; onClose: () => v
               </TabBtn>
             </div>
             <div className="flex-1 overflow-hidden">
-              {tab === "competitors" && <CompetitorsPane competitors={data.competitors} />}
+              {tab === "competitors" && (
+                <CompetitorsPane
+                  competitors={data.competitors}
+                  failures={data.scrape_failures}
+                />
+              )}
               {tab === "paa" && <PaaPane paa={data.paa} />}
               {tab === "format" && <FormatPane fmt={data.format} />}
               {tab === "semantic" && (
@@ -171,11 +192,17 @@ function TabBtn({
   );
 }
 
-function CompetitorsPane({ competitors }: { competitors: Competitor[] }) {
+function CompetitorsPane({
+  competitors,
+  failures,
+}: {
+  competitors: Competitor[];
+  failures: ScrapeFailure[];
+}) {
   const [selected, setSelected] = useState<number>(0);
   const current = competitors[selected];
 
-  if (competitors.length === 0) {
+  if (competitors.length === 0 && failures.length === 0) {
     return <div className="p-10 text-sm text-zinc-500 text-center">Aucun concurrent extrait.</div>;
   }
 
@@ -197,13 +224,27 @@ function CompetitorsPane({ competitors }: { competitors: Competitor[] }) {
             <div className="text-[11px] text-zinc-500 truncate mt-0.5">{c.url}</div>
             <div className="flex gap-2 mt-1.5 text-[10px] text-zinc-500">
               {c.word_count != null && <span>{c.word_count} mots</span>}
-              {c.scrape_error ? (
-                <span className="text-red-400">scrape erreur</span>
-              ) : (
-                c.scrape_source && <span>{c.scrape_source}</span>
-              )}
+              {c.scrape_source && <span>{c.scrape_source}</span>}
             </div>
           </button>
+        ))}
+        {failures.length > 0 && (
+          <div className="px-4 py-2 border-t border-b border-[#25252a] text-[10px] uppercase tracking-wider text-amber-400/80 bg-[#1a1410]">
+            Scrapes ignorés ({failures.length})
+          </div>
+        )}
+        {failures.map((f, i) => (
+          <div
+            key={`fail-${i}`}
+            className="px-4 py-3 border-b border-[#1c1c20] bg-[#0e0e11] opacity-70"
+            title={f.error || ""}
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs text-amber-400">×</span>
+              <span className="text-sm truncate flex-1 text-zinc-400">{f.url || "—"}</span>
+            </div>
+            <div className="text-[11px] text-amber-400/80 truncate mt-0.5">{f.error || "—"}</div>
+          </div>
         ))}
       </div>
       {current && (
