@@ -6,6 +6,7 @@ import { api, fetcher } from "@/lib/api";
 import { Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { SkeletonList } from "@/components/Skeleton";
+import { Icon } from "@/components/Icon";
 
 export default function FoldersPage() {
   const { data: folders, mutate } = useSWR<Folder[]>("/srv/folders", fetcher);
@@ -42,16 +43,15 @@ export default function FoldersPage() {
   return (
     <div className="space-y-8 max-w-3xl animate-fadein">
       <header>
-        <h1 className="text-[28px] font-semibold tracking-tight inline-flex items-center">
+        <div className="eyebrow mb-2">Bibliothèque</div>
+        <h1 className="h-page inline-flex items-center">
           Dossiers
           <HelpIcon
             side="right"
             content="Crée un dossier par client ou projet. Lors d'un nouveau lot, choisis-le pour ranger automatiquement les contenus produits."
           />
         </h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Organisation simple par client / projet / thématique.
-        </p>
+        <p className="h-sub">Organisation simple par client / projet / thématique.</p>
       </header>
 
       <form onSubmit={add} className="card p-5 grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end">
@@ -78,11 +78,12 @@ export default function FoldersPage() {
           </select>
         </div>
         <button disabled={!name.trim() || busy} className="btn-primary">
-          {busy ? "…" : "Créer"}
+          {busy ? <Icon name="spinner" size={14} /> : <Icon name="plus" size={14} />}
+          Créer
         </button>
       </form>
       {err && (
-        <div className="text-xs text-red-300 bg-red-900/20 border border-red-700/40 rounded-lg px-3 py-2">
+        <div className="text-xs text-red-300 bg-red-500/10 border border-red-700/40 rounded-lg px-3 py-2">
           {err}
         </div>
       )}
@@ -90,32 +91,35 @@ export default function FoldersPage() {
       {!folders && <SkeletonList rows={3} />}
 
       {folders && folders.length === 0 && (
-        <div className="card p-12 text-center space-y-3 border-dashed">
-          <div className="mx-auto w-10 h-10 rounded-xl bg-accent-600/10 border border-accent-500/30 flex items-center justify-center text-accent-400 text-lg">
-            ▫
+        <div className="empty">
+          <div className="empty-icon">
+            <Icon name="folder" size={20} />
           </div>
-          <div className="text-zinc-200 font-medium">Aucun dossier</div>
-          <p className="text-zinc-500 text-sm max-w-md mx-auto">
+          <div className="text-zinc-100 font-medium">Aucun dossier</div>
+          <p className="text-zinc-500 text-sm max-w-md mx-auto leading-relaxed">
             L'outil marche très bien sans, mais c'est utile dès que tu gères plusieurs clients.
           </p>
         </div>
       )}
 
       {(folders || []).length > 0 && (
-        <ul className="card divide-y divide-[#1f1f24] overflow-hidden">
+        <ul className="card divide-y divide-[var(--border)] overflow-hidden">
           {folders?.map((f) => (
             <li
               key={f.id}
-              className="px-5 py-3 flex items-center justify-between hover:bg-[#1a1a1e] transition-colors"
+              className="px-5 py-3.5 flex items-center justify-between hover:bg-[#13141a] transition-colors"
             >
-              <span className="flex items-center gap-3">
-                <span className="text-zinc-600 text-sm">▫</span>
-                <span className="font-medium text-[14px]">{f.name}</span>
-                {f.parent_id && (
-                  <span className="chip border-[#2c2c32] text-zinc-500">enfant</span>
-                )}
+              <span className="flex items-center gap-3 min-w-0">
+                <Icon name="folder" size={16} className="text-zinc-500 shrink-0" />
+                <span className="font-medium text-[14px] text-zinc-100 truncate">{f.name}</span>
+                {f.parent_id && <span className="chip-soft">enfant</span>}
               </span>
-              <button onClick={() => remove(f.id)} className="btn-danger px-3 py-1.5 text-xs">
+              <button
+                onClick={() => remove(f.id)}
+                className="btn-danger px-3 py-1.5 text-xs"
+                title="Supprimer le dossier"
+              >
+                <Icon name="trash" size={12} />
                 Supprimer
               </button>
             </li>

@@ -24,11 +24,11 @@ function statusFor(count: number, t: TermTarget): Status {
   return "ok";
 }
 
-const TONE: Record<Status, { bar: string; chip: string }> = {
-  missing: { bar: "bg-red-500/40", chip: "text-red-300" },
-  low: { bar: "bg-amber-500/50", chip: "text-amber-300" },
-  ok: { bar: "bg-emerald-500/60", chip: "text-emerald-300" },
-  over: { bar: "bg-orange-500/50", chip: "text-orange-300" },
+const TONE: Record<Status, { bar: string; chip: string; pill: string }> = {
+  missing: { bar: "bg-red-500/40", chip: "text-red-300", pill: "border-red-700/50 text-red-300 bg-red-500/10" },
+  low: { bar: "bg-amber-500/55", chip: "text-amber-300", pill: "border-amber-600/50 text-amber-200 bg-amber-500/10" },
+  ok: { bar: "bg-emerald-500/65", chip: "text-emerald-300", pill: "border-emerald-700/50 text-emerald-300 bg-emerald-500/10" },
+  over: { bar: "bg-orange-500/55", chip: "text-orange-300", pill: "border-orange-600/50 text-orange-200 bg-orange-500/10" },
 };
 
 export function SemanticScore({
@@ -45,7 +45,6 @@ export function SemanticScore({
 
   const targets = data?.targets ?? [];
 
-  // Debounce the html → plain → counts pipeline so big edits don't lag the UI.
   const [debouncedHtml, setDebouncedHtml] = useState(html);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedHtml(html), 300);
@@ -78,79 +77,76 @@ export function SemanticScore({
 
   if (!data) {
     return (
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 text-sm text-zinc-500">
-        Chargement du score sémantique…
-      </div>
+      <div className="card p-4 text-sm text-zinc-500">Chargement du score sémantique…</div>
     );
   }
   if (targets.length === 0) {
     return (
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 text-sm text-zinc-500">
-        Aucune cible sémantique calculée. Le rapport SERP n'est peut-être pas terminé.
+      <div className="card p-4 text-sm text-zinc-500">
+        Aucune cible sémantique. Le rapport SERP n'est peut-être pas terminé.
       </div>
     );
   }
 
   const tone =
     summary.score >= 75
-      ? "text-emerald-300 border-emerald-700 bg-emerald-700/20"
+      ? "border-emerald-700/50 text-emerald-300 bg-emerald-500/10"
       : summary.score >= 50
-      ? "text-amber-200 border-amber-700 bg-amber-700/20"
-      : "text-red-300 border-red-700 bg-red-700/20";
+      ? "border-amber-600/50 text-amber-200 bg-amber-500/10"
+      : "border-red-700/50 text-red-300 bg-red-500/10";
 
   return (
-    <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm uppercase tracking-wider text-zinc-500">
-          Score sémantique
-        </h3>
-        <div className={`text-sm border rounded px-2 py-0.5 tabular-nums ${tone}`}>
+    <div className="card overflow-hidden">
+      <div className="card-section">
+        <h3 className="label">Score sémantique</h3>
+        <div className={`text-sm rounded-full px-2.5 py-1 tabular-nums border font-semibold ${tone}`}>
           {summary.score}%
         </div>
       </div>
+      <div className="p-4 space-y-3">
+        <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-wider">
+          <Pill label="Présents" value={summary.breakdown.ok} tone="ok" />
+          <Pill label="Manquants" value={summary.breakdown.missing} tone="missing" />
+          <Pill label="Sous-util." value={summary.breakdown.low} tone="low" />
+          <Pill label="Sur-util." value={summary.breakdown.over} tone="over" />
+        </div>
 
-      <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-wider">
-        <Pill label="Présents" value={summary.breakdown.ok} tone="ok" />
-        <Pill label="Manquants" value={summary.breakdown.missing} tone="missing" />
-        <Pill label="Sous-utilisés" value={summary.breakdown.low} tone="low" />
-        <Pill label="Sur-utilisés" value={summary.breakdown.over} tone="over" />
+        <ul className="space-y-1 max-h-[480px] overflow-y-auto pr-1 -mr-1">
+          {targets.map((t) => {
+            const count = counts.get(t.term) ?? 0;
+            const st = statusFor(count, t);
+            const fill = Math.max(2, Math.min(100, t.importance * 100));
+            return (
+              <li
+                key={t.term}
+                className="grid grid-cols-[1fr_auto] items-center gap-2 text-xs py-1"
+              >
+                <div className="min-w-0">
+                  <div className="flex justify-between items-baseline gap-2">
+                    <span className="truncate font-medium text-zinc-200">
+                      {t.is_ngram && (
+                        <span className="text-[9px] uppercase tracking-wider text-accent-400/80 mr-1">
+                          ◆
+                        </span>
+                      )}
+                      {t.term}
+                    </span>
+                    <span className={`tabular-nums font-medium ${TONE[st].chip}`}>
+                      {count}/{t.target}
+                    </span>
+                  </div>
+                  <div className="h-1.5 mt-1 bg-[#15161b] rounded overflow-hidden">
+                    <div
+                      className={`h-full ${TONE[st].bar} transition-all`}
+                      style={{ width: `${fill}%` }}
+                    />
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </div>
-
-      <ul className="space-y-1 max-h-[480px] overflow-y-auto pr-1">
-        {targets.map((t) => {
-          const count = counts.get(t.term) ?? 0;
-          const st = statusFor(count, t);
-          const fill = Math.max(2, Math.min(100, t.importance * 100));
-          return (
-            <li
-              key={t.term}
-              className="grid grid-cols-[1fr_auto] items-center gap-2 text-xs"
-            >
-              <div className="min-w-0">
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="truncate font-medium">
-                    {t.is_ngram && (
-                      <span className="text-[9px] uppercase tracking-wider text-accent-400/70 mr-1">
-                        ◆
-                      </span>
-                    )}
-                    {t.term}
-                  </span>
-                  <span className={`tabular-nums ${TONE[st].chip}`}>
-                    {count}/{t.target}
-                  </span>
-                </div>
-                <div className="h-1.5 mt-1 bg-ink-800 rounded overflow-hidden">
-                  <div
-                    className={`h-full ${TONE[st].bar} transition-all`}
-                    style={{ width: `${fill}%` }}
-                  />
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 }
@@ -165,8 +161,8 @@ function Pill({
   tone: Status;
 }) {
   return (
-    <div className={`border border-ink-800 rounded px-2 py-1 text-center ${TONE[tone].chip}`}>
-      <div className="text-[10px] text-zinc-500">{label}</div>
+    <div className={`border rounded-lg px-2 py-1.5 text-center ${TONE[tone].pill}`}>
+      <div className="text-[9px] tracking-wider opacity-80">{label}</div>
       <div className="text-sm font-semibold tabular-nums">{value}</div>
     </div>
   );

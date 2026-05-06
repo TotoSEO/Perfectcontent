@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Icon } from "@/components/Icon";
 
 type Sec = { id: string; heading: string };
 
@@ -37,19 +38,25 @@ export function SectionList({
 
   if (sections.length === 0) {
     return (
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 text-sm text-zinc-500">
+      <div className="card p-4 text-sm text-zinc-500">
         Aucune section H2 détectée.
       </div>
     );
   }
 
   return (
-    <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
-      <h3 className="text-sm uppercase tracking-wider text-zinc-500">Sections H2</h3>
-      <ul className="space-y-1 text-sm">
-        {sections.map((s) => (
-          <li key={s.id} className="flex justify-between items-center gap-2">
-            <span className="truncate">{s.heading}</span>
+    <div className="card overflow-hidden">
+      <div className="card-section">
+        <h3 className="label">Sections H2</h3>
+        <span className="text-[11px] text-zinc-500 tabular-nums">{sections.length}</span>
+      </div>
+      <ul className="divide-y divide-[var(--border)]">
+        {sections.map((s, i) => (
+          <li key={s.id} className="flex justify-between items-center gap-2 px-4 py-2.5 hover:bg-[#13141a] transition-colors">
+            <span className="text-zinc-200 text-sm flex items-center gap-2 min-w-0">
+              <span className="text-zinc-600 tabular-nums text-[11px]">{String(i + 1).padStart(2, "0")}</span>
+              <span className="truncate">{s.heading}</span>
+            </span>
             <button
               disabled={busy === s.id}
               onClick={async () => {
@@ -60,9 +67,15 @@ export function SectionList({
                   setBusy(null);
                 }
               }}
-              className="text-xs text-accent-500 hover:underline disabled:opacity-50 shrink-0"
+              className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50 shrink-0 inline-flex items-center gap-1"
+              title="Régénérer cette section"
             >
-              {busy === s.id ? "…" : "Régénérer"}
+              {busy === s.id ? (
+                <Icon name="spinner" size={12} />
+              ) : (
+                <Icon name="refresh" size={12} />
+              )}
+              Régénérer
             </button>
           </li>
         ))}

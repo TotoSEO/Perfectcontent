@@ -8,6 +8,7 @@ import { ContentType, Domain, Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { RichTextarea } from "@/components/RichTextarea";
 import { CountryPicker } from "@/components/CountryPicker";
+import { Icon } from "@/components/Icon";
 
 const CONTENT_TYPES: { value: ContentType; label: string }[] = [
   { value: "blog", label: "Article de blog" },
@@ -95,36 +96,38 @@ export default function RewritePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold inline-flex items-center">
-          ♻️ Réécriture de contenu
+    <div className="space-y-6 max-w-5xl animate-fadein">
+      <header>
+        <div className="eyebrow mb-2">Création</div>
+        <h1 className="h-page inline-flex items-center gap-2">
+          <Icon name="rewrite" size={24} className="text-accent-400" />
+          Réécriture de contenu
           <HelpIcon
             side="right"
             content="Pour un contenu obsolète ou sous-performant. On scrape la SERP fraîche, on identifie les gaps et termes manquants, puis on RÉÉCRIT (pas de redémarrage à zéro) ton contenu en l'enrichissant et en corrigeant son ton."
           />
         </h1>
-        <p className="text-sm text-zinc-500">
+        <p className="h-sub max-w-2xl">
           Différent de la génération from scratch : ici, on garde l'âme du
           contenu source, on enrichit et corrige.
         </p>
       </header>
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
+      <section className="card p-5 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Mot-clé principal" help="Sur quel mot-clé doit performer le contenu réécrit.">
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="ex: meilleure cafetière à grain"
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             />
           </Field>
           <Field label="Type de contenu">
             <select
               value={contentType}
               onChange={(e) => setContentType(e.target.value as ContentType)}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             >
               {CONTENT_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -139,42 +142,51 @@ export default function RewritePage() {
           onChange={(c, l) => { setLocationCode(c); setLanguageCode(l); }}
         />
 
-        <Field label="Dossier (optionnel)">
-          <select
-            value={folderId}
-            onChange={(e) => setFolderId(e.target.value)}
-            className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-          >
-            <option value="">(aucun)</option>
-            {folders?.map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Dossier (optionnel)">
+            <select
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
+              className="input"
+            >
+              <option value="">(aucun)</option>
+              {folders?.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </Field>
 
-        <Field label="Domaine cible (pour maillage)" help="Sélectionne un domaine indexé pour activer le maillage interne sur le contenu réécrit.">
-          <select
-            value={domainId}
-            onChange={(e) => setDomainId(e.target.value)}
-            className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
-          >
-            <option value="">(aucun)</option>
-            {readyDomains.map((d) => (
-              <option key={d.id} value={d.id}>{d.hostname} — {d.pages_count} pages</option>
-            ))}
-          </select>
-        </Field>
+          <Field label="Domaine cible (pour maillage)" help="Sélectionne un domaine indexé pour activer le maillage interne sur le contenu réécrit.">
+            <select
+              value={domainId}
+              onChange={(e) => setDomainId(e.target.value)}
+              className="input"
+            >
+              <option value="">(aucun)</option>
+              {readyDomains.map((d) => (
+                <option key={d.id} value={d.id}>{d.hostname} — {d.pages_count} pages</option>
+              ))}
+            </select>
+          </Field>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="flex items-start gap-2 text-sm">
+          <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+            internalLinking && !!domainId
+              ? "border-accent-500/40 bg-accent-500/5"
+              : "border-[var(--border)] bg-[#13141a] hover:bg-[#181a20]"
+          } ${!domainId ? "opacity-50 cursor-not-allowed" : ""}`}>
+            <div className="flex items-center gap-2">
+              <Icon name="link" size={14} className="text-zinc-400" />
+              <span className="text-sm text-zinc-200">Maillage interne après réécriture</span>
+            </div>
             <input
               type="checkbox"
               disabled={!domainId}
               checked={internalLinking && !!domainId}
               onChange={(e) => setInternalLinking(e.target.checked)}
-              className="mt-0.5"
+              className="accent-accent-500"
             />
-            <span>Maillage interne après réécriture</span>
           </label>
           <Field label="Plafond coût (USD)" help="Garde-fou. Au-delà, le job s'arrête.">
             <input
@@ -182,15 +194,15 @@ export default function RewritePage() {
               step={0.05}
               value={costCap}
               onChange={(e) => setCostCap(e.target.value === "" ? "" : Number(e.target.value))}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input tabular-nums"
             />
           </Field>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
+      <section className="card p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wider text-zinc-500 inline-flex items-center">
+          <span className="label inline-flex items-center">
             Contenu actuel à réécrire
             <HelpIcon content="Colle le contenu de la page existante. Le rich text est préservé : H1-H6, gras, italique, listes, tableaux, citations." />
           </span>
@@ -203,19 +215,21 @@ export default function RewritePage() {
           placeholder="Colle ici le contenu existant de la page (titres, paragraphes, listes, tableaux…)"
         />
         {sourceWords > 0 && sourceWords < 100 && (
-          <p className="text-xs text-amber-300">
+          <p className="text-xs text-amber-300 inline-flex items-center gap-1.5">
+            <Icon name="alert" size={12} />
             Contenu trop court ({sourceWords} mots). Minimum 100 mots pour une réécriture utile.
           </p>
         )}
-      </div>
+      </section>
 
       {err && (
-        <div className="bg-red-900/30 border border-red-700 text-red-100 p-3 rounded-xl text-sm">
-          {err}
+        <div className="card border-red-700/50 bg-red-500/10 text-red-200 p-3 text-sm flex items-start gap-2">
+          <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+          <span>{err}</span>
         </div>
       )}
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 flex items-center justify-between gap-3 sticky bottom-3 backdrop-blur">
+      <div className="card-elevated p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur-md">
         <div className="text-sm">
           {!ready ? (
             <span className="text-zinc-500">
@@ -223,26 +237,28 @@ export default function RewritePage() {
             </span>
           ) : (
             <>
-              <div className="font-medium">
-                Réécriture prête à lancer
-              </div>
+              <div className="font-medium text-zinc-100">Réécriture prête à lancer</div>
               <div className="text-xs text-zinc-500 mt-0.5">
                 Pipeline complet (SERP → analyse → réécriture) ~1 min
                 {estimate && (
                   <>
-                    {" "}· estimation <strong className="text-zinc-300">${estimate.low.toFixed(3)}</strong> – <strong className="text-zinc-300">${estimate.high.toFixed(3)}</strong>
+                    {" "}· estimation <strong className="text-zinc-300 tabular-nums">${estimate.low.toFixed(3)}</strong> – <strong className="text-zinc-300 tabular-nums">${estimate.high.toFixed(3)}</strong>
                   </>
                 )}
               </div>
             </>
           )}
         </div>
-        <button
-          disabled={!ready || busy}
-          onClick={submit}
-          className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-5 py-2.5 rounded font-medium text-sm shadow"
-        >
-          {busy ? "Lancement…" : "Lancer la réécriture"}
+        <button disabled={!ready || busy} onClick={submit} className="btn-primary">
+          {busy ? (
+            <>
+              <Icon name="spinner" size={14} /> Lancement…
+            </>
+          ) : (
+            <>
+              <Icon name="rewrite" size={14} /> Lancer la réécriture
+            </>
+          )}
         </button>
       </div>
     </div>
@@ -252,7 +268,7 @@ export default function RewritePage() {
 function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs uppercase tracking-wider text-zinc-500 inline-flex items-center">
+      <span className="label inline-flex items-center">
         {label}
         {help && <HelpIcon content={help} />}
       </span>

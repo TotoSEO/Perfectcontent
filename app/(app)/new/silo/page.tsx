@@ -7,6 +7,7 @@ import { api, fetcher } from "@/lib/api";
 import { Domain, Folder } from "@/lib/types";
 import { CountryPicker } from "@/components/CountryPicker";
 import { HelpIcon } from "@/components/Tooltip";
+import { Icon } from "@/components/Icon";
 
 // Mirror of backend/app/services/slug.slugify — keep in sync.
 const FILLER = new Set([
@@ -131,20 +132,19 @@ export default function NewSiloPage() {
   }
 
   return (
-    <div className="space-y-7 max-w-5xl animate-fadein">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="label mb-1.5">Création</div>
-          <h1 className="text-[28px] font-semibold tracking-tight flex items-center gap-2">
-            <span className="text-accent-400">◧</span> Nouveau silo SEO
-          </h1>
-          <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
-            Une page pilier (à générer ou existante) + N satellites, tous générés en
-            parallèle et déjà maillés. Le pilier introduit chaque satellite ; chaque
-            satellite pointe vers le pilier dans ses 3 premiers paragraphes et tisse
-            des liens contextuels naturels vers ses voisins.
-          </p>
-        </div>
+    <div className="space-y-7 animate-fadein">
+      <header>
+        <div className="eyebrow mb-2">Création</div>
+        <h1 className="h-page flex items-center gap-2">
+          <Icon name="silo" size={24} className="text-accent-400" />
+          Nouveau silo SEO
+        </h1>
+        <p className="h-sub max-w-2xl">
+          Une page pilier (à générer ou existante) + N satellites, tous générés en
+          parallèle et déjà maillés. Le pilier introduit chaque satellite ; chaque
+          satellite pointe vers le pilier dans ses 3 premiers paragraphes et tisse
+          des liens contextuels naturels vers ses voisins.
+        </p>
       </header>
 
       {/* Live silo schema preview */}
@@ -355,35 +355,44 @@ export default function NewSiloPage() {
       </Card>
 
       {/* STICKY CTA */}
-      <div className="card p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)]">
+      <div className="card-elevated p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur-md">
         <div className="text-sm">
           {totalCount === 0 ? (
             <span className="text-zinc-500">Configure le pilier et au moins 2 satellites.</span>
           ) : (
             <>
-              <div className="font-medium tabular-nums">
+              <div className="font-medium tabular-nums text-zinc-100">
                 {totalCount} contenu{totalCount > 1 ? "s" : ""} à générer
-                <span className="text-zinc-500">
+                <span className="text-zinc-500 font-normal">
                   {!usePillarUrl ? ` · 1 pilier + ${sats.length} satellites` : ` · ${sats.length} satellites`}
                 </span>
               </div>
               <div className="text-xs text-zinc-400 mt-0.5">
                 Estimation totale :{" "}
-                <strong className="text-zinc-200">${estLow.toFixed(2)}</strong>
+                <strong className="text-zinc-200 tabular-nums">${estLow.toFixed(2)}</strong>
                 {" – "}
-                <strong className="text-zinc-200">${estHigh.toFixed(2)}</strong>
+                <strong className="text-zinc-200 tabular-nums">${estHigh.toFixed(2)}</strong>
               </div>
             </>
           )}
         </div>
         <button disabled={!canSubmit} onClick={submit} className="btn-primary">
-          {busy ? "Lancement…" : "Lancer le silo"}
+          {busy ? (
+            <>
+              <Icon name="spinner" size={14} /> Lancement…
+            </>
+          ) : (
+            <>
+              <Icon name="play" size={14} /> Lancer le silo
+            </>
+          )}
         </button>
       </div>
 
       {err && (
-        <div className="card border-red-700/50 bg-red-900/20 text-red-100 p-3 text-sm">
-          {err}
+        <div className="card border-red-700/50 bg-red-500/10 text-red-100 p-3 text-sm flex items-start gap-2">
+          <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+          <span>{err}</span>
         </div>
       )}
     </div>
