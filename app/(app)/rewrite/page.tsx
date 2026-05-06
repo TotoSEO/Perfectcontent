@@ -174,7 +174,7 @@ export default function RewritePage() {
           <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
             internalLinking && !!domainId
               ? "border-accent-500/40 bg-accent-500/5"
-              : "border-[var(--border)] bg-[#13141a] hover:bg-[#181a20]"
+              : "border-[var(--border)] bg-white/[0.04] hover:bg-white/[0.07]"
           } ${!domainId ? "opacity-50 cursor-not-allowed" : ""}`}>
             <div className="flex items-center gap-2">
               <Icon name="link" size={14} className="text-zinc-400" />

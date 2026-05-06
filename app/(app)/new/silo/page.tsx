@@ -155,7 +155,7 @@ export default function NewSiloPage() {
 
       {/* PILIER */}
       <Card title="Page pilier" stepIndex={1}>
-        <div className="inline-flex bg-[#0e0e11] border border-[#25252a] rounded-lg p-0.5 text-xs">
+        <div className="inline-flex bg-white/[0.025] border border-[var(--border)] rounded-lg p-0.5 text-xs">
           {[
             { id: "kw", label: "Générer le pilier", val: false },
             { id: "url", label: "Pilier déjà existant", val: true },
@@ -216,7 +216,7 @@ export default function NewSiloPage() {
               onChange={(e) => setTrailing(e.target.checked)}
               className="accent-accent-500"
             />
-            <code className="bg-[#0e0e11] px-1.5 py-0.5 rounded text-xs">/</code>
+            <code className="bg-white/[0.025] px-1.5 py-0.5 rounded text-xs">/</code>
             à la fin
           </label>
         </div>
@@ -242,9 +242,9 @@ export default function NewSiloPage() {
           className="input font-mono text-xs leading-relaxed resize-y min-h-[100px]"
         />
         {sats.length > 0 && (
-          <div className="border border-[#25252a] rounded-lg overflow-hidden">
+          <div className="border border-[var(--border)] rounded-lg overflow-hidden">
             <table className="w-full text-xs">
-              <thead className="text-[10px] uppercase tracking-[0.06em] text-zinc-500 bg-[#0e0e11]">
+              <thead className="text-[10px] uppercase tracking-[0.06em] text-zinc-500 bg-white/[0.025]">
                 <tr>
                   <th className="text-left px-3 py-2.5 w-1/3">Mot-clé</th>
                   <th className="text-left px-3 py-2.5 w-[260px]">Slug (éditable)</th>
@@ -258,7 +258,7 @@ export default function NewSiloPage() {
                   return (
                     <tr
                       key={s.kw}
-                      className="border-t border-[#1f1f24] hover:bg-[#1a1a1e]"
+                      className="border-t border-[var(--border)] hover:bg-white/[0.05]"
                     >
                       <td className="px-3 py-2 text-zinc-200">{s.kw}</td>
                       <td className="px-3 py-2">
@@ -266,8 +266,8 @@ export default function NewSiloPage() {
                           <input
                             value={s.slug}
                             onChange={(e) => setSlug(s.kw, e.target.value)}
-                            className={`flex-1 bg-[#0e0e11] border rounded px-2 py-1 font-mono focus:outline-none focus:border-accent-500 ${
-                              dup ? "border-red-500 text-red-300" : "border-[#25252a]"
+                            className={`flex-1 bg-white/[0.025] border rounded px-2 py-1 font-mono focus:outline-none focus:border-accent-500 ${
+                              dup ? "border-red-500 text-red-300" : "border-[var(--border)]"
                             }`}
                           />
                           {!s.auto && (
@@ -450,7 +450,7 @@ function Card({
       <div className="flex items-baseline justify-between">
         <h2 className="label flex items-center gap-2">
           {stepIndex != null && (
-            <span className="w-5 h-5 rounded-full bg-[#1c1c20] border border-[#34343b] inline-flex items-center justify-center text-[10px] text-zinc-300">
+            <span className="w-5 h-5 rounded-full bg-white/[0.04] border border-[var(--border-strong)] inline-flex items-center justify-center text-[10px] text-zinc-300">
               {stepIndex}
             </span>
           )}
@@ -488,7 +488,7 @@ function ToggleRow({
 }) {
   return (
     <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
-      checked ? "border-accent-500/40 bg-accent-500/5" : "border-[#25252a] bg-[#0e0e11] hover:bg-[#1a1a1e]"
+      checked ? "border-accent-500/40 bg-accent-500/5" : "border-[var(--border)] bg-white/[0.025] hover:bg-white/[0.05]"
     }`}>
       <div className="flex flex-col">
         <span className="text-sm text-zinc-200">{label}</span>

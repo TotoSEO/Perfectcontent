@@ -56,7 +56,7 @@ export function DomainProgress({ id, autoStart = true }: { id: string; autoStart
 
   return (
     <div className="space-y-1.5">
-      <div className="h-1.5 bg-[#15161b] rounded-full overflow-hidden">
+      <div className="h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
         <div
           className="h-1.5 bg-gradient-to-r from-accent-500 to-accent-400 rounded-full transition-all"
           style={{ width: `${Math.min(pct, 100)}%` }}

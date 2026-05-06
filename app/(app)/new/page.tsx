@@ -229,7 +229,7 @@ export default function NewContentPage() {
                   active ? b.color : ""
                 }`}
               >
-                <div className="flex items-center justify-between px-4 py-2 border-b border-[#25252a] bg-[#0e0e11]/60">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)] bg-white/[0.03]">
                   <div className="flex items-center gap-2">
                     <span className="text-base">{b.emoji}</span>
                     <span className="font-medium text-sm">{b.label}</span>
@@ -290,7 +290,7 @@ export default function NewContentPage() {
 
           <div className="card overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="text-[10px] uppercase tracking-[0.06em] text-zinc-500 bg-[#0e0e11]">
+              <thead className="text-[10px] uppercase tracking-[0.06em] text-zinc-500 bg-white/[0.025]">
                 <tr>
                   <th className="text-left px-4 py-2.5">Mot-clé</th>
                   <th className="text-left px-3 py-2.5 w-32">Type</th>
@@ -312,7 +312,7 @@ export default function NewContentPage() {
                 {rows.map((r) => {
                   const meta = TYPE_META[r.content_type];
                   return (
-                    <tr key={r.id} className="border-t border-[#1f1f24] hover:bg-[#1a1a1e]">
+                    <tr key={r.id} className="border-t border-[var(--border)] hover:bg-white/[0.05]">
                       <td className="px-4 py-2.5 font-mono text-xs">{r.keyword}</td>
                       <td className="px-3 py-2.5">
                         <span className={`chip ${meta.color}`}>
@@ -401,7 +401,7 @@ export default function NewContentPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
-            autoValidate ? "border-accent-500/40 bg-accent-500/5" : "border-[#25252a] bg-[#0e0e11] hover:bg-[#1a1a1e]"
+            autoValidate ? "border-accent-500/40 bg-accent-500/5" : "border-[var(--border)] bg-white/[0.025] hover:bg-white/[0.05]"
           }`}>
             <div className="flex flex-col">
               <span className="text-sm text-zinc-200 inline-flex items-center">
@@ -491,7 +491,7 @@ function Field({ label, help, children }: { label: string; help?: string; childr
 
 function StepBadge({ n }: { n: number }) {
   return (
-    <span className="w-5 h-5 rounded-full bg-[#1c1c20] border border-[#34343b] inline-flex items-center justify-center text-[10px] text-zinc-300">
+    <span className="w-5 h-5 rounded-full bg-white/[0.04] border border-[var(--border-strong)] inline-flex items-center justify-center text-[10px] text-zinc-300">
       {n}
     </span>
   );
@@ -519,10 +519,10 @@ function DefaultPill({
       onClick={() => onChange(!checked)}
       className={`text-xs px-2.5 py-1 rounded-md border inline-flex items-center gap-1.5 transition-colors ${
         disabled
-          ? "border-[#25252a] text-zinc-700 bg-[#0e0e11] cursor-not-allowed"
+          ? "border-[var(--border)] text-zinc-700 bg-white/[0.025] cursor-not-allowed"
           : checked
           ? "border-accent-500/40 bg-accent-500/10 text-accent-200"
-          : "border-[#25252a] bg-[#0e0e11] text-zinc-400 hover:bg-[#1a1a1e]"
+          : "border-[var(--border)] bg-white/[0.025] text-zinc-400 hover:bg-white/[0.05]"
       }`}
     >
       <span>{emoji}</span>

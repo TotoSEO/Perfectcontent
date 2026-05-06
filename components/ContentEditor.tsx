@@ -60,14 +60,14 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
       className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
         active
           ? "border-accent-500/50 bg-accent-500/15 text-accent-200"
-          : "border-[var(--border)] bg-[#13141a] text-zinc-300 hover:bg-[#181a20] hover:border-[var(--border-strong)]"
+          : "border-[var(--border)] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.07] hover:border-[var(--border-strong)]"
       }`}
     >
       {label}
     </button>
   );
   return (
-    <div className="flex flex-wrap items-center gap-1 px-4 py-2.5 border-b border-[var(--border)] bg-[#0d0e12]">
+    <div className="flex flex-wrap items-center gap-1 px-4 py-2.5 border-b border-[var(--border)] bg-white/[0.025]">
       <span className="label mr-1">Format</span>
       {btn("B", () => editor.chain().focus().toggleBold().run(), editor.isActive("bold"), "Gras")}
       {btn("I", () => editor.chain().focus().toggleItalic().run(), editor.isActive("italic"), "Italique")}

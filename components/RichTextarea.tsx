@@ -33,7 +33,7 @@ export function RichTextarea({
         contentEditable
         suppressContentEditableWarning
         onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
-        className="w-full bg-[#13141a] border border-[var(--border)] rounded-lg px-4 py-3 text-sm leading-relaxed focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-colors overflow-auto"
+        className="w-full bg-white/[0.04] border border-[var(--border)] rounded-lg px-4 py-3 text-sm leading-relaxed focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-colors overflow-auto"
         style={{ minHeight }}
         data-placeholder={placeholder || "Colle ton contenu ici (HTML / texte riche supporté)"}
       />

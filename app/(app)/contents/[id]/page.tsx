@@ -160,7 +160,7 @@ export default function ContentPage() {
                     className={`block px-4 py-3 cursor-pointer transition-colors ${
                       chosenIdx === i
                         ? "bg-accent-500/10"
-                        : "hover:bg-[#13141a]"
+                        : "hover:bg-white/[0.04]"
                     }`}
                   >
                     <div className="flex items-start gap-3">

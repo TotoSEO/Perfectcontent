@@ -52,7 +52,7 @@ export function SectionList({
       </div>
       <ul className="divide-y divide-[var(--border)]">
         {sections.map((s, i) => (
-          <li key={s.id} className="flex justify-between items-center gap-2 px-4 py-2.5 hover:bg-[#13141a] transition-colors">
+          <li key={s.id} className="flex justify-between items-center gap-2 px-4 py-2.5 hover:bg-white/[0.04] transition-colors">
             <span className="text-zinc-200 text-sm flex items-center gap-2 min-w-0">
               <span className="text-zinc-600 tabular-nums text-[11px]">{String(i + 1).padStart(2, "0")}</span>
               <span className="truncate">{s.heading}</span>
