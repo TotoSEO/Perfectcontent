@@ -6,7 +6,10 @@
     {
       "src": "api/index.py",
       "use": "@vercel/python@4.3.1",
-      "config": { "includeFiles": "backend/app/**" }
+      "config": {
+        "includeFiles": "backend/app/**",
+        "maxDuration": 60
+      }
     },
     { "src": "api/diag.py", "use": "@vercel/python@4.3.1" }
   ],

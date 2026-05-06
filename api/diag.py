@@ -1,12 +1,12 @@
 """Tiny stdlib-only diagnostic endpoint.
 
-Used to confirm Vercel routing reaches a Python function. If GET /diag/ping
-returns the JSON body below, the @vercel/python builder is wired correctly.
-If it returns the Next.js 500/404 HTML, the route never made it past the
-framework handler.
+Two probes:
+  GET  /diag/ping   -> confirms Python routing reaches the function.
+  POST /diag/post   -> confirms POST + body parsing works (echoes back the
+                       received content-length and a few request properties).
 
-Kept under 1 KB and using only the standard library so it never contributes
-to the function bundle size pressure.
+Returns JSON; uses only the standard library so it stays under the function
+size budget regardless of what we add to the main app's requirements.
 """
 from http.server import BaseHTTPRequestHandler
 import json
@@ -14,10 +14,30 @@ import json
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
-        self.send_response(200)
+        self._reply(200, {"ok": True, "method": "GET", "from": "diag", "path": self.path})
+
+    def do_POST(self) -> None:  # noqa: N802
+        try:
+            length = int(self.headers.get("content-length") or 0)
+        except ValueError:
+            length = 0
+        body = self.rfile.read(length) if length > 0 else b""
+        ct = self.headers.get("content-type") or ""
+        self._reply(
+            200,
+            {
+                "ok": True,
+                "method": "POST",
+                "from": "diag",
+                "path": self.path,
+                "content_type": ct,
+                "received_bytes": len(body),
+            },
+        )
+
+    def _reply(self, status: int, payload: dict) -> None:
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(
-            json.dumps({"ok": True, "from": "diag", "path": self.path}).encode()
-        )
+        self.wfile.write(json.dumps(payload).encode())

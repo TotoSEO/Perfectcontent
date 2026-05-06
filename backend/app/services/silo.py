@@ -73,7 +73,16 @@ class SiloPlan:
 async def create_silo(db: AsyncSession, plan: SiloPlan) -> tuple[Silo, list[Job]]:
     """Create the silo row, the N(+1) contents and their jobs. Each job is
     set up so the existing pipeline runs SERP -> blueprint with auto-validate.
-    The browser triggers generate later, after manifest is built."""
+    The browser triggers generate later, after manifest is built.
+
+    Optimized to 2 DB round-trips:
+      1. INSERT silo + all contents in one flush() so we get their IDs
+      2. INSERT all jobs (referencing content_id) and silo.pillar_content_id
+         then commit()
+    Previously this did 1 + (N+1) flushes = up to 7+ round-trips, which on
+    Supabase EU ↔ Vercel US (~150ms each) blew past the 10s default function
+    timeout for medium silos.
+    """
     if not plan.satellites:
         raise ValueError("a silo needs at least one satellite")
     has_pillar = bool(plan.pillar_keyword) and not plan.pillar_external_url
@@ -88,52 +97,50 @@ async def create_silo(db: AsyncSession, plan: SiloPlan) -> tuple[Silo, list[Job]
         domain_id=plan.domain_id,
         folder_id=plan.folder_id,
         batch_id=batch_id,
-        status="planning",
+        status="blueprinting",
     )
     db.add(silo)
+    # Round-trip #1: flush the silo so silo.id exists, then bulk-add contents.
     await db.flush()
 
-    jobs: list[Job] = []
-
-    # 1. Pillar (if any)
+    contents: list[Content] = []
+    pillar_content: Content | None = None
     if has_pillar:
-        pillar_slug = slugify(plan.pillar_keyword or "")
         pillar_content = Content(
             folder_id=plan.folder_id,
             domain_id=plan.domain_id,
             keyword=plan.pillar_keyword,
-            content_type="blog",  # pillar is always treated as long-form blog
-            status="analysis",
-            silo_id=silo.id,
-            silo_role="pillar",
-            slug=pillar_slug,
-        )
-        db.add(pillar_content)
-        await db.flush()
-        silo.pillar_content_id = pillar_content.id
-        jobs.append(_make_job(pillar_content, plan, batch_id, "blog"))
-
-    # 2. Satellites
-    for spec in plan.satellites:
-        slug = spec.slug or slugify(spec.keyword)
-        content = Content(
-            folder_id=plan.folder_id,
-            domain_id=plan.domain_id,
-            keyword=spec.keyword,
             content_type="blog",
             status="analysis",
             silo_id=silo.id,
-            silo_role="satellite",
-            slug=slug,
+            silo_role="pillar",
+            slug=slugify(plan.pillar_keyword or ""),
         )
-        db.add(content)
-        await db.flush()
-        jobs.append(_make_job(content, plan, batch_id, "blog"))
+        contents.append(pillar_content)
+    for spec in plan.satellites:
+        contents.append(
+            Content(
+                folder_id=plan.folder_id,
+                domain_id=plan.domain_id,
+                keyword=spec.keyword,
+                content_type="blog",
+                status="analysis",
+                silo_id=silo.id,
+                silo_role="satellite",
+                slug=spec.slug or slugify(spec.keyword),
+            )
+        )
+    db.add_all(contents)
+    await db.flush()  # round-trip #2: all content.id are now populated
 
-    for j in jobs:
-        db.add(j)
-    silo.status = "blueprinting"
-    await db.commit()
+    # Wire pillar_content_id back on the silo (we have the ID now)
+    if pillar_content is not None:
+        silo.pillar_content_id = pillar_content.id
+
+    # Build all jobs now that content.id exists
+    jobs: list[Job] = [_make_job(c, plan, batch_id, "blog") for c in contents]
+    db.add_all(jobs)
+    await db.commit()  # round-trip #3 (final write)
     for j in jobs:
         await db.refresh(j)
     await db.refresh(silo)
