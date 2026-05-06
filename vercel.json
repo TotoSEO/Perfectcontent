@@ -1,16 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
-  "builds": [
-    { "src": "package.json", "use": "@vercel/next" },
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python@4.3.1",
-      "config": { "includeFiles": "backend/app/**" }
+  "functions": {
+    "api/index.py": {
+      "runtime": "@vercel/python@4.3.1",
+      "includeFiles": "backend/app/**"
     }
-  ],
-  "routes": [
-    { "src": "/srv/(.*)", "dest": "/api/index.py" },
-    { "src": "/healthz/(.*)", "dest": "/api/index.py" }
+  },
+  "rewrites": [
+    { "source": "/srv/:path*", "destination": "/api/index" },
+    { "source": "/healthz/:path*", "destination": "/api/index" }
   ]
 }
