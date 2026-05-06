@@ -3,6 +3,7 @@
 // native to the consultant's deliverables when imported into Google Sheets.
 
 import { SEVERITY as SEV } from "./brand";
+import { recommendFor } from "./solutions";
 import type { CategoryReport, IssueRow } from "./types";
 
 const SEVERITY_BG: Record<string, string> = {
@@ -122,6 +123,7 @@ export async function exportIssuesToXlsx(
         key: col.key,
         width: col.key === "url" ? 60 : col.key === "title" || col.key === "meta" ? 50 : 18,
       })),
+      { header: "Solution recommandée", key: "_solution", width: 80 },
     ];
     ws.columns = cols;
     styleHeader(ws.getRow(1));
@@ -131,6 +133,7 @@ export async function exportIssuesToXlsx(
         const v = r[col.key];
         data[col.key] = v == null ? "" : v;
       }
+      data._solution = recommendFor(c.id, r);
       const wsRow = ws.addRow(data);
       const sev = r.severity;
       const bg = SEVERITY_BG[sev];
@@ -152,6 +155,10 @@ export async function exportIssuesToXlsx(
         urlCell.value = { text: urlVal, hyperlink: urlVal };
         urlCell.font = { color: { argb: HYPERLINK_FG }, underline: true };
       }
+      // Wrap the Solution cell so it's readable, italic-ish to distinguish
+      const solCell = wsRow.getCell("_solution");
+      solCell.alignment = { wrapText: true, vertical: "top" };
+      wsRow.height = 38;
     }
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: ws.columnCount } };
   }

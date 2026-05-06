@@ -186,17 +186,9 @@ export default function AuditPage() {
                       <BigStat label="Problèmes" value={totalIssues.toLocaleString("fr-FR")} />
                     </div>
                   </div>
-                  <div className="shrink-0 flex flex-col items-center gap-5">
-                    <VbtLogo size={140} />
-                    <div className="flex flex-col items-center gap-1.5">
-                      <ScoreBadge score={audit.summary!.global_score} />
-                    </div>
-                    <div
-                      className="text-[11px] uppercase tracking-[0.18em]"
-                      style={{ color: VBT.terracotta700, fontWeight: 700 }}
-                    >
-                      Visibili'tea
-                    </div>
+                  <div className="shrink-0 flex flex-col items-center gap-6">
+                    <VbtLogo size={120} layout="stack" />
+                    <ScoreBadge score={audit.summary!.global_score} />
                   </div>
                 </div>
               </Slide>

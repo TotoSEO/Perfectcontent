@@ -79,7 +79,7 @@ export function Slide({
             </div>
             <div className="shrink-0 flex items-center gap-3">
               {rightHeader}
-              <VbtLogo size={44} />
+              <VbtLogo size={36} />
             </div>
           </header>
         )}

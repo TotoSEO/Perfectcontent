@@ -3,6 +3,7 @@
 // bottom assembles them and computes the global score.
 
 import type { UrlRow } from "./parse";
+import type { InlinksMap } from "./inlinks";
 import { VBT } from "./brand";
 import type { CategoryReport, IssueRow, Report, Severity } from "./types";
 
@@ -594,20 +595,134 @@ function checkContent(rows: UrlRow[]): CategoryReport {
   };
 }
 
+function checkImages(rows: UrlRow[]): CategoryReport {
+  const images = rows.filter(
+    (r) => r.content_type !== null && /^image\//i.test(r.content_type),
+  );
+  const issues: IssueRow[] = [];
+  let heavy = 0; // > 500 KB
+  let veryHeavy = 0; // > 1 MB
+  let broken = 0; // 4xx / 5xx
+  let totalKb = 0;
+  for (const img of images) {
+    const sizeKb = img.size_bytes != null ? img.size_bytes / 1024 : 0;
+    totalKb += sizeKb;
+    if ((img.status_code ?? 0) >= 400) {
+      broken++;
+      issues.push({
+        url: img.url,
+        severity: "critical",
+        reason: `image cassée (${img.status_code})`,
+        size_kb: Math.round(sizeKb),
+        status_code: img.status_code,
+      });
+      continue;
+    }
+    if (sizeKb >= 1024) {
+      veryHeavy++;
+      issues.push({
+        url: img.url,
+        severity: "high",
+        reason: `image très lourde`,
+        size_kb: Math.round(sizeKb),
+        format: extractFormat(img.url, img.content_type),
+      });
+    } else if (sizeKb >= 500) {
+      heavy++;
+      issues.push({
+        url: img.url,
+        severity: "medium",
+        reason: `image lourde`,
+        size_kb: Math.round(sizeKb),
+        format: extractFormat(img.url, img.content_type),
+      });
+    }
+  }
+  const total = images.length || 1;
+  const score = scoreFromRatio((veryHeavy * 1 + heavy * 0.4 + broken * 1) / total);
+  const avgKb = images.length ? totalKb / images.length : 0;
+  return {
+    id: "images",
+    label: "Images",
+    score,
+    weight: 6,
+    summary: `${images.length} images crawlées · ${broken} cassées · ${heavy + veryHeavy} > 500 Ko (dont ${veryHeavy} > 1 Mo).`,
+    kpis: [
+      { label: "Total images", value: images.length, tone: "ok" },
+      { label: "Cassées", value: broken, tone: broken > 0 ? "bad" : "ok" },
+      { label: "> 500 Ko", value: heavy + veryHeavy, tone: heavy + veryHeavy > 0 ? "warn" : "ok" },
+      { label: "Poids moyen", value: `${Math.round(avgKb)} Ko`, tone: avgKb > 200 ? "warn" : "ok" },
+    ],
+    chart: {
+      type: "bar",
+      bars: [
+        { label: "< 500 Ko", value: Math.max(0, images.length - heavy - veryHeavy - broken), color: COLORS.ok },
+        { label: "500 Ko – 1 Mo", value: heavy, color: COLORS.warn },
+        { label: "> 1 Mo", value: veryHeavy, color: COLORS.bad },
+        { label: "Cassées", value: broken, color: COLORS.bad },
+      ],
+    },
+    columns: [
+      { key: "reason", label: "Problème" },
+      { key: "size_kb", label: "Poids (Ko)" },
+      { key: "format", label: "Format" },
+      { key: "url", label: "URL" },
+    ],
+    top_issues: topN(
+      issues.sort((a, b) => Number(b.size_kb || 0) - Number(a.size_kb || 0)),
+      15,
+    ),
+    issues_full: issues,
+  };
+}
+
+function extractFormat(url: string, contentType: string | null): string {
+  if (contentType) {
+    const m = contentType.match(/^image\/([a-z0-9.+-]+)/i);
+    if (m) return m[1].toLowerCase();
+  }
+  const ext = url.split("?")[0].split("#")[0].split(".").pop() || "";
+  return ext.length <= 5 ? ext.toLowerCase() : "—";
+}
+
+
 // ---------- orchestrator ---------------------------------------------------
 
-export function analyze(rows: UrlRow[], opts: { source_filename: string | null }): Report {
+export function analyze(
+  rows: UrlRow[],
+  opts: {
+    source_filename: string | null;
+    contextual_inlinks?: InlinksMap;
+    contextual_inlinks_label?: string;
+  },
+): Report {
+  // If the user provided an `all_inlinks.csv` Bulk Export, replace the
+  // default Screaming Frog inlinks (which include nav/footer/header) with
+  // only the Body / Content links. This kills the "all pages have 50+ inlinks
+  // because of the footer" effect and surfaces real orphan / under-linked
+  // pages.
+  let workingRows = rows;
+  if (opts.contextual_inlinks) {
+    const map = opts.contextual_inlinks;
+    workingRows = rows.map((r) => ({
+      ...r,
+      inlinks: map.get(r.url) ?? 0,
+      unique_inlinks: map.get(r.url) ?? 0,
+    }));
+  }
+
   const cats: CategoryReport[] = [
-    checkHttp(rows),
-    checkIndexability(rows),
-    checkTitles(rows),
-    checkMeta(rows),
-    checkH1(rows),
-    checkDepth(rows),
-    checkLinking(rows),
-    checkCanonicals(rows),
-    checkUrls(rows),
-    checkContent(rows),
+    checkHttp(workingRows),
+    checkIndexability(workingRows),
+    checkTitles(workingRows),
+    checkMeta(workingRows),
+    checkH1(workingRows),
+    checkDepth(workingRows),
+    checkLinking(workingRows),
+    checkCanonicals(workingRows),
+    checkImages(workingRows),
+    checkUrls(workingRows),
+    checkContent(workingRows),
   ];
   const totalWeight = cats.reduce((s, c) => s + c.weight, 0);
   const weightedSum = cats.reduce((s, c) => s + c.score * c.weight, 0);

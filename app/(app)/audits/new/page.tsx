@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
 import { Folder } from "@/lib/types";
 import { parseInternalCsv } from "@/lib/audit/parse";
+import { parseInlinksCsv, type InlinksParseResult } from "@/lib/audit/inlinks";
 import { analyze } from "@/lib/audit/analyze";
 import type { Report } from "@/lib/audit/types";
 
@@ -13,19 +14,38 @@ export default function NewAuditPage() {
   const router = useRouter();
   const { data: folders } = useSWR<Folder[]>("/srv/folders", fetcher);
   const [file, setFile] = useState<File | null>(null);
+  const [inlinksFile, setInlinksFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [folderId, setFolderId] = useState("");
   const [report, setReport] = useState<Report | null>(null);
+  const [parsedRows, setParsedRows] = useState<Awaited<ReturnType<typeof parseInternalCsv>>["rows"] | null>(null);
+  const [parsedFilename, setParsedFilename] = useState<string | null>(null);
+  const [inlinksStats, setInlinksStats] = useState<InlinksParseResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<"idle" | "parsing" | "analyzing" | "saving">("idle");
   const [err, setErr] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
+  const [dragInlinks, setDragInlinks] = useState(false);
   const [parseStats, setParseStats] = useState<Awaited<ReturnType<typeof parseInternalCsv>>["stats"] | null>(null);
+
+  // Re-run analyze whenever either the main file or the optional inlinks file
+  // changes. Keeping parsedRows + inlinksStats as the source of truth.
+  const reanalyze = useCallback(
+    (rows: Awaited<ReturnType<typeof parseInternalCsv>>["rows"], fn: string | null, inlinks: InlinksParseResult | null) => {
+      const r = analyze(rows, {
+        source_filename: fn,
+        contextual_inlinks: inlinks?.map,
+      });
+      setReport(r);
+    },
+    [],
+  );
 
   const onPickFile = useCallback(async (f: File) => {
     setErr(null);
     setReport(null);
     setParseStats(null);
+    setParsedRows(null);
     setFile(f);
     if (!name) {
       const inferred = f.name.replace(/\.csv$/i, "").replace(/internal_all_?/i, "").trim() || "Audit";
@@ -49,20 +69,48 @@ export default function NewAuditPage() {
           `Dans Screaming Frog, exporte depuis l'onglet "Internal" avec le filtre "HTML" → bouton Export en haut à droite.`,
         );
       }
+      setParsedRows(rows);
+      setParsedFilename(stats.filename);
       setStage("analyzing");
-      const r = analyze(rows, { source_filename: stats.filename });
-      setReport(r);
+      reanalyze(rows, stats.filename, inlinksStats);
     } catch (e) {
       setErr(String(e instanceof Error ? e.message : e));
     } finally {
       setBusy(false);
       setStage("idle");
     }
-  }, [name]);
+  }, [name, inlinksStats, reanalyze]);
+
+  const onPickInlinks = useCallback(async (f: File) => {
+    setErr(null);
+    setBusy(true);
+    setStage("parsing");
+    try {
+      const r = await parseInlinksCsv(f);
+      setInlinksFile(f);
+      setInlinksStats(r);
+      if (parsedRows) reanalyze(parsedRows, parsedFilename, r);
+    } catch (e) {
+      setErr(`Échec lecture du fichier inlinks : ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusy(false);
+      setStage("idle");
+    }
+  }, [parsedRows, parsedFilename, reanalyze]);
+
+  function clearInlinks() {
+    setInlinksFile(null);
+    setInlinksStats(null);
+    if (parsedRows) reanalyze(parsedRows, parsedFilename, null);
+  }
 
   function onInputFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (f) onPickFile(f);
+  }
+  function onInputInlinks(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f) onPickInlinks(f);
   }
 
   function onDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -70,6 +118,12 @@ export default function NewAuditPage() {
     setDrag(false);
     const f = e.dataTransfer.files?.[0];
     if (f) onPickFile(f);
+  }
+  function onDropInlinks(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragInlinks(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) onPickInlinks(f);
   }
 
   // Vercel serverless functions cap request bodies at ~4.5 MB. A massive
@@ -137,36 +191,87 @@ export default function NewAuditPage() {
         </p>
       </header>
 
-      {/* Upload area */}
+      {/* Upload area — main file (Internal HTML export) */}
       <section
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={onDrop}
-        className={`card p-10 border-dashed transition-colors text-center ${
+        className={`card p-8 border-dashed transition-colors text-center ${
           drag ? "border-accent-500 bg-accent-500/5" : ""
         }`}
       >
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-accent-600/15 border border-accent-500/30 flex items-center justify-center mb-4">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-accent-600/15 border border-accent-500/30 flex items-center justify-center mb-3">
           <span className="text-accent-400 text-2xl">⇪</span>
         </div>
         <div className="text-zinc-200 font-medium mb-1">
-          {file ? file.name : "Dépose ton fichier internal_all.csv"}
+          {file ? file.name : "Dépose ton fichier Internal HTML"}
         </div>
-        <div className="text-xs text-zinc-500 mb-4">
+        <div className="text-xs text-zinc-500 mb-4 max-w-md mx-auto">
           {file
             ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
-            : "Glisse-dépose ou clique pour sélectionner."}
+            : "Screaming Frog → onglet Internal → filtre HTML → Export. Glisse-dépose ou clique."}
         </div>
         <label className="btn-primary inline-flex cursor-pointer">
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={onInputFile}
-          />
+          <input type="file" accept=".csv,text/csv" className="hidden" onChange={onInputFile} />
           {file ? "Remplacer" : "Choisir un fichier"}
         </label>
       </section>
+
+      {/* Upload area — optional all_inlinks for contextual orphan detection */}
+      {parsedRows && (
+        <section
+          onDragOver={(e) => { e.preventDefault(); setDragInlinks(true); }}
+          onDragLeave={() => setDragInlinks(false)}
+          onDrop={onDropInlinks}
+          className={`card p-5 border-dashed transition-colors ${
+            dragInlinks ? "border-accent-500 bg-accent-500/5" : ""
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <span className="text-amber-300 text-lg">⚭</span>
+            </div>
+            <div className="flex-1 min-w-[260px]">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-zinc-200 font-medium text-sm">
+                  Maillage contextuel <span className="text-zinc-500 font-normal">(optionnel mais recommandé)</span>
+                </div>
+                {inlinksStats && (
+                  <span className={`chip ${
+                    inlinksStats.has_position
+                      ? "border-emerald-700/50 text-emerald-300 bg-emerald-500/10"
+                      : "border-amber-700/50 text-amber-300 bg-amber-500/10"
+                  }`}>
+                    {inlinksStats.has_position
+                      ? `✓ ${inlinksStats.body_rows.toLocaleString("fr-FR")} liens contextuels`
+                      : `⚠ pas de colonne Position dans ce fichier`}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-zinc-500 mt-1">
+                {inlinksFile ? (
+                  <>{inlinksFile.name} · {(inlinksFile.size / 1024 / 1024).toFixed(1)} MB</>
+                ) : (
+                  <>
+                    Sans ce fichier, les "pages orphelines" comptent les liens nav/footer.
+                    Pour un audit propre, exporte aussi <code className="bg-[#1c1c20] px-1.5 py-0.5 rounded text-[10px]">all_inlinks.csv</code>{" "}
+                    (Bulk Export → Links → All Inlinks) — il contient la colonne Link Position qu'on filtre côté Body uniquement.
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {inlinksFile && (
+                <button onClick={clearInlinks} className="btn-ghost text-xs">Retirer</button>
+              )}
+              <label className="btn-ghost text-xs cursor-pointer">
+                <input type="file" accept=".csv,text/csv" className="hidden" onChange={onInputInlinks} />
+                {inlinksFile ? "Remplacer" : "+ Ajouter all_inlinks.csv"}
+              </label>
+            </div>
+          </div>
+        </section>
+      )}
 
       {busy && (
         <div className="card p-4 text-sm text-zinc-300 flex items-center gap-3">

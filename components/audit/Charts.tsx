@@ -103,32 +103,44 @@ export function BarChart({
 }) {
   const m = max ?? Math.max(1, ...bars.map((b) => b.value));
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 min-w-0">
       {bars.map((b, i) => {
-        const w = m > 0 ? (b.value / m) * width : 0;
+        // Clamp width to [0, 100] so a bar can never visually overflow its
+        // container — values still print even when 0.
+        const ratio = m > 0 ? Math.min(1, Math.max(0, b.value / m)) : 0;
+        const wPct = `${ratio * 100}%`;
         const barColor = b.color || VBT.terracotta500;
+        const labelInside = ratio >= 0.18; // enough room for the value to fit inside
         return (
-          <div key={i} className="flex items-center gap-3" style={{ marginBottom: i === bars.length - 1 ? 0 : gap }}>
-            <div className="w-32 text-sm text-right truncate" style={{ color: VBT.inkSoft }}>
+          <div
+            key={i}
+            className="flex items-center gap-3 min-w-0"
+            style={{ marginBottom: i === bars.length - 1 ? 0 : gap }}
+          >
+            <div
+              className="w-32 text-sm text-right truncate shrink-0"
+              style={{ color: VBT.inkSoft }}
+            >
               {b.label}
             </div>
             <div
-              className="relative flex-1 rounded-md"
+              className="relative flex-1 rounded-md overflow-hidden min-w-0"
               style={{ height: barHeight, background: VBT.paperEdge + "55" }}
             >
               <div
                 className="absolute inset-y-0 left-0 rounded-md transition-all"
                 style={{
-                  width: w,
+                  width: wPct,
                   background: `linear-gradient(180deg, ${barColor}EE, ${barColor})`,
                 }}
               />
+              {/* Value label: inside the bar when there's room, otherwise just
+                  outside on the right (still inside the container). */}
               <div
-                className="absolute inset-y-0 flex items-center text-sm tabular-nums font-semibold"
+                className="absolute inset-y-0 flex items-center text-sm tabular-nums font-semibold pointer-events-none"
                 style={{
-                  paddingLeft: w > 30 ? 8 : Math.max(8, w + 8),
-                  color: w > 30 ? "#FFFCF7" : VBT.ink,
-                  left: w > 30 ? 0 : w,
+                  left: labelInside ? 8 : `calc(${wPct} + 8px)`,
+                  color: labelInside ? "#FFFCF7" : VBT.ink,
                 }}
               >
                 {b.value}
