@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
-import { fetcher } from "@/lib/api";
+import { api, fetcher } from "@/lib/api";
 import { runSiloToCompletion } from "@/lib/pipeline";
 import { Icon } from "@/components/Icon";
 
@@ -233,7 +233,13 @@ export default function SiloPage() {
       </section>
 
       {/* Mesh audit */}
-      {silo.mesh_audit && <MeshAuditPanel audit={silo.mesh_audit} />}
+      {silo.mesh_audit && (
+        <MeshAuditPanel
+          siloId={silo.id}
+          audit={silo.mesh_audit}
+          onRefresh={() => { mutate(); mutateJobs(); }}
+        />
+      )}
     </div>
   );
 }
@@ -285,10 +291,32 @@ function PhaseBar({ current, status }: { current: string | null; status: string 
 }
 
 function MeshAuditPanel({
+  siloId,
   audit,
+  onRefresh,
 }: {
+  siloId: string;
   audit: { rows: MeshRow[]; summary: { members: number; issues: number; all_ok: boolean } };
+  onRefresh: () => void;
 }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function regenerate(contentId: string) {
+    setBusyId(contentId);
+    try {
+      await api(`/srv/silos/${siloId}/regenerate/${contentId}`, { method: "POST" });
+      // Re-validate the mesh after regeneration
+      try {
+        await api(`/srv/silos/${siloId}/validate`, { method: "POST" });
+      } catch { /* mesh validate is best-effort */ }
+      onRefresh();
+    } catch (e) {
+      alert(`Régénération échouée : ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <section className="card overflow-hidden">
       <div className="px-5 py-3 border-b border-[var(--border)] flex items-baseline justify-between">
@@ -322,13 +350,25 @@ function MeshAuditPanel({
                     {row.title || row.url}
                   </span>
                 </div>
-                <span className={`text-xs whitespace-nowrap ${
-                  row.issues.length === 0 ? "text-emerald-300" : "text-amber-300"
-                }`}>
-                  {row.issues.length === 0
-                    ? `✓ ${row.expected.length} lien${row.expected.length > 1 ? "s" : ""}`
-                    : `⚠ ${row.issues.length} pb`}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-xs whitespace-nowrap ${
+                    row.issues.length === 0 ? "text-emerald-300" : "text-amber-300"
+                  }`}>
+                    {row.issues.length === 0
+                      ? `✓ ${row.expected.length} lien${row.expected.length > 1 ? "s" : ""}`
+                      : `⚠ ${row.issues.length} pb`}
+                  </span>
+                  {row.issues.length > 0 && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); regenerate(row.content_id); }}
+                      disabled={busyId === row.content_id}
+                      className="btn-ghost text-[11px] px-2 py-1"
+                      title="Régénérer cet article (re-roll Claude avec les mêmes consignes silo)"
+                    >
+                      {busyId === row.content_id ? "…" : "↻ Régénérer"}
+                    </button>
+                  )}
+                </div>
               </summary>
               <ul className="mt-3 grid gap-1.5">
                 {row.expected.map((e, i) => (

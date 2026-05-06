@@ -118,6 +118,41 @@ async def build_manifest(silo_id: UUID, db: AsyncSession = Depends(get_db)) -> d
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
+@router.post("/{silo_id}/regenerate/{content_id}")
+async def regenerate_member(
+    silo_id: UUID, content_id: UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Re-run only the `generate` step for one silo member that landed with
+    a broken mesh (missing pillar link, missing peer link…).
+
+    Strategy: find the member's latest job, mark it back to status='running'
+    on step='generate', and let the existing pipeline.run_step handler do the
+    work. The link_manifest persisted on the content row drives the strict
+    silo prompt — same path as the initial generation, just re-rolled."""
+    from app.services import pipeline as pipeline_svc
+    from app.models import Job
+    from sqlalchemy import select as _select
+
+    silo = await db.get(Silo, silo_id)
+    if silo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "silo not found")
+    content = await db.get(Content, content_id)
+    if content is None or content.silo_id != silo_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found in this silo")
+
+    # Pick the most recent job for that content
+    job = (
+        await db.execute(
+            _select(Job).where(Job.content_id == content_id).order_by(Job.created_at.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no job attached")
+
+    result = await pipeline_svc.run_step(job.id, "generate")
+    return {"ok": True, "result": result, "content_id": str(content_id), "job_id": str(job.id)}
+
+
 @router.post("/{silo_id}/validate")
 async def validate_mesh(silo_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     try:

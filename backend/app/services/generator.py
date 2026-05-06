@@ -183,22 +183,30 @@ MAILLAGE INTERNE (zéro tolérance) :
 - Ancres VARIÉES : jamais 2 ancres identiques. Varie verbe, nom, expression.
 - Format : <a href="URL_EXACTE_FOURNIE">ancre courte</a>. Pas de target/rel/class.
 - 1 LIEN MAX par couple (source → cible). Jamais 2 liens vers la même URL.
-- URL qui ne s'intègre pas naturellement → NE METS PAS le lien.
+- Pour les liens VOISINS uniquement : si l'URL ne s'intègre pas naturellement,
+  ne pas la forcer (zéro lien plutôt qu'un lien forcé). Le lien PILIER, lui,
+  reste OBLIGATOIRE dans TOUS les cas (voir RÔLE ci-dessous).
 """
 
 SILO_RULES_SATELLITE = """
 RÔLE : article satellite d'un silo.
 
 PILIER (URL exacte) : {pillar_url}
-→ 1 lien OBLIGATOIRE vers cette URL dans l'intro ou les 3 premiers <p>,
-  ancre contextuelle.
+→ 1 lien OBLIGATOIRE vers cette URL, posé dans l'introduction OU les 3
+  premiers <p> du texte. Ancre contextuelle, intégrée au fil de la phrase.
+→ Cette obligation est NON-NÉGOCIABLE. Elle prime sur la règle "ne pas
+  forcer un lien" : le lien pilier DOIT être présent, même si tu dois
+  reformuler la phrase d'introduction pour qu'il s'y intègre naturellement.
+→ La présence du lien pilier est VÉRIFIÉE automatiquement après génération.
+  Un article sans lien pilier sera signalé comme défaillant.
 
 VOISINS du silo (similarité décroissante) :
 {peer_block}
-→ 0 ou 1 lien max par voisin. Mets le lien quand le sujet voisin est
+→ 0 ou 1 lien max par voisin. Pose le lien quand le sujet voisin est
   mentionné naturellement (terme/notion lié). Vise le PLUS de liens voisins
-  possibles tant que c'est naturel ; jamais forcé. Priorise les voisins en
-  haut de liste.
+  possibles TANT QUE c'est naturel ; jamais forcé. Priorise les voisins en
+  haut de liste. Pour les voisins UNIQUEMENT, ne pas forcer un lien qui
+  ne s'intègre pas.
 """
 
 SILO_RULES_PILLAR = """
@@ -307,16 +315,28 @@ async def generate_content(
     resp = await llm.complete(
         system=system,
         user=user,
-        max_tokens=8000,
+        max_tokens=12000,  # bumped from 8000: long FR articles + silo block could hit the cap
         temperature=0.6,
         model=model,
     )
     if capture is not None:
         capture.update(system=system, user=user, model=model, cost=resp.cost)
     data = llm.extract_json(resp.text)
+    html = str(data.get("html", "")).strip()
+    title_variants = list(data.get("title_variants", []))[:3]
+    # Sanity check: if the response was truncated (max_tokens hit) the repair
+    # in extract_json may return a JSON with an empty/very short html field.
+    # Reject loud here so the pipeline marks the job 'failed' instead of saving
+    # an empty page as 'generated'. The user can then click "Régénérer" to retry.
+    if len(html) < 400 or "<h" not in html.lower():
+        raise RuntimeError(
+            f"generator returned an unusable html (len={len(html)}, "
+            f"variants={len(title_variants)}). Likely max_tokens hit during "
+            f"generation. Click 'Régénérer' on this article to retry."
+        )
     return Generated(
-        title_variants=list(data.get("title_variants", []))[:3],
-        html=str(data.get("html", "")),
+        title_variants=title_variants,
+        html=html,
         schema_recommendations=dict(data.get("schema_recommendations", {})),
         image_prompt=str(data.get("image_prompt", "")),
         llm_cost=resp.cost,
