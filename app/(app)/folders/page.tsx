@@ -1,15 +1,24 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
-import { Folder } from "@/lib/types";
+import { Content, Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { SkeletonList } from "@/components/Skeleton";
 import { Icon } from "@/components/Icon";
 
 export default function FoldersPage() {
   const { data: folders, mutate } = useSWR<Folder[]>("/srv/folders", fetcher);
+  const { data: allContents } = useSWR<Content[]>("/srv/contents", fetcher);
+
+  const countByFolder = new Map<string, number>();
+  (allContents || []).forEach((c) => {
+    if (c.folder_id) {
+      countByFolder.set(c.folder_id, (countByFolder.get(c.folder_id) || 0) + 1);
+    }
+  });
   const [name, setName] = useState("");
   const [parent, setParent] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -104,26 +113,53 @@ export default function FoldersPage() {
 
       {(folders || []).length > 0 && (
         <ul className="card divide-y divide-[var(--border)] overflow-hidden">
-          {folders?.map((f) => (
-            <li
-              key={f.id}
-              className="px-5 py-3.5 flex items-center justify-between hover:bg-white/[0.04] transition-colors"
-            >
-              <span className="flex items-center gap-3 min-w-0">
-                <Icon name="folder" size={16} className="text-zinc-500 shrink-0" />
-                <span className="font-medium text-[14px] text-zinc-100 truncate">{f.name}</span>
-                {f.parent_id && <span className="chip-soft">enfant</span>}
-              </span>
-              <button
-                onClick={() => remove(f.id)}
-                className="btn-danger px-3 py-1.5 text-xs"
-                title="Supprimer le dossier"
-              >
-                <Icon name="trash" size={12} />
-                Supprimer
-              </button>
-            </li>
-          ))}
+          {folders?.map((f) => {
+            const count = countByFolder.get(f.id) || 0;
+            return (
+              <li key={f.id} className="relative group">
+                <Link
+                  href={`/folders/${f.id}`}
+                  className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-white/[0.04] transition-colors"
+                >
+                  <span className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className="w-9 h-9 rounded-lg bg-accent-500/10 border border-accent-500/25 flex items-center justify-center text-accent-300 shrink-0 group-hover:scale-105 group-hover:bg-accent-500/15 transition-all">
+                      <Icon name="folder" size={15} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-[14px] text-zinc-100 group-hover:text-white truncate block">
+                        {f.name}
+                      </span>
+                      <span className="text-[11px] text-zinc-500 mt-0.5 inline-flex items-center gap-1.5">
+                        {count} contenu{count > 1 ? "s" : ""}
+                        {f.parent_id && (
+                          <>
+                            <span className="text-zinc-700">·</span>
+                            <span>sous-dossier</span>
+                          </>
+                        )}
+                      </span>
+                    </span>
+                  </span>
+                  <Icon
+                    name="chevron-right"
+                    size={14}
+                    className="text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0"
+                  />
+                </Link>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    remove(f.id);
+                  }}
+                  className="absolute right-12 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-300 transition-all p-1.5 rounded-md hover:bg-red-500/10"
+                  title="Supprimer le dossier"
+                >
+                  <Icon name="trash" size={12} />
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

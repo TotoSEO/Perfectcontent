@@ -26,6 +26,14 @@ async def create_folder(payload: FolderIn, db: AsyncSession = Depends(get_db)) -
     return folder
 
 
+@router.get("/{folder_id}", response_model=FolderOut)
+async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> Folder:
+    folder = await db.get(Folder, folder_id)
+    if folder is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "folder not found")
+    return folder
+
+
 @router.patch("/{folder_id}", response_model=FolderOut)
 async def update_folder(
     folder_id: UUID, payload: FolderUpdate, db: AsyncSession = Depends(get_db)

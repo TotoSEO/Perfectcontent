@@ -205,6 +205,33 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   }
   .input::placeholder { color: #5e5f68; }
 
+  /* Native <select>: kill the browser white-on-white dropdown. The control
+     itself inherits .input, but the popup uses OS colors — force them dark. */
+  select.input {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a4ac' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 12px 12px;
+    background-color: rgba(255, 255, 255, 0.035);
+    cursor: pointer;
+  }
+  select.input option,
+  select option {
+    background-color: #15171f;
+    color: #ededef;
+    padding: 8px 10px;
+  }
+  select.input optgroup {
+    background-color: #0e1018;
+    color: #a3a4ac;
+    font-style: normal;
+    font-weight: 600;
+  }
+
   /* ============ TYPOGRAPHY ============ */
   .label {
     @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400;

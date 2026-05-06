@@ -28,6 +28,7 @@ export type IconName =
   | "play"
   | "pause"
   | "spinner"
+  | "arrow-left"
   | "arrow-right"
   | "arrow-up-right"
   | "filter"
@@ -177,6 +178,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   spinner: (
     <path d="M12 3a9 9 0 1 0 9 9" />
   ),
+  "arrow-left": <path d="M19 12H5M11 6l-6 6 6 6" />,
   "arrow-right": <path d="M5 12h14M13 6l6 6-6 6" />,
   "arrow-up-right": <path d="M7 17 17 7M9 7h8v8" />,
   filter: <path d="M3 5h18l-7 9v6l-4-2v-4L3 5Z" />,

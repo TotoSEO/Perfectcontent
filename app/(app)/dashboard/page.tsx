@@ -8,6 +8,7 @@ import { Content } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { SkeletonList } from "@/components/Skeleton";
 import { Icon } from "@/components/Icon";
+import { FolderPicker } from "@/components/FolderPicker";
 
 const STATUS_TONE: Record<string, string> = {
   analysis: "border-zinc-700 text-zinc-400 bg-zinc-800/40",
@@ -31,9 +32,11 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { data: contents } = useSWR<Content[]>("/srv/contents", fetcher, {
-    refreshInterval: 5000,
-  });
+  const { data: contents, mutate: refetchContents } = useSWR<Content[]>(
+    "/srv/contents",
+    fetcher,
+    { refreshInterval: 5000 },
+  );
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "archived">("active");
 
@@ -67,8 +70,8 @@ export default function DashboardPage() {
           </p>
         </div>
         <Link href="/new" className="btn-primary">
-          <Icon name="plus" size={14} />
-          Nouveau lot
+          <Icon name="sparkles" size={14} />
+          Nouveau contenu
         </Link>
       </header>
 
@@ -121,10 +124,10 @@ export default function DashboardPage() {
             const label = TYPE_LABELS[c.content_type] || c.content_type;
             const statusLabel = STATUS_LABELS[c.status] || c.status;
             return (
-              <li key={c.id}>
+              <li key={c.id} className="relative group">
                 <Link
                   href={`/contents/${c.id}`}
-                  className="group flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-white/[0.04] transition-colors"
+                  className="flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-white/[0.04] transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate text-[14px] text-zinc-100 group-hover:text-white">
@@ -157,8 +160,17 @@ export default function DashboardPage() {
                       {Number(c.coverage_score).toFixed(0)}%
                     </span>
                   )}
+                  {/* spacer reserving room for the FolderPicker overlay */}
+                  <span className="w-[140px]" aria-hidden />
                   <Icon name="chevron-right" size={14} className="text-zinc-600 group-hover:text-zinc-400 transition-colors" />
                 </Link>
+                <div className="absolute right-12 top-1/2 -translate-y-1/2 z-10">
+                  <FolderPicker
+                    contentId={c.id}
+                    currentFolderId={c.folder_id}
+                    onChange={() => refetchContents()}
+                  />
+                </div>
               </li>
             );
           })}
