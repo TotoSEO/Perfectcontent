@@ -1,11 +1,14 @@
+import time
 import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.auth import require_session
 from app.config import get_settings
+from app.db import get_db
 from app.routers import auth as auth_router
 from app.routers import audits, batches, contents, domains, folders, fusion, healthz, jobs, logs, silos
 
@@ -24,6 +27,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Surface every request to Vercel function logs so a hanging or
+    crashing endpoint is identifiable from the dashboard.
+    Format: [METHOD] /path -> status (Xms) or [METHOD] /path EXC type: msg
+    """
+    start = time.perf_counter()
+    method, path = request.method, request.url.path
+    print(f"[{method}] {path} START")
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        ms = int((time.perf_counter() - start) * 1000)
+        print(f"[{method}] {path} EXC {type(exc).__name__}: {exc!s} ({ms}ms)")
+        raise
+    ms = int((time.perf_counter() - start) * 1000)
+    print(f"[{method}] {path} -> {response.status_code} ({ms}ms)")
+    return response
 
 
 @app.exception_handler(Exception)
@@ -135,6 +158,32 @@ async def diag_echo_get(request: Request) -> dict:
         "ok": True,
         "method": request.method,
         "path": str(request.url.path),
+    }
+
+
+@app.post("/srv/diag/auth")
+async def diag_auth(_: None = Depends(require_session)) -> dict:
+    """POST + auth dependency, NO DB. If this returns JSON, the auth
+    dependency works on POST. If this fails with HTML, the auth check
+    is what's blocking authenticated POSTs."""
+    return {"ok": True, "auth": "passed"}
+
+
+@app.post("/srv/diag/auth-db")
+async def diag_auth_db(_: None = Depends(require_session)) -> dict:
+    """POST + auth + a single DB SELECT 1. Reproduces the minimum
+    surface that silo / jobs / audits POSTs all share. If this returns
+    JSON, the silo/jobs handlers are the issue (heavy DB writes). If
+    it fails, the auth+DB combination is what's broken on POST."""
+    from sqlalchemy import text
+    from app.db import SessionLocal
+    async with SessionLocal() as session:
+        result = await session.execute(text("SELECT 1 AS ok"))
+        row = result.first()
+    return {
+        "ok": True,
+        "auth": "passed",
+        "db_select_1": row[0] if row else None,
     }
 
 
