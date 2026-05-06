@@ -13,6 +13,7 @@ import { SemanticScore } from "@/components/SemanticScore";
 import { ImagePanel } from "@/components/ImagePanel";
 import { CompetitorsPanel } from "@/components/CompetitorsPanel";
 import { PromptViewerButton } from "@/components/PromptViewer";
+import { SerpAnalysisButton } from "@/components/SerpAnalysis";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 
@@ -116,6 +117,7 @@ export default function ContentPage() {
               slug={content.slug ?? ""}
               html={html}
             />
+            <SerpAnalysisButton contentId={id!} />
             <PromptViewerButton contentId={id!} />
             <button
               onClick={archive}

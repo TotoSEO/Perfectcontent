@@ -167,6 +167,124 @@ async def get_prompts(content_id: UUID, db: AsyncSession = Depends(get_db)) -> d
     }
 
 
+@router.get("/{content_id}/serp")
+async def get_serp_analysis(content_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Return everything we extracted from the SERP for this content:
+    - top-7 organic results (urls + titles)
+    - per-competitor parsed metrics (word_count, h2[], lists, tables, schema flags…)
+    - per-competitor full scraped markdown body
+    - per-competitor breakdown (angle / strength / weakness from analysis)
+    - People Also Ask
+    - SERP-implied format (listicle / how-to / comparator / …) with vote split
+    - related keywords (top 30)
+
+    Lets the user verify the scraping/analysis quality + see what Claude
+    actually saw before generating the article."""
+    job = (
+        await db.execute(
+            select(Job)
+            .where(Job.content_id == content_id)
+            .order_by(Job.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        return {"job_id": None, "competitors": [], "paa": [], "format": None, "related": []}
+    sr = (
+        await db.execute(
+            select(SemanticReport).where(SemanticReport.job_id == job.id)
+        )
+    ).scalar_one_or_none()
+    if sr is None:
+        return {"job_id": str(job.id), "competitors": [], "paa": [], "format": None, "related": []}
+
+    serp_raw = sr.serp_raw or {}
+    organic = serp_raw.get("organic_top7", []) or []
+    scraped = serp_raw.get("scraped", []) or []
+    paa_raw = serp_raw.get("paa", []) or []
+    fmt_payload = serp_raw.get("serp_format") or {}
+
+    # Index scraped pages by URL for quick lookup
+    scraped_by_url = {p.get("url"): p for p in scraped if isinstance(p, dict)}
+
+    # Index competitor breakdown by rank (1-based)
+    breakdown = list(sr.competitors_breakdown or [])
+    bd_by_rank = {b.get("rank"): b for b in breakdown if isinstance(b, dict)}
+
+    # Build per-competitor payload by zipping organic_top7 + parsed competitors + scraped + breakdown
+    parsed = list(sr.competitors or [])
+    competitors_out = []
+    for i, parsed_row in enumerate(parsed):
+        url = parsed_row.get("url") if isinstance(parsed_row, dict) else None
+        scrape = scraped_by_url.get(url, {}) if url else {}
+        bd = bd_by_rank.get(i + 1, {})
+        competitors_out.append({
+            "rank": i + 1,
+            "url": url,
+            "title": parsed_row.get("title") if isinstance(parsed_row, dict) else None,
+            "h1": parsed_row.get("h1"),
+            "h2": parsed_row.get("h2") or [],
+            "h3_count": parsed_row.get("h3_count"),
+            "word_count": parsed_row.get("word_count"),
+            "paragraphs_count": parsed_row.get("paragraphs_count"),
+            "lists_count": parsed_row.get("lists_count"),
+            "tables_count": parsed_row.get("tables_count"),
+            "images_with_alt": parsed_row.get("images_with_alt"),
+            "images_without_alt": parsed_row.get("images_without_alt"),
+            "has_faq_schema": parsed_row.get("has_faq_schema"),
+            "has_article_schema": parsed_row.get("has_article_schema"),
+            "has_product_schema": parsed_row.get("has_product_schema"),
+            "author": parsed_row.get("author"),
+            "quality": parsed_row.get("quality"),
+            "scrape_source": scrape.get("source"),  # firecrawl | jina | cache
+            "scrape_error": scrape.get("error"),
+            "markdown": scrape.get("markdown") or "",
+            "angle": bd.get("angle"),
+            "strength": bd.get("strength"),
+            "weakness": bd.get("weakness"),
+        })
+
+    # Normalize PAA to a list of strings
+    paa: list[str] = []
+    for item in paa_raw:
+        if isinstance(item, str):
+            paa.append(item)
+        elif isinstance(item, dict):
+            q = item.get("question") or item.get("title") or item.get("query")
+            if isinstance(q, str):
+                paa.append(q)
+
+    # Related keywords as flat list
+    rel_raw = list(sr.related_keywords or [])
+    related = []
+    for r in rel_raw[:30]:
+        if isinstance(r, str):
+            related.append(r)
+        elif isinstance(r, dict):
+            related.append(r.get("keyword") or "")
+
+    return {
+        "job_id": str(job.id),
+        "keyword": job.keyword,
+        "competitors": competitors_out,
+        "organic_top7": [
+            {"url": o.get("url"), "title": o.get("title"), "description": o.get("description")}
+            for o in organic if isinstance(o, dict)
+        ],
+        "paa": paa,
+        "format": {
+            "format": fmt_payload.get("format"),
+            "votes": fmt_payload.get("votes") or {},
+            "brief": fmt_payload.get("brief") or "",
+        },
+        "related": related,
+        "common_subthemes": list(sr.common_subthemes or []),
+        "rare_subthemes": list(sr.rare_subthemes or []),
+        "entities": list(sr.entities or []),
+        "content_gaps": list(sr.content_gaps or []),
+    }
+
+
 @router.get("/{content_id}/semantic-targets")
 async def semantic_targets(content_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Return the top corpus terms with target / min / max frequencies.
