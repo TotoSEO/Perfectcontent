@@ -26,7 +26,28 @@ export async function api<T = unknown>(
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${text}`);
+    const ct = res.headers.get("content-type") || "";
+    // FastAPI errors come as JSON {detail|error|message: "..."} — extract a
+    // readable message instead of dumping the raw payload.
+    if (ct.includes("application/json")) {
+      try {
+        const j = JSON.parse(text);
+        const msg = j.detail || j.error || j.message || j.error_type || "";
+        throw new Error(`${res.status}${msg ? ` — ${msg}` : ""}`);
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message.startsWith(`${res.status}`)) throw parseErr;
+        // fallthrough: not actually JSON
+      }
+    }
+    // HTML response on a /srv/* call = the request hit Next.js instead of the
+    // Python function (routing misconfig). Surface a focused hint.
+    const looksLikeHtml = /^\s*</.test(text);
+    if (looksLikeHtml) {
+      throw new Error(
+        `${res.status} — la requête n'a pas atteint le backend Python (réponse HTML). Routing Vercel mal configuré ou déploiement non finalisé.`,
+      );
+    }
+    throw new Error(`${res.status}${text ? ` — ${text.slice(0, 300)}` : ""}`);
   }
   if (res.status === 204) return undefined as T;
   const ct = res.headers.get("content-type") || "";
