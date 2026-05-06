@@ -92,10 +92,14 @@ FORMAT_BRIEFS: dict[Format, str] = {
     ),
     "comparator": (
         "FORMAT IMPOSÉ : COMPARATIF. Les concurrents top SERP comparent deux ou "
-        "plusieurs solutions. Tu DOIS livrer un tableau comparatif <table> dans "
-        "les 3 premières sections, avec critères en colonnes (prix, feature, "
-        "cible, etc.) et solutions en lignes. Verdict par cas d'usage en "
-        "conclusion (\"X pour les freelances, Y pour les agences\")."
+        "plusieurs solutions. Tu DOIS livrer un <table> comparatif dès le DÉBUT "
+        "de l'article — placé dans les 200 PREMIERS MOTS (juste après le résumé "
+        "express, avant le développement). Le tableau doit être lisible et "
+        "concentrer l'essentiel : critères en colonnes (prix, cible, feature "
+        "principale, point fort), solutions en lignes. Pas plus de 6 colonnes, "
+        "pas plus de 6 lignes. Le lecteur doit voir le verdict d'un coup d'œil. "
+        "Verdict par cas d'usage en conclusion (\"X pour les freelances, Y pour "
+        "les agences\")."
     ),
     "definition": (
         "FORMAT IMPOSÉ : DÉFINITION + APPROFONDISSEMENT. Les concurrents top "

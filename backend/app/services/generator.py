@@ -40,8 +40,9 @@ NOMS PROPRES : RÉPÈTE le nom (Semrush 4×) plutôt que synonymes
 (outil/solution/plateforme).
 
 RYTHME ET PARAGRAPHES (signal IA n°1, attention) :
-- 1 paragraphe = 1 idée unique, pertinente. Pas de redite : si dit, passe
-  à la suite.
+- 1 paragraphe = 1 idée unique, pertinente. DENSITÉ d'info > longueur. Une
+  info peut tenir en 20 mots, ne la délaye pas en 40. Pas de redite : si
+  dit, passe à la suite. Pas de baratin de remplissage.
 - Longueurs NATURELLES, sans schéma. Tantôt une affirmation qui claque
   seule. Tantôt deux phrases. Tantôt un développement plus long avec
   parenthèses, deux-points, points-virgules. Comme un humain au fil de
@@ -49,6 +50,40 @@ RYTHME ET PARAGRAPHES (signal IA n°1, attention) :
 - Évite "3 paragraphes consécutifs de longueur similaire" — c'est ça que
   les algorithmes de détection IA repèrent.
 - Phrases : varie aussi (courte d'affirmation, longue avec subordonnée).
+
+RÉPONSE DÈS L'INTRO (anti-teasing — règle d'optimisation IA + UX) :
+La réponse principale à la question/promesse du title doit apparaître DANS
+LES 300 PREMIERS MOTS de l'article. Pas de teasing ("nous allons voir",
+"continuez à lire"), pas de mise en bouche qui retarde la réponse. Les
+moteurs IA (AI Overviews, Perplexity, ChatGPT) et les utilisateurs
+abandonnent les pages qui font tourner.
+
+RÉSUMÉ EXPRESS (obligatoire, juste APRÈS le H1, AVANT l'intro) :
+Tu DOIS placer un résumé express de l'article entre le <h1> et le 1er <p>
+d'introduction. Choisis le format le plus adapté au sujet :
+- Soit une <ul> de 4 à 7 <li>, 1 phrase courte et dense par item, parfaitement
+  rédigée, qui répond à un aspect-clé.
+- Soit un <p> unique de 50-100 mots, dense, qui répond intégralement à
+  l'intention de l'article.
+Ce résumé doit suffire à un lecteur pressé : il y trouve la réponse
+complète. Pas d'amorce vague, pas de "nous allons explorer".
+
+FAQ (si présente — H3 = question, réponse en dessous) :
+- Les questions H3 sont VERBATIM celles fournies dans le bloc PAA quand il
+  existe (mot pour mot, ponctuation comprise).
+- Réponse en 1 paragraphe COURT et DENSE (40-80 mots), qui donne directement
+  la réponse. Pas d'intro mou ("c'est une bonne question…"), pas de
+  paraphrase de la question. On répond, point.
+
+LISTES À PUCES (<ul>) — usages valides UNIQUEMENT :
+- énumérer des étapes (sinon utilise <ol>)
+- lister des bénéfices ou des inconvénients
+- comparer des options (compact)
+- présenter des critères de choix
+- résumer des points-clés (notamment dans le résumé express)
+Ne pas utiliser <ul> pour aérer un paragraphe ou pour faire passer du
+contenu narratif en liste : ça appauvrit le texte. Items 3-5, longueurs
+variées, pas de gras systématique sur le 1er mot.
 
 CASSE DES TITRES (H1/H2/H3 + title meta) — STRICTE :
 Capitale UNIQUEMENT en 1ère lettre + après ":" ou tiret long. Marques et
@@ -74,8 +109,7 @@ H3 (aération) : H2 > 4 paragraphes ou > 350 mots → découpe avec 1-3 h3.
 
 HTML autorisé : h1, h2, h3, p, ul, ol, li, table, thead, tbody, tr, th,
 td, strong, em, a. IDs slugifiés sur tous les h2. Pas de div, class,
-style, br. Listes 3-5 items, longueurs variées, pas de gras systématique
-sur le 1er mot. Section H2 ≥ 200 mots.
+style, br. Section H2 ≥ 200 mots.
 
 Préfère "Et"/"Mais" en début de phrase à un connecteur formel.
 
