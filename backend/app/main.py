@@ -113,6 +113,31 @@ async def diag_db() -> dict:
     return out
 
 
+@app.post("/srv/diag/echo")
+async def diag_echo(request: Request) -> dict:
+    """Pure echo endpoint — no auth, no DB, no validation. If POSTing here
+    returns JSON, FastAPI POST routing works and the issue is elsewhere
+    (specific handler timing out, DB op failing, auth crashing, etc.)."""
+    body = await request.body()
+    return {
+        "ok": True,
+        "method": request.method,
+        "path": str(request.url.path),
+        "received_bytes": len(body),
+        "content_type": request.headers.get("content-type"),
+    }
+
+
+@app.get("/srv/diag/echo")
+async def diag_echo_get(request: Request) -> dict:
+    """GET sibling so the user can hit both verbs from the URL bar."""
+    return {
+        "ok": True,
+        "method": request.method,
+        "path": str(request.url.path),
+    }
+
+
 app.include_router(auth_router.router, prefix="/srv/auth", tags=["auth"])
 app.include_router(folders.router, prefix="/srv/folders", tags=["folders"])
 app.include_router(domains.router, prefix="/srv/domains", tags=["domains"])
