@@ -1,23 +1,26 @@
 // Parse Screaming Frog `internal_all.csv` (or any internal HTML export) into
-// a normalized list of UrlRow objects. Tolerates the column-name variations
-// SF has shipped over different versions.
+// a normalized list of UrlRow objects. Tolerates:
+// - column-name variations across SF versions
+// - UTF-8 BOM
+// - CSV delimiter ',', ';' or '\t' (French Excel re-exports use ';')
+// - a metadata banner row above the header (some SF wrappers prepend it)
 
 import Papa from "papaparse";
 
 export type UrlRow = {
   url: string;
   status_code: number | null;
-  status: string | null;          // e.g. "OK", "Not Found", "Moved Permanently"
+  status: string | null;
   content_type: string | null;
-  indexability: string | null;    // "Indexable" / "Non-Indexable"
-  indexability_status: string | null; // why non-indexable
+  indexability: string | null;
+  indexability_status: string | null;
   title: string | null;
   title_length: number | null;
   meta_description: string | null;
   meta_description_length: number | null;
   h1: string | null;
   h1_length: number | null;
-  h1_2: string | null;            // 2nd H1 if present
+  h1_2: string | null;
   h2_1: string | null;
   word_count: number | null;
   crawl_depth: number | null;
@@ -33,36 +36,46 @@ export type UrlRow = {
 };
 
 const COL_ALIASES: Record<keyof UrlRow, string[]> = {
-  url:                     ["Address"],
-  status_code:             ["Status Code"],
-  status:                  ["Status"],
-  content_type:            ["Content Type"],
-  indexability:            ["Indexability"],
-  indexability_status:     ["Indexability Status"],
-  title:                   ["Title 1", "Title"],
-  title_length:            ["Title 1 Length", "Title Length"],
-  meta_description:        ["Meta Description 1", "Meta Description"],
-  meta_description_length: ["Meta Description 1 Length", "Meta Description Length"],
-  h1:                      ["H1-1", "H1"],
-  h1_length:               ["H1-1 Length", "H1 Length"],
-  h1_2:                    ["H1-2"],
-  h2_1:                    ["H2-1", "H2"],
-  word_count:              ["Word Count"],
-  crawl_depth:             ["Crawl Depth"],
-  inlinks:                 ["Inlinks"],
-  unique_inlinks:          ["Unique Inlinks"],
-  outlinks:                ["Outlinks"],
-  unique_outlinks:         ["Unique Outlinks"],
-  canonical:               ["Canonical Link Element 1", "Canonical Link Element", "Canonical"],
-  redirect_url:            ["Redirect URL", "Redirect URI"],
-  size_bytes:              ["Size (bytes)", "Size"],
-  response_time:           ["Response Time"],
-  hash:                    ["Hash"],
+  url:                     ["address", "url", "uri", "page", "page url"],
+  status_code:             ["status code", "http status", "status"],
+  status:                  ["status", "http status text"],
+  content_type:            ["content type", "content-type"],
+  indexability:            ["indexability"],
+  indexability_status:     ["indexability status"],
+  title:                   ["title 1", "title", "page title", "title tag"],
+  title_length:            ["title 1 length", "title length", "title 1 (length)"],
+  meta_description:        ["meta description 1", "meta description", "description"],
+  meta_description_length: ["meta description 1 length", "meta description length"],
+  h1:                      ["h1-1", "h1", "h1 1"],
+  h1_length:               ["h1-1 length", "h1 length", "h1-1 (length)"],
+  h1_2:                    ["h1-2", "h1 2"],
+  h2_1:                    ["h2-1", "h2", "h2 1"],
+  word_count:              ["word count", "words", "word-count"],
+  crawl_depth:             ["crawl depth", "depth", "level"],
+  inlinks:                 ["inlinks", "internal inlinks", "in links"],
+  unique_inlinks:          ["unique inlinks"],
+  outlinks:                ["outlinks", "internal outlinks", "out links"],
+  unique_outlinks:         ["unique outlinks"],
+  canonical:               ["canonical link element 1", "canonical link element", "canonical", "canonical url"],
+  redirect_url:            ["redirect url", "redirect uri", "redirect to"],
+  size_bytes:              ["size (bytes)", "size", "size bytes"],
+  response_time:           ["response time", "response time (s)"],
+  hash:                    ["hash"],
 };
+
+// Some SF exports prepend a banner row (file name, generated date) before the
+// real header. We detect the header row by looking for a row that contains an
+// "Address" or "URL" column.
+const URL_HEADERS = new Set(["address", "url", "uri", "page", "page url"]);
+
+function normalizeKey(s: string): string {
+  return s.toLowerCase().replace(/^﻿/, "").trim();
+}
 
 function pick(rec: Record<string, string>, aliases: string[]): string | null {
   for (const a of aliases) {
-    if (rec[a] !== undefined && rec[a] !== "") return rec[a];
+    const v = rec[a];
+    if (v !== undefined && v !== "" && v !== "—") return v;
   }
   return null;
 }
@@ -77,6 +90,10 @@ export type ParseStats = {
   total_rows: number;
   html_rows: number;
   filename: string | null;
+  headers: string[];        // column headers detected (lower-case)
+  delimiter: string;        // delimiter used
+  banner_skipped: number;   // metadata rows skipped before the header
+  rows_without_url: number; // rows we couldn't extract a URL from
 };
 
 export type ParseResult = {
@@ -84,27 +101,60 @@ export type ParseResult = {
   stats: ParseStats;
 };
 
-/**
- * Parse a SF internal_all.csv (or any compatible export). Returns ALL rows
- * found — not just HTML. The analyzer filters appropriately.
- */
 export async function parseInternalCsv(file: File): Promise<ParseResult> {
   const text = await file.text();
   return parseInternalCsvText(text, file.name);
 }
 
-export function parseInternalCsvText(text: string, filename: string | null): ParseResult {
+export function parseInternalCsvText(textRaw: string, filename: string | null): ParseResult {
+  // 1. Strip UTF-8 BOM if present
+  let text = textRaw.replace(/^﻿/, "");
+
+  // 2. Skip a leading metadata banner: walk forward line by line until we
+  //    find a line that contains a URL-like header. SF "Top Reports" exports
+  //    sometimes have a "Spider Crawl by ..." banner above the header.
+  let banner_skipped = 0;
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    const probe = lines[i].toLowerCase();
+    if (URL_HEADERS.has(probe.split(/[,;\t]/)[0]?.replace(/^"|"$/g, "").trim() || "")) {
+      // already at header
+      break;
+    }
+    // Detect "header-y" line (contains both "address" or "url" AND another known col)
+    if ((probe.includes("address") || probe.includes("url") || probe.includes("uri")) &&
+        (probe.includes("status") || probe.includes("title") || probe.includes("indexability"))) {
+      banner_skipped = i;
+      break;
+    }
+    if (i === 4) banner_skipped = 0; // give up, keep original
+  }
+  if (banner_skipped > 0) {
+    text = lines.slice(banner_skipped).join("\n");
+  }
+
+  // 3. Auto-detect delimiter (comma / semicolon / tab) and parse with header
   const result = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: "greedy",
+    delimitersToGuess: [",", ";", "\t", "|"],
+    transformHeader: (h) => normalizeKey(h),
     transform: (v) => (typeof v === "string" ? v.trim() : v),
   });
 
+  const headers = (result.meta.fields || []).map(normalizeKey);
+  const delimiter = result.meta.delimiter || ",";
+
   const rows: UrlRow[] = [];
   let html_rows = 0;
-  for (const rec of result.data as Record<string, string>[]) {
+  let rows_without_url = 0;
+
+  for (const rec of (result.data as Record<string, string>[])) {
     const url = pick(rec, COL_ALIASES.url);
-    if (!url) continue;
+    if (!url || !/^https?:\/\//i.test(url)) {
+      rows_without_url++;
+      continue;
+    }
     const ct = pick(rec, COL_ALIASES.content_type);
     if (ct && /text\/html/i.test(ct)) html_rows++;
     rows.push({
@@ -138,6 +188,14 @@ export function parseInternalCsvText(text: string, filename: string | null): Par
 
   return {
     rows,
-    stats: { total_rows: rows.length, html_rows, filename },
+    stats: {
+      total_rows: rows.length,
+      html_rows,
+      filename,
+      headers,
+      delimiter,
+      banner_skipped,
+      rows_without_url,
+    },
   };
 }

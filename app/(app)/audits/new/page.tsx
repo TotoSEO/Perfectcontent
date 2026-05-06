@@ -20,10 +20,12 @@ export default function NewAuditPage() {
   const [stage, setStage] = useState<"idle" | "parsing" | "analyzing" | "saving">("idle");
   const [err, setErr] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
+  const [parseStats, setParseStats] = useState<Awaited<ReturnType<typeof parseInternalCsv>>["stats"] | null>(null);
 
   const onPickFile = useCallback(async (f: File) => {
     setErr(null);
     setReport(null);
+    setParseStats(null);
     setFile(f);
     if (!name) {
       const inferred = f.name.replace(/\.csv$/i, "").replace(/internal_all_?/i, "").trim() || "Audit";
@@ -33,14 +35,25 @@ export default function NewAuditPage() {
     try {
       setStage("parsing");
       const { rows, stats } = await parseInternalCsv(f);
+      setParseStats(stats);
       if (!rows.length) {
-        throw new Error("Le fichier ne contient aucune URL exploitable. Vérifie qu'il s'agit bien d'un export Screaming Frog.");
+        const headerHint = stats.headers.length
+          ? `Colonnes détectées : ${stats.headers.slice(0, 12).join(", ")}${stats.headers.length > 12 ? "…" : ""}.`
+          : "Aucune colonne détectée — le fichier est peut-être vide ou mal formaté.";
+        const sepHint = `Séparateur lu : "${stats.delimiter}". `;
+        const skippedHint = stats.rows_without_url > 0
+          ? `${stats.rows_without_url} lignes ont été ignorées car elles n'avaient pas de colonne URL/Address valide. `
+          : "";
+        throw new Error(
+          `Aucune URL exploitable dans le fichier. ${sepHint}${skippedHint}${headerHint} ` +
+          `Dans Screaming Frog, exporte depuis l'onglet "Internal" avec le filtre "HTML" → bouton Export en haut à droite.`,
+        );
       }
       setStage("analyzing");
       const r = analyze(rows, { source_filename: stats.filename });
       setReport(r);
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e instanceof Error ? e.message : e));
     } finally {
       setBusy(false);
       setStage("idle");
@@ -165,7 +178,20 @@ export default function NewAuditPage() {
       )}
 
       {err && (
-        <div className="card border-red-700/50 bg-red-900/20 text-red-100 p-3 text-sm">{err}</div>
+        <div className="card border-red-700/50 bg-red-900/20 text-red-100 p-4 text-sm space-y-2">
+          <div className="font-medium">Échec de l'import</div>
+          <div className="text-red-100/90 leading-relaxed">{err}</div>
+          {parseStats && parseStats.headers.length > 0 && (
+            <details className="text-xs text-red-100/80 mt-2">
+              <summary className="cursor-pointer hover:text-white">
+                Diagnostic technique ({parseStats.headers.length} colonnes lues, séparateur "{parseStats.delimiter}")
+              </summary>
+              <div className="mt-2 p-3 bg-black/20 rounded font-mono text-[11px] break-all">
+                {parseStats.headers.join(" · ")}
+              </div>
+            </details>
+          )}
+        </div>
       )}
 
       {report && !busy && (
