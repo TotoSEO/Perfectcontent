@@ -298,15 +298,20 @@ async def _step_parse(job_id: UUID) -> None:
         q = quality.score_competitor(p)
         parsed.append((p, q))
 
-    intent = intent_svc.classify_intent(
-        serp_result.get("features", []),
-        [o.get("title", "") for o in serp_result.get("organic_top7", [])],
-    )
+    top_titles = [o.get("title", "") for o in serp_result.get("organic_top7", [])]
+    intent = intent_svc.classify_intent(serp_result.get("features", []), top_titles)
+    fmt, votes = intent_svc.detect_format(top_titles)
+    format_brief = intent_svc.FORMAT_BRIEFS.get(fmt, "")
 
     sr = await _ensure_report(job_id)
     async with SessionLocal() as session:
         sr_db = await session.get(SemanticReport, sr.id)
         if sr_db is not None:
+            # Persist format detection alongside SERP raw so the generate step can
+            # read it without re-running detect_format.
+            payload = (sr_db.serp_raw or {}).copy()
+            payload["serp_format"] = {"format": fmt, "votes": votes, "brief": format_brief}
+            sr_db.serp_raw = payload
             sr_db.competitors = [
                 {
                     "url": p.url,
@@ -400,6 +405,7 @@ async def _step_analyze(job_id: UUID) -> None:
             sr_db.required_terms = report.required_terms
             sr_db.content_gaps = report.content_gaps
             sr_db.term_targets = [t.to_dict() for t in targets]
+            sr_db.competitors_breakdown = [c.to_dict() for c in report.competitors_breakdown]
             if expected_vec is not None:
                 sr_db.expected_terms_embedding = expected_vec
             await session.commit()
@@ -472,6 +478,18 @@ async def _step_generate(job_id: UUID) -> None:
     entities = list(sr.entities or [])
     gaps = list(sr.content_gaps or [])
     term_targets = list(sr.term_targets or [])
+    competitors_breakdown = list(sr.competitors_breakdown or [])
+    # PAA list lives in the persisted SERP raw payload
+    paa_raw = (sr.serp_raw or {}).get("paa", []) or []
+    paa: list[str] = []
+    for item in paa_raw:
+        if isinstance(item, str):
+            paa.append(item)
+        elif isinstance(item, dict):
+            q = item.get("question") or item.get("title") or item.get("query")
+            if isinstance(q, str):
+                paa.append(q)
+    format_brief = ((sr.serp_raw or {}).get("serp_format") or {}).get("brief") or None
     domain_host = await _load_domain_host(job.domain_id) if job.domain_id else None
 
     if job.mode == "rewrite":
@@ -521,6 +539,9 @@ async def _step_generate(job_id: UUID) -> None:
             term_targets=term_targets,
             use_haiku=getattr(job, "use_haiku", False),
             link_manifest=link_manifest,
+            paa=paa,
+            competitors_breakdown=competitors_breakdown,
+            format_brief=format_brief,
             capture=cap_gen,
         )
         title_variants = generated.title_variants
@@ -532,6 +553,50 @@ async def _step_generate(job_id: UUID) -> None:
     await _add_cost(job_id, cost)
     if cap_gen:
         await _record_prompt(job_id, "generate", **cap_gen)
+
+    # OPTIONAL: refinement pass — Claude reviews its own output and rewrites
+    # weak passages. Triples generation cost roughly. Opt-in per job.
+    refinement_notes: list[str] = []
+    if getattr(job, "do_refinement", False) and job.mode != "rewrite":
+        try:
+            refined_html, issues_fixed, refine_cost = await generator.refine_content(
+                keyword=job.keyword,
+                intent=intent,
+                blueprint=content.blueprint or {},
+                html=html,
+                use_haiku=getattr(job, "use_haiku", False),
+            )
+            if refined_html and refined_html != html:
+                html = refined_html
+                refinement_notes = issues_fixed
+            await _add_cost(job_id, refine_cost)
+        except Exception as exc:  # noqa: BLE001
+            await syslog.error(
+                f"refinement step failed: {exc}", module="pipeline", job_id=str(job_id)
+            )
+
+    # OPTIONAL: full schema.org JSON-LD generation. Replaces the recommendations
+    # array with a real ld+json payload (Article + FAQPage if FAQ detected).
+    if getattr(job, "do_schema_jsonld", False):
+        chosen_title_pre = title_variants[0].get("title") if title_variants else None
+        chosen_meta_pre = title_variants[0].get("meta") if title_variants else None
+        jsonld = generator.build_jsonld(
+            chosen_title=chosen_title_pre,
+            chosen_meta=chosen_meta_pre,
+            html=html,
+            domain=domain_host,
+            slug=getattr(content, "slug", None),
+            image_url=getattr(content, "image_url", None),
+            published_iso=None,
+            author_name=None,
+            types=(schema_recos.get("types") if isinstance(schema_recos, dict) else None),
+        )
+        # Stash both the AI types[] hint AND the full ld+json so the editor can
+        # surface either.
+        schema_recos = {
+            "types": (schema_recos.get("types") if isinstance(schema_recos, dict) else []) or [],
+            "jsonld": jsonld,
+        }
 
     async with SessionLocal() as session:
         c = await session.get(Content, content.id)
@@ -545,6 +610,15 @@ async def _step_generate(job_id: UUID) -> None:
             c.schema_recommendations = schema_recos
             c.image_prompt = image_prompt
             c.status = "generated"
+            if refinement_notes:
+                # Surface the refinement notes in the audit JSONB so the user
+                # can see what the relecture step adjusted.
+                audit = dict(c.blueprint or {})  # not strictly used; just merge to Job audit instead
+                _job = await session.get(Job, job_id)
+                if _job is not None:
+                    _ja = dict(_job.audit or {})
+                    _ja["refinement_notes"] = refinement_notes
+                    _job.audit = _ja
             embed_text = (c.chosen_title or "") + " " + (c.keyword or "")
             if embed_text.strip():
                 vecs = await embeddings.embed([embed_text])

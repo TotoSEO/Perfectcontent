@@ -24,6 +24,8 @@ class SiloCreateIn(BaseModel):
     language_code: str = "fr"
     use_haiku: bool = False
     generate_image: bool = False
+    do_refinement: bool = False
+    do_schema_jsonld: bool = False
     cost_cap: float | None = None
 
     @field_validator("base_url")

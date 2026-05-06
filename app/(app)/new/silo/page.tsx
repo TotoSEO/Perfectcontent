@@ -54,6 +54,8 @@ export default function NewSiloPage() {
   const [folderId, setFolderId] = useState("");
   const [useHaiku, setUseHaiku] = useState(false);
   const [generateImage, setGenerateImage] = useState(false);
+  const [doRefinement, setDoRefinement] = useState(false);
+  const [doSchemaJsonld, setDoSchemaJsonld] = useState(false);
   const [costCap, setCostCap] = useState<number | "">(2.5);
 
   const [busy, setBusy] = useState(false);
@@ -121,6 +123,8 @@ export default function NewSiloPage() {
           language_code: languageCode,
           use_haiku: useHaiku,
           generate_image: generateImage,
+          do_refinement: doRefinement,
+          do_schema_jsonld: doSchemaJsonld,
           cost_cap: costCap === "" ? null : Number(costCap),
         },
       });
@@ -351,6 +355,20 @@ export default function NewSiloPage() {
               className="input"
             />
           </Field>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ToggleRow
+            checked={doRefinement}
+            onChange={setDoRefinement}
+            label="✍️ Relecture par Claude"
+            sub="2e passe correctrice. ~+50 % de coût, qualité +"
+          />
+          <ToggleRow
+            checked={doSchemaJsonld}
+            onChange={setDoSchemaJsonld}
+            label="🔖 Schema JSON-LD"
+            sub="Article + FAQPage générés (sans breadcrumb)"
+          />
         </div>
       </Card>
 

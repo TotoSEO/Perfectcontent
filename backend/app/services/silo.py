@@ -67,6 +67,8 @@ class SiloPlan:
     language_code: str = "fr"
     use_haiku: bool = False
     generate_image: bool = False
+    do_refinement: bool = False
+    do_schema_jsonld: bool = False
     cost_cap: float | None = None
 
 
@@ -164,6 +166,8 @@ def _make_job(content: Content, plan: SiloPlan, batch_id: uuid.UUID, content_typ
         status="queued",
         cost_cap=plan.cost_cap,
         audit={"steps": []},
+        do_refinement=plan.do_refinement,
+        do_schema_jsonld=plan.do_schema_jsonld,
     )
 
 

@@ -49,6 +49,8 @@ async def create_batch(db: AsyncSession, payload: JobBatchCreateIn) -> tuple[uui
             cost_cap=payload.cost_cap,
             status="queued",
             audit={"steps": []},
+            do_refinement=getattr(payload, "do_refinement", False),
+            do_schema_jsonld=getattr(payload, "do_schema_jsonld", False),
         )
         db.add(job)
         jobs.append(job)

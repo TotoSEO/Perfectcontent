@@ -76,6 +76,8 @@ class JobBatchCreateIn(BaseModel):
     use_haiku: bool = False
     auto_validate_blueprint: bool = True
     cost_cap: float | None = None
+    do_refinement: bool = False
+    do_schema_jsonld: bool = False
 
 
 class JobBatchEstimateOut(BaseModel):

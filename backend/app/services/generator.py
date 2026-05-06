@@ -199,9 +199,13 @@ Mot-clé cible : {keyword}
 Intent : {intent}
 Type de contenu : {content_type}
 Domaine cible : {domain}
-{listicle_block}
+{format_block}{listicle_block}{paa_block}{competitors_block}
 Blueprint VALIDÉE (à respecter strictement) :
 {blueprint}
+
+NOTE blueprint : chaque section a un champ "must_terms". Concentre ces termes
+dans LEUR section, ne les disperse pas. Ne place PAS dans l'intro les termes
+qui sont assignés à des sections de fin.
 
 Termes obligatoires à intégrer (vient du rapport sémantique) :
 {required_terms}
@@ -275,6 +279,67 @@ def _listicle_block(keyword: str, blueprint: dict) -> str:
         f"- Si le sujet ne supporte pas {n} items distincts, dis-le DANS l'introduction\n"
         f"  ET trouve {n} angles complémentaires plutôt que de fusionner — la promesse\n"
         f"  du titre prime sur tout.\n"
+    )
+
+
+def _format_block(format_brief: str | None) -> str:
+    """SERP-implied format brief (listicle / how-to / comparator / etc.) from
+    intent.detect_format(). Forces the article shape to match what the SERP
+    converges on."""
+    if not format_brief:
+        return ""
+    return f"\n=== FORMAT ATTENDU (vu en SERP) ===\n{format_brief}\n"
+
+
+def _paa_block(paa: list[str] | None) -> str:
+    """People Also Ask — questions Google surfaces for this query. Forcing
+    them as VERBATIM H3 in the FAQ section gives a direct shot at the PAA
+    rich result. The "FAQ" section title can stay generic; what matters is
+    that each H3 is the exact question text."""
+    if not paa:
+        return ""
+    qs = [q.strip() for q in paa if q and q.strip()][:8]
+    if not qs:
+        return ""
+    items = "\n".join(f"  - {q}" for q in qs)
+    return (
+        "\n=== PEOPLE ALSO ASK (questions surfacées par Google) ===\n"
+        "Tu DOIS inclure une section FAQ où chaque H3 reprend EXACTEMENT une\n"
+        "des questions ci-dessous (mot pour mot, ponctuation comprise). C'est\n"
+        "ce qui permet de capturer les rich results PAA. Le H2 de la section\n"
+        "peut s'appeler \"FAQ\" ou \"Questions fréquentes\".\n"
+        "Réponse sous chaque H3 = 1 paragraphe concret de 40-80 mots, qui\n"
+        "répond directement (pas d'intro mou, pas de \"bonne question\").\n\n"
+        "Questions à inclure VERBATIM en H3 :\n"
+        f"{items}\n"
+    )
+
+
+def _competitors_block(breakdown: list[dict] | None) -> str:
+    """Per-competitor angle/strength/weakness from analysis.competitors_breakdown.
+    Drives differentiation: the article should AVOID merely averaging the SERP
+    and instead position against an identified weakness."""
+    if not breakdown:
+        return ""
+    lines = []
+    for c in breakdown[:7]:
+        rank = c.get("rank", "?")
+        angle = c.get("angle") or "—"
+        weakness = c.get("weakness") or "—"
+        strength = c.get("strength") or "—"
+        lines.append(
+            f"  Concurrent {rank} — angle « {angle} »\n"
+            f"    + force : {strength}\n"
+            f"    – faille : {weakness}"
+        )
+    return (
+        "\n=== ANALYSE PAR CONCURRENT (cartographie SERP) ===\n"
+        "Voici comment chaque concurrent du top 7 se positionne. Ta mission :\n"
+        "ne pas reproduire la moyenne. Cible UNE des failles ci-dessous et\n"
+        "construis ton article pour la combler concrètement (chiffres, cas,\n"
+        "structure manquante, ton manquant…). Ne reprends JAMAIS l'angle\n"
+        "exact d'un concurrent — décale-toi.\n\n"
+        + "\n".join(lines) + "\n"
     )
 
 
@@ -391,6 +456,9 @@ async def generate_content(
     use_haiku: bool = False,
     link_manifest: dict | None = None,
     capture: dict | None = None,
+    paa: list[str] | None = None,
+    competitors_breakdown: list[dict] | None = None,
+    format_brief: str | None = None,
 ) -> Generated:
     system = SYSTEM_TEMPLATE.format(
         type_brief=PROMPTS.get(content_type, PROMPTS["blog"]),
@@ -411,7 +479,10 @@ async def generate_content(
         intent=intent,
         content_type=content_type,
         domain=domain or "(aucun)",
+        format_block=_format_block(format_brief),
         listicle_block=_listicle_block(keyword, blueprint),
+        paa_block=_paa_block(paa),
+        competitors_block=_competitors_block(competitors_breakdown),
         blueprint=json.dumps(blueprint, ensure_ascii=False, indent=2),
         required_terms=", ".join(required_terms[:30]) or "(aucun)",
         entities=", ".join(entities[:20]) or "(aucune)",
@@ -450,3 +521,173 @@ async def generate_content(
         image_prompt=str(data.get("image_prompt", "")),
         llm_cost=resp.cost,
     )
+
+
+# ---------------------------------------------------------------------------
+# Refinement pass (optional, opt-in per job)
+# ---------------------------------------------------------------------------
+
+REFINE_SYSTEM = """Rédacteur web FR senior — rôle de RELECTEUR exigeant. Tu reçois
+un article fraîchement écrit + son brief de génération. Ta mission :
+
+1. IDENTIFIER 3 à 5 défauts CONCRETS dans l'article : passages flous, paragraphes
+   trop similaires en longueur, redites, expressions IA détectables, intro
+   promotionnelle, casse de titres incorrecte, listes faibles, manque de
+   chiffres ou d'exemples, FAQ générique, etc.
+2. RÉÉCRIRE ces passages localement, en gardant intact le reste de l'article.
+
+Tu rends le RÉSULTAT FINAL en JSON strict avec le HTML réécrit en intégralité
+(pas de diff, l'article complet remplacé) :
+{
+  "html": "<h1>...</h1>...",
+  "issues_fixed": ["intro promo", "paragraphes uniformes section 2", ...]
+}
+
+Règles :
+- Conserve les liens <a href="…"> existants à l'identique (URLs ET ancres).
+- Conserve la structure des sections (mêmes H2/H3) sauf si un défaut explicitement
+  identifié exige de la modifier.
+- Conserve les chiffres, marques, données factuelles citées.
+- Continue d'appliquer toutes les règles éditoriales de la 1ère passe (anti-IA,
+  rythme, paragraphes variés, casse correcte des titres).
+- Ne remplace JAMAIS un fait par une formule plus vague ; toujours plus précis.
+"""
+
+
+async def refine_content(
+    *,
+    keyword: str,
+    intent: str,
+    blueprint: dict,
+    html: str,
+    use_haiku: bool = False,
+) -> tuple[str, list[str], float]:
+    """2nd pass : Claude critiques its own output and rewrites weak passages.
+    Returns (refined_html, list_of_issues_fixed, cost). The caller decides
+    whether to keep the refined version (always, in our case)."""
+    user = (
+        f"Mot-clé cible : {keyword}\n"
+        f"Intent : {intent}\n"
+        f"Cible mots : {blueprint.get('target_words', 1500)}\n\n"
+        f"Brief (blueprint) :\n{json.dumps(blueprint, ensure_ascii=False, indent=2)}\n\n"
+        f"Article à relire et améliorer :\n{html}\n\n"
+        "Identifie 3-5 défauts concrets, réécris UNIQUEMENT les passages qui en\n"
+        "ont besoin, et rends l'article complet en JSON strict comme spécifié."
+    )
+    model = llm.HAIKU if use_haiku else llm.SONNET
+    resp = await llm.complete(
+        system=REFINE_SYSTEM,
+        user=user,
+        max_tokens=12000,
+        temperature=0.45,
+        model=model,
+    )
+    data = llm.extract_json(resp.text)
+    refined = str(data.get("html", "")).strip()
+    issues = list(data.get("issues_fixed", []))
+    if len(refined) < 400 or "<h" not in refined.lower():
+        # Refinement broke the article — fall back to the original
+        return html, [], resp.cost
+    return refined, issues, resp.cost
+
+
+# ---------------------------------------------------------------------------
+# Schema.org JSON-LD generation
+# ---------------------------------------------------------------------------
+
+
+def build_jsonld(
+    *,
+    chosen_title: str | None,
+    chosen_meta: str | None,
+    html: str,
+    domain: str | None,
+    slug: str | None,
+    image_url: str | None,
+    published_iso: str | None,
+    author_name: str | None,
+    types: list[str] | None,
+) -> list[dict]:
+    """Build a clean schema.org JSON-LD payload (Article + FAQPage if FAQ
+    section detected). No breadcrumb (per user spec)."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html or "", "html.parser")
+    out: list[dict] = []
+
+    url = None
+    if domain and slug:
+        host = domain.rstrip("/")
+        if not host.startswith(("http://", "https://")):
+            host = f"https://{host}"
+        url = f"{host.rstrip('/')}/{slug.lstrip('/')}"
+
+    # Article schema
+    article: dict = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": chosen_title or "",
+        "description": chosen_meta or "",
+    }
+    if url:
+        article["mainEntityOfPage"] = {"@type": "WebPage", "@id": url}
+        article["url"] = url
+    if image_url:
+        article["image"] = image_url
+    if published_iso:
+        article["datePublished"] = published_iso
+        article["dateModified"] = published_iso
+    if author_name:
+        article["author"] = {"@type": "Person", "name": author_name}
+    out.append(article)
+
+    # FAQPage if we can detect a FAQ section (H3 questions ending in '?'
+    # under an H2 that contains "FAQ" or "questions"). Scoped to keep it
+    # honest — false-positives on FAQPage hurt rankings.
+    faq_pairs: list[tuple[str, str]] = []
+    headings = soup.find_all(["h2", "h3"])
+    in_faq = False
+    cur_q: str | None = None
+    cur_a_parts: list[str] = []
+
+    def _flush():
+        nonlocal cur_q, cur_a_parts
+        if cur_q and cur_a_parts:
+            faq_pairs.append((cur_q, " ".join(p.strip() for p in cur_a_parts).strip()))
+        cur_q, cur_a_parts = None, []
+
+    for el in soup.body.descendants if soup.body else []:
+        name = getattr(el, "name", None)
+        if not name:
+            continue
+        if name == "h2":
+            _flush()
+            text = el.get_text(" ", strip=True).lower()
+            in_faq = ("faq" in text) or ("questions" in text and "fréquentes" in text) or ("foire aux" in text)
+            continue
+        if not in_faq:
+            continue
+        if name == "h3":
+            _flush()
+            qtext = el.get_text(" ", strip=True)
+            if qtext.endswith("?") or qtext.endswith(" ?") or "?" in qtext:
+                cur_q = qtext
+        elif name == "p" and cur_q:
+            cur_a_parts.append(el.get_text(" ", strip=True))
+    _flush()
+
+    if faq_pairs:
+        out.append({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+                {
+                    "@type": "Question",
+                    "name": q,
+                    "acceptedAnswer": {"@type": "Answer", "text": a},
+                }
+                for q, a in faq_pairs
+            ],
+        })
+
+    return out

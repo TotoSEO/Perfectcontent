@@ -44,6 +44,8 @@ async def create_silo(payload: SiloCreateIn, db: AsyncSession = Depends(get_db))
         language_code=payload.language_code,
         use_haiku=payload.use_haiku,
         generate_image=payload.generate_image,
+        do_refinement=payload.do_refinement,
+        do_schema_jsonld=payload.do_schema_jsonld,
         cost_cap=payload.cost_cap,
     )
     silo, jobs = await silo_svc.create_silo(db, plan)

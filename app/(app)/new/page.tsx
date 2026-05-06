@@ -87,6 +87,8 @@ export default function NewContentPage() {
   const [defaultLinking, setDefaultLinking] = useState(true);
   const [defaultImage, setDefaultImage] = useState(false);
   const [defaultHaiku, setDefaultHaiku] = useState(false);
+  const [doRefinement, setDoRefinement] = useState(false);
+  const [doSchemaJsonld, setDoSchemaJsonld] = useState(false);
   const [autoValidate, setAutoValidate] = useState(true);
   const [costCap, setCostCap] = useState<number | "">(1.0);
 
@@ -190,6 +192,8 @@ export default function NewContentPage() {
           generate_image: defaultImage,
           auto_validate_blueprint: autoValidate,
           cost_cap: costCap === "" ? null : Number(costCap),
+          do_refinement: doRefinement,
+          do_schema_jsonld: doSchemaJsonld,
         },
       });
       router.push(`/batches/${res.batch_id}`);
@@ -426,6 +430,44 @@ export default function NewContentPage() {
               className="input"
             />
           </Field>
+        </div>
+
+        {/* Optional quality boosters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+            doRefinement ? "border-accent-500/40 bg-accent-500/5" : "border-[var(--border)] bg-white/[0.025] hover:bg-white/[0.05]"
+          }`}>
+            <div className="flex flex-col">
+              <span className="text-sm text-zinc-200 inline-flex items-center">
+                ✍️ Relecture par Claude
+                <HelpIcon content="Une 2e passe Claude relit l'article et corrige les défauts (passages flous, paragraphes uniformes, formules IA, casse incorrecte). +50 % de coût environ, qualité nettement supérieure." />
+              </span>
+              <span className="text-[10px] text-zinc-500">2e passe correctrice (~+50 % de coût)</span>
+            </div>
+            <input
+              type="checkbox"
+              checked={doRefinement}
+              onChange={(e) => setDoRefinement(e.target.checked)}
+              className="accent-accent-500"
+            />
+          </label>
+          <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+            doSchemaJsonld ? "border-accent-500/40 bg-accent-500/5" : "border-[var(--border)] bg-white/[0.025] hover:bg-white/[0.05]"
+          }`}>
+            <div className="flex flex-col">
+              <span className="text-sm text-zinc-200 inline-flex items-center">
+                🔖 Schema JSON-LD
+                <HelpIcon content="Génère le balisage schema.org complet (Article + FAQPage si FAQ détectée) prêt à coller dans Yoast/RankMath. Sans BreadcrumbList." />
+              </span>
+              <span className="text-[10px] text-zinc-500">Article + FAQPage automatiques</span>
+            </div>
+            <input
+              type="checkbox"
+              checked={doSchemaJsonld}
+              onChange={(e) => setDoSchemaJsonld(e.target.checked)}
+              className="accent-accent-500"
+            />
+          </label>
         </div>
       </section>
 
