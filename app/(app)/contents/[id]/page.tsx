@@ -110,6 +110,12 @@ export default function ContentPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <CoverageBadge score={content.coverage_score} />
+            <CopyEverythingButton
+              title={chosen?.title ?? content.chosen_title ?? ""}
+              meta={chosen?.meta ?? content.chosen_meta ?? ""}
+              slug={content.slug ?? ""}
+              html={html}
+            />
             <PromptViewerButton contentId={id!} />
             <button
               onClick={archive}
@@ -247,5 +253,88 @@ export default function ContentPage() {
         )}
       </div>
     </div>
+  );
+}
+
+
+function CopyEverythingButton({
+  title,
+  meta,
+  slug,
+  html,
+}: {
+  title: string;
+  meta: string;
+  slug: string;
+  html: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function htmlToText(input: string): string {
+    if (typeof window === "undefined") return input;
+    const doc = new DOMParser().parseFromString(input, "text/html");
+    doc.querySelectorAll("script, style, noscript").forEach((el) => el.remove());
+    const out: string[] = [];
+    function walk(node: Node, prefix = "") {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = node.textContent || "";
+        if (t.trim()) out.push(t);
+        return;
+      }
+      if (!(node instanceof Element)) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "h1") { out.push("\n# " + (node.textContent || "").trim() + "\n"); return; }
+      if (tag === "h2") { out.push("\n## " + (node.textContent || "").trim() + "\n"); return; }
+      if (tag === "h3") { out.push("\n### " + (node.textContent || "").trim() + "\n"); return; }
+      if (tag === "p")  { out.push((node.textContent || "").trim() + "\n"); return; }
+      if (tag === "li") { out.push("- " + (node.textContent || "").trim()); return; }
+      if (tag === "table") {
+        const rows = Array.from(node.querySelectorAll("tr"));
+        out.push("");
+        for (const r of rows) {
+          const cells = Array.from(r.querySelectorAll("th,td")).map((c) => (c.textContent || "").trim());
+          out.push("| " + cells.join(" | ") + " |");
+        }
+        out.push("");
+        return;
+      }
+      node.childNodes.forEach((c) => walk(c, prefix));
+    }
+    doc.body.childNodes.forEach((c) => walk(c));
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  async function copy() {
+    const body = htmlToText(html || "");
+    const payload =
+      `Title : ${title}\n` +
+      `Metadescription : ${meta}\n` +
+      `Slug : ${slug}\n\n` +
+      body;
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // fallback for older browsers
+      const ta = document.createElement("textarea");
+      ta.value = payload;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); setCopied(true); } catch { /* noop */ }
+      ta.remove();
+      setTimeout(() => setCopied(false), 1800);
+    }
+  }
+
+  return (
+    <button
+      onClick={copy}
+      className="btn-ghost px-2.5 py-1.5 text-xs"
+      title="Copie title + metadescription + slug + contenu prêt à coller dans un Google Doc"
+    >
+      <Icon name="copy" size={12} />
+      {copied ? "Copié ✓" : "Copier le contenu"}
+    </button>
   );
 }

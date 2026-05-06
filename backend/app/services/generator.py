@@ -45,7 +45,35 @@ RYTHME (obligatoire) :
 - ≥3 phrases ultra-courtes (1-5 mots, type "Pas ouf.", "Résultat : rien.").
 - ≥2 phrases longues (30+ mots, subordonnées).
 - Jamais 3 phrases consécutives de longueur similaire (±3 mots).
-- Paragraphes 2-6 phrases, longueurs variées.
+
+PARAGRAPHES (variation imposée) :
+- Règle d'or : 1 paragraphe = 1 idée unique, pertinente, utile au lecteur.
+  Pas de redite. Si l'info est déjà dite, ne la reformule pas, passe à la
+  suite.
+- Longueur VARIÉE : alterner entre paragraphes courts (1-2 phrases, parfois
+  une seule phrase de 5-8 mots qui frappe), paragraphes moyens (3-4 phrases)
+  et paragraphes longs (5-7 phrases pour développer un point complexe).
+- INTERDIT : avoir 3 paragraphes consécutifs de longueur similaire. Un
+  rédacteur humain respire en alternant. Un rédacteur IA aligne des blocs
+  uniformes — c'est le marqueur le plus détectable.
+- Si tu te retrouves à écrire 4 paragraphes "moyens" d'affilée, casse le
+  rythme : insère un paragraphe d'une seule phrase qui pose une question,
+  ou un constat sec.
+
+CASSE DES TITRES (H1, H2, H3) — RÈGLE STRICTE :
+- Capitalise UNIQUEMENT la 1ère lettre du titre, et après un deux-points ou
+  un tiret cadratin/long.
+- INTERDIT le title-case anglo-saxon "Les Erreurs Fatales Des Chatbots En
+  Entreprise". Forme correcte : "Les erreurs fatales des chatbots en
+  entreprise".
+- Exception : noms propres et marques (Google, ChatGPT, Webflow…) gardent
+  leurs majuscules d'origine.
+- Exemples valides :
+  ✓ "Comment choisir une cafetière en 2026"
+  ✓ "Cafetière à grain : guide d'achat complet"
+  ✓ "Pourquoi le SEO change — et comment s'adapter"
+  ✗ "Comment Choisir Une Cafetière En 2026"  ← INTERDIT
+  ✗ "Les Outils SEO Indispensables"           ← INTERDIT
 
 OUVERTURES H2 : varie. Exemple concret / question / affirmation tranchée /
 chiffre / anecdote / contradiction. Pas de phrase de contexte vague.
@@ -144,6 +172,10 @@ Réponds UNIQUEMENT en JSON strict (pas de markdown) :
 
 title_variants : exactement 3, angles distincts.
 - title 50-60 car., mot-clé en début si naturel, zéro clickbait.
+- CASSE : capitale UNIQUEMENT en 1ère lettre + après ':' ou tiret long, JAMAIS
+  une majuscule par mot. Marques/noms propres exceptés.
+  ✓ "Webflow ou WordPress en 2026 ?"
+  ✗ "Webflow Ou WordPress En 2026 ?"
 - meta 140-160 car. MINI-RÉSUMÉ qui répond presque au title : verdict d'abord
   puis invite ("Voir le comparatif.", "Détails ici."). Pas de "Découvrez tout
   sur X". Ex : title "Webflow ou WordPress en 2026 ?" → meta "Webflow pour les

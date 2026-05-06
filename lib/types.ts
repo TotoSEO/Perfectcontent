@@ -82,6 +82,9 @@ export type Content = {
   schema_recommendations: Record<string, unknown> | null;
   internal_links: InternalLink[] | null;
   coverage_score: number | null;
+  slug: string | null;
+  silo_id: string | null;
+  silo_role: "pillar" | "satellite" | null;
   created_at: string;
   updated_at: string;
 };

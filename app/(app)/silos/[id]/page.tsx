@@ -199,10 +199,8 @@ export default function SiloPage() {
           {silo.members.map((m) => (
             <li key={m.content_id}>
               <Link
-                href={m.has_html ? `/contents/${m.content_id}` : "#"}
-                className={`group flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors ${
-                  m.has_html ? "hover:bg-white/[0.04]" : "cursor-default"
-                }`}
+                href={`/contents/${m.content_id}`}
+                className="group flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors hover:bg-white/[0.04]"
               >
                 <span className={`chip ${
                   m.role === "pillar"
@@ -223,9 +221,7 @@ export default function SiloPage() {
                 <span className={`chip ${STATUS_TONE[m.status] || STATUS_TONE.queued}`}>
                   {m.status}
                 </span>
-                {m.has_html && (
-                  <Icon name="chevron-right" size={14} className="text-zinc-600 group-hover:text-accent-400 transition-colors" />
-                )}
+                <Icon name="chevron-right" size={14} className="text-zinc-600 group-hover:text-accent-400 transition-colors" />
               </Link>
             </li>
           ))}
@@ -358,6 +354,14 @@ function MeshAuditPanel({
                       ? `✓ ${row.expected.length} lien${row.expected.length > 1 ? "s" : ""}`
                       : `⚠ ${row.issues.length} pb`}
                   </span>
+                  <Link
+                    href={`/contents/${row.content_id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="btn-ghost text-[11px] px-2 py-1"
+                    title="Ouvrir le contenu pour édition manuelle (ajouter le lien à la main, corriger…)"
+                  >
+                    Ouvrir
+                  </Link>
                   {row.issues.length > 0 && (
                     <button
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); regenerate(row.content_id); }}
