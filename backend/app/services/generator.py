@@ -5,6 +5,7 @@ This is the core of the product — content quality lives or dies here.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -69,6 +70,24 @@ classe, style. Listes 3-5 items, longueurs variées, pas de gras systématique
 sur le 1er mot. Section H2 ≥ 200 mots avant la suivante.
 
 Préfère "Et"/"Mais" en début de phrase à un connecteur formel.
+
+DIVERSITÉ DES EXPRESSIONS (anti keyword stuffing) : les "cibles de fréquence
+par terme" plus bas indiquent COMBIEN de fois il faut couvrir UN CONCEPT.
+Ne répète JAMAIS l'expression exacte autant de fois — varie les surface forms.
+Exemple : si "gouvernance conversationnelle" doit apparaître 5 fois, alterne
+entre "gouvernance conversationnelle", "pilotage du chatbot", "cadre de
+gouvernance", "garde-fous opérationnels", "supervision du dispositif". Le
+fond doit être couvert, pas la formulation cocher des cases. Une expression
+identique répétée plus de 2 fois = signal de bourrage côté Google.
+
+INTRO + CONCLUSION (zéro pitch) : les 200 premiers mots et les 150 derniers
+mots NE DOIVENT PAS contenir :
+- le nom du domaine cible ni d'aucune marque rédactrice
+- une formule promotionnelle ("nous accompagnons", "notre équipe", "faites
+  appel à", "n'hésitez pas à nous contacter")
+L'intro doit poser le problème ou un fait. La conclusion doit donner un
+conseil actionnable ou une prise de position. Si une marque externe doit
+être citée, mets-la dans le corps de l'article, pas aux bornes.
 """
 
 
@@ -148,7 +167,7 @@ Mot-clé cible : {keyword}
 Intent : {intent}
 Type de contenu : {content_type}
 Domaine cible : {domain}
-
+{listicle_block}
 Blueprint VALIDÉE (à respecter strictement) :
 {blueprint}
 
@@ -168,6 +187,63 @@ Cible totale : {target_words} mots.
 {silo_block}
 Réponds en JSON strict.
 """
+
+
+# ---------------------------------------------------------------------------
+# Listicle detection
+# ---------------------------------------------------------------------------
+
+# Match a number written as digits OR as a French numeral word, when it sits
+# in a title that looks like a list ("10 erreurs", "5 outils", "7 raisons").
+_LISTICLE_RE = re.compile(
+    r"(?:^|[^\w])(\d{1,3}|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|quinze|vingt)\s+"
+    r"(?:[\wéèêëàâîïôöûüç-]+)",
+    re.IGNORECASE,
+)
+_NUMERAL_FR = {
+    "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "six": 6, "sept": 7,
+    "huit": 8, "neuf": 9, "dix": 10, "onze": 11, "douze": 12, "quinze": 15,
+    "vingt": 20,
+}
+
+
+def detect_listicle_count(text: str) -> int | None:
+    """If `text` (keyword, blueprint title) implies a numbered list, return
+    the count. Else None. Used to enforce a structured H2/H3 numbering in the
+    generation prompt — otherwise Claude often delivers prose that doesn't
+    match the title's promise."""
+    if not text:
+        return None
+    m = _LISTICLE_RE.search(text)
+    if not m:
+        return None
+    raw = m.group(1).lower()
+    if raw.isdigit():
+        n = int(raw)
+        # Only treat as listicle for sensible list sizes.
+        if 3 <= n <= 50:
+            return n
+        return None
+    return _NUMERAL_FR.get(raw)
+
+
+def _listicle_block(keyword: str, blueprint: dict) -> str:
+    """Build the prompt fragment that forces a numbered structure when the
+    user keyword (or blueprint title) asks for N items."""
+    title = (blueprint or {}).get("title_target") or ""
+    n = detect_listicle_count(title) or detect_listicle_count(keyword)
+    if not n:
+        return ""
+    return (
+        f"\nFORMAT LISTICLE OBLIGATOIRE — le titre annonce {n} items.\n"
+        f"- Tu dois livrer EXACTEMENT {n} items numérotés explicitement (1., 2., …, {n}.).\n"
+        f"- Chaque item est un H2 ou un H3 dont le texte commence par son numéro :\n"
+        f"  ex. \"1. Premier item\", \"2. Deuxième item\".\n"
+        f"- Pas de regroupement (\"Items 1-3\", \"4-6\") : un H2/H3 par item, sans exception.\n"
+        f"- Si le sujet ne supporte pas {n} items distincts, dis-le DANS l'introduction\n"
+        f"  ET trouve {n} angles complémentaires plutôt que de fusionner — la promesse\n"
+        f"  du titre prime sur tout.\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +379,7 @@ async def generate_content(
         intent=intent,
         content_type=content_type,
         domain=domain or "(aucun)",
+        listicle_block=_listicle_block(keyword, blueprint),
         blueprint=json.dumps(blueprint, ensure_ascii=False, indent=2),
         required_terms=", ".join(required_terms[:30]) or "(aucun)",
         entities=", ".join(entities[:20]) or "(aucune)",
