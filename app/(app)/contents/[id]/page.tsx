@@ -13,6 +13,7 @@ import { SemanticScore } from "@/components/SemanticScore";
 import { ImagePanel } from "@/components/ImagePanel";
 import { CompetitorsPanel } from "@/components/CompetitorsPanel";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/Icon";
 
 export default function ContentPage() {
   const params = useParams<{ id: string }>();
@@ -28,6 +29,7 @@ export default function ContentPage() {
   const [html, setHtml] = useState("");
   const [chosenIdx, setChosenIdx] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (content?.html) setHtml(content.html);
@@ -55,6 +57,7 @@ export default function ContentPage() {
           chosen_meta: chosen?.meta,
         },
       });
+      setSavedAt(Date.now());
       mutate();
     } finally {
       setSaving(false);
@@ -83,82 +86,131 @@ export default function ContentPage() {
     router.push("/dashboard");
   }
 
+  const justSaved = savedAt && Date.now() - savedAt < 2200;
+
   return (
-    <div className="grid grid-cols-3 gap-6 max-w-7xl">
-      <div className="col-span-2 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">{content.keyword}</h1>
-          <div className="flex items-center gap-3">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadein">
+      <div className="lg:col-span-2 space-y-4 min-w-0">
+        <div className="card p-5 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="eyebrow">Contenu</div>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-50 mt-1 break-words">
+              {content.chosen_title || content.keyword}
+            </h1>
+            <div className="text-xs text-zinc-500 mt-1.5 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-zinc-400">{content.keyword}</span>
+              {content.intent && (
+                <>
+                  <span className="text-zinc-700">·</span>
+                  <span>{content.intent}</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <CoverageBadge score={content.coverage_score} />
             <button
               onClick={archive}
-              className="text-xs text-zinc-400 hover:text-white"
+              className="btn-ghost px-2.5 py-1.5 text-xs"
               title="Archiver"
             >
+              <Icon name="archive" size={12} />
               Archiver
             </button>
             <button
               onClick={remove}
-              className="text-xs text-red-400 hover:text-red-300"
+              className="btn-danger px-2.5 py-1.5 text-xs"
               title="Supprimer"
             >
+              <Icon name="trash" size={12} />
               Supprimer
             </button>
             <button
               onClick={save}
               disabled={saving}
-              className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-3 py-2 rounded text-sm"
+              className="btn-primary px-3.5 py-2 text-sm"
             >
-              {saving ? "Enregistrement…" : "Enregistrer"}
+              {saving ? (
+                <>
+                  <Icon name="spinner" size={14} /> Enregistrement…
+                </>
+              ) : justSaved ? (
+                <>
+                  <Icon name="check" size={14} /> Enregistré
+                </>
+              ) : (
+                <>
+                  <Icon name="save" size={14} /> Enregistrer
+                </>
+              )}
             </button>
           </div>
         </div>
 
         {variants.length > 0 && (
-          <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
-            <div className="text-xs uppercase tracking-wider text-zinc-500">
-              Variantes title / meta
+          <div className="card overflow-hidden">
+            <div className="card-section">
+              <h2 className="label">Variantes title / meta</h2>
+              <span className="text-[11px] text-zinc-500 tabular-nums">{variants.length}</span>
             </div>
-            {variants.map((v, i) => (
-              <label
-                key={i}
-                className={`block border rounded p-2 cursor-pointer ${
-                  chosenIdx === i
-                    ? "border-accent-500 bg-accent-500/10"
-                    : "border-ink-800 hover:border-ink-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="title"
-                  className="hidden"
-                  checked={chosenIdx === i}
-                  onChange={() => setChosenIdx(i)}
-                />
-                <div className="text-sm font-medium">{v.title}</div>
-                <div className="text-xs text-zinc-500">{v.meta}</div>
-              </label>
-            ))}
+            <ul className="divide-y divide-[var(--border)]">
+              {variants.map((v, i) => (
+                <li key={i}>
+                  <label
+                    className={`block px-4 py-3 cursor-pointer transition-colors ${
+                      chosenIdx === i
+                        ? "bg-accent-500/10"
+                        : "hover:bg-[#13141a]"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                        chosenIdx === i
+                          ? "border-accent-400 bg-accent-500/20"
+                          : "border-[var(--border-strong)]"
+                      }`}>
+                        {chosenIdx === i && <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />}
+                      </span>
+                      <input
+                        type="radio"
+                        name="title"
+                        className="sr-only"
+                        checked={chosenIdx === i}
+                        onChange={() => setChosenIdx(i)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className={`text-sm font-medium ${chosenIdx === i ? "text-white" : "text-zinc-200"}`}>
+                          {v.title}
+                        </div>
+                        <div className="text-xs text-zinc-500 mt-0.5">{v.meta}</div>
+                      </div>
+                    </div>
+                  </label>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
         <ContentEditor html={html} onChange={setHtml} />
 
-        <div className="flex gap-3 text-sm">
+        <div className="flex flex-wrap gap-2 text-xs">
           <a
             href={`${API_BASE}/srv/contents/${id}/export?format=html`}
             target="_blank"
             rel="noreferrer"
-            className="text-accent-500 hover:underline"
+            className="btn-secondary px-3 py-2 text-xs"
           >
+            <Icon name="download" size={12} />
             Export HTML
           </a>
           <a
             href={`${API_BASE}/srv/contents/${id}/export?format=md`}
             target="_blank"
             rel="noreferrer"
-            className="text-accent-500 hover:underline"
+            className="btn-secondary px-3 py-2 text-xs"
           >
+            <Icon name="download" size={12} />
             Export Markdown
           </a>
         </div>
@@ -166,7 +218,7 @@ export default function ContentPage() {
         <CompetitorsPanel contentId={id!} />
       </div>
 
-      <div className="col-span-1 space-y-4">
+      <div className="lg:col-span-1 space-y-4 min-w-0">
         <ImagePanel
           contentId={id!}
           imageUrl={content.image_url}
@@ -177,9 +229,16 @@ export default function ContentPage() {
         <SectionList html={html} onRegenerate={regenSection} />
         <LinkSuggestionsPanel links={content.internal_links} />
         {content.schema_recommendations && (
-          <details className="bg-ink-900 border border-ink-800 rounded-xl p-4">
-            <summary className="text-sm cursor-pointer">Schema recommandé</summary>
-            <pre className="text-xs mt-2 overflow-auto">
+          <details className="card group">
+            <summary className="card-section cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <h3 className="label">Schema recommandé</h3>
+              <Icon
+                name="chevron-right"
+                size={14}
+                className="text-zinc-500 transition-transform group-open:rotate-90"
+              />
+            </summary>
+            <pre className="text-xs p-4 overflow-auto text-zinc-400 max-h-72">
               {JSON.stringify(content.schema_recommendations, null, 2)}
             </pre>
           </details>

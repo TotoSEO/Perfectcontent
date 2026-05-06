@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { runSiloToCompletion } from "@/lib/pipeline";
+import { Icon } from "@/components/Icon";
 
 type Member = {
   content_id: string;
@@ -132,15 +133,15 @@ export default function SiloPage() {
   const total = silo.members.length;
 
   return (
-    <div className="space-y-6 max-w-6xl animate-fadein">
+    <div className="space-y-6 animate-fadein">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <div className="label mb-1.5">Silo SEO</div>
-          <h1 className="text-[28px] font-semibold tracking-tight flex items-center gap-2 truncate">
-            <span className="text-accent-400">◧</span>
+          <div className="eyebrow mb-2">Silo SEO</div>
+          <h1 className="h-page flex items-center gap-2 truncate">
+            <Icon name="silo" size={24} className="text-accent-400 shrink-0" />
             <span className="truncate">{silo.name || "Silo"}</span>
           </h1>
-          <p className="text-sm text-zinc-500 mt-1 truncate max-w-3xl">
+          <p className="h-sub truncate max-w-3xl">
             {sats.length} satellite{sats.length > 1 ? "s" : ""} ·{" "}
             {externalPillar ? (
               <>pilier externe <code className="text-accent-300">{silo.pillar_external_url}</code></>
@@ -156,8 +157,9 @@ export default function SiloPage() {
           {running && (
             <button
               onClick={() => { cancelled.current = true; }}
-              className="btn-ghost text-xs"
+              className="btn-ghost text-xs px-2.5 py-1.5"
             >
+              <Icon name="x" size={12} />
               Annuler
             </button>
           )}
@@ -198,8 +200,8 @@ export default function SiloPage() {
             <li key={m.content_id}>
               <Link
                 href={m.has_html ? `/contents/${m.content_id}` : "#"}
-                className={`flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors ${
-                  m.has_html ? "hover:bg-[#1a1a1e]" : "cursor-default"
+                className={`group flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors ${
+                  m.has_html ? "hover:bg-[#13141a]" : "cursor-default"
                 }`}
               >
                 <span className={`chip ${
@@ -207,10 +209,11 @@ export default function SiloPage() {
                     ? "border-accent-500/40 bg-accent-500/10 text-accent-200"
                     : "border-blue-500/30 bg-blue-500/5 text-blue-300"
                 }`}>
-                  {m.role === "pillar" ? "◉ pilier" : "○ satellite"}
+                  <span className={`w-1.5 h-1.5 rounded-full ${m.role === "pillar" ? "bg-accent-400" : "bg-blue-400"}`} />
+                  {m.role === "pillar" ? "pilier" : "satellite"}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-[14px] truncate">
+                  <div className="font-medium text-[14px] truncate text-zinc-100">
                     {m.chosen_title || m.keyword}
                   </div>
                   <div className="text-[11px] text-zinc-500 truncate font-mono mt-0.5">
@@ -220,7 +223,9 @@ export default function SiloPage() {
                 <span className={`chip ${STATUS_TONE[m.status] || STATUS_TONE.queued}`}>
                   {m.status}
                 </span>
-                {m.has_html && <span className="text-zinc-500 text-xs">→</span>}
+                {m.has_html && (
+                  <Icon name="chevron-right" size={14} className="text-zinc-600 group-hover:text-accent-400 transition-colors" />
+                )}
               </Link>
             </li>
           ))}
@@ -249,13 +254,13 @@ function PhaseBar({ current, status }: { current: string | null; status: string 
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium transition-colors ${
                   isDone
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
                     : isCurrent
-                    ? "bg-accent-500/25 text-accent-200 border border-accent-500/50 animate-pulse"
-                    : "bg-[#1c1c20] text-zinc-500 border border-[#34343b]"
+                    ? "bg-accent-500/20 text-accent-200 border border-accent-500/50 animate-pulse-soft"
+                    : "bg-[#13141a] text-zinc-500 border border-[var(--border-strong)]"
                 }`}
               >
-                {isDone ? "✓" : i + 1}
+                {isDone ? <Icon name="check" size={12} /> : i + 1}
               </div>
               <span
                 className={`text-xs whitespace-nowrap ${
@@ -267,7 +272,7 @@ function PhaseBar({ current, status }: { current: string | null; status: string 
               {i < PHASES.length - 1 && (
                 <div
                   className={`w-8 h-px transition-colors ${
-                    isDone ? "bg-emerald-500/40" : "bg-[#34343b]"
+                    isDone ? "bg-emerald-500/40" : "bg-[var(--border-strong)]"
                   }`}
                 />
               )}

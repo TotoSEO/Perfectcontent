@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Blueprint, Section } from "@/lib/types";
+import { Icon } from "@/components/Icon";
 
 export function BlueprintEditor({
   initial,
@@ -34,56 +35,57 @@ export function BlueprintEditor({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <span className="text-xs uppercase tracking-wider text-zinc-500">Title</span>
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
+        <label className="space-y-1.5 block">
+          <span className="label">Title</span>
           <input
             value={bp.title_target}
             onChange={(e) => setBp({ ...bp, title_target: e.target.value })}
-            className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+            className="input"
           />
         </label>
-        <label className="space-y-1">
-          <span className="text-xs uppercase tracking-wider text-zinc-500">
-            Cible (mots)
-          </span>
+        <label className="space-y-1.5 block">
+          <span className="label">Cible (mots)</span>
           <input
             type="number"
             value={bp.target_words}
             onChange={(e) => setBp({ ...bp, target_words: Number(e.target.value) })}
-            className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+            className="input tabular-nums"
           />
         </label>
       </div>
 
-      <label className="space-y-1 block">
-        <span className="text-xs uppercase tracking-wider text-zinc-500">
-          Angle différenciant
-        </span>
+      <label className="space-y-1.5 block">
+        <span className="label">Angle différenciant</span>
         <textarea
           value={bp.angle}
           onChange={(e) => setBp({ ...bp, angle: e.target.value })}
-          className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 min-h-[60px]"
+          className="input min-h-[64px] leading-relaxed"
         />
       </label>
 
       <div className="space-y-3">
-        <h3 className="text-sm uppercase tracking-wider text-zinc-500">Sections</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="label">Sections H2</h3>
+          <span className="text-[11px] text-zinc-500 tabular-nums">
+            {bp.sections.length} section{bp.sections.length > 1 ? "s" : ""}
+          </span>
+        </div>
         {bp.sections.map((s, i) => (
-          <div key={s.id} className="border border-ink-800 rounded p-3 space-y-2">
-            <div className="flex justify-between gap-2">
+          <div key={s.id} className="card p-3 space-y-2">
+            <div className="flex flex-wrap gap-2">
               <input
                 value={s.h2}
                 onChange={(e) => updateSection(i, { h2: e.target.value })}
-                className="flex-1 bg-ink-800 border border-ink-700 rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[200px] bg-[#13141a] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
               />
               <select
                 value={s.element || ""}
                 onChange={(e) =>
                   updateSection(i, { element: (e.target.value || undefined) as Section["element"] })
                 }
-                className="bg-ink-800 border border-ink-700 rounded px-2 py-1 text-sm"
+                className="bg-[#13141a] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
               >
                 <option value="">prose</option>
                 <option value="table">tableau</option>
@@ -93,9 +95,11 @@ export function BlueprintEditor({
               </select>
               <button
                 onClick={() => removeSection(i)}
-                className="text-red-400 text-xs hover:underline"
+                className="btn-ghost px-2.5 py-1.5 text-xs hover:text-red-300 hover:bg-red-500/10"
+                title="Supprimer la section"
+                type="button"
               >
-                Suppr.
+                <Icon name="trash" size={14} />
               </button>
             </div>
             <textarea
@@ -104,24 +108,35 @@ export function BlueprintEditor({
                 updateSection(i, { bullets: e.target.value.split("\n").filter(Boolean) })
               }
               placeholder="bullet points (un par ligne)"
-              className="w-full bg-ink-800 border border-ink-700 rounded px-2 py-1 text-sm min-h-[60px]"
+              className="w-full bg-[#13141a] border border-[var(--border)] rounded-lg px-3 py-2 text-sm min-h-[64px] focus:outline-none focus:border-accent-500 leading-relaxed"
             />
           </div>
         ))}
         <button
           onClick={addSection}
-          className="text-sm text-accent-500 hover:underline"
+          className="w-full text-sm text-accent-400 hover:text-accent-300 py-2 border border-dashed border-[var(--border)] hover:border-accent-500/40 hover:bg-accent-500/5 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+          type="button"
         >
-          + Ajouter une section
+          <Icon name="plus" size={14} />
+          Ajouter une section
         </button>
       </div>
 
       <button
         disabled={busy}
         onClick={() => onSubmit(bp)}
-        className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-4 py-2 rounded font-medium"
+        className="btn-primary w-full sm:w-auto"
+        type="button"
       >
-        {busy ? "Reprise…" : "Valider et générer"}
+        {busy ? (
+          <>
+            <Icon name="spinner" size={14} /> Reprise…
+          </>
+        ) : (
+          <>
+            <Icon name="check" size={14} /> Valider et générer
+          </>
+        )}
       </button>
     </div>
   );

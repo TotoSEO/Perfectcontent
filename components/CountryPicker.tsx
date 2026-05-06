@@ -14,8 +14,6 @@ export function CountryPicker({
 }) {
   const country = findCountry(countryCode) ?? COUNTRIES[0];
 
-  // If the current language isn't supported by the new country, snap to the
-  // country's first language.
   useEffect(() => {
     if (!country.langs.includes(languageCode)) {
       onChange(countryCode, country.langs[0]);
@@ -26,7 +24,7 @@ export function CountryPicker({
   return (
     <div className="grid grid-cols-2 gap-3">
       <label className="space-y-1.5 block">
-        <span className="text-xs uppercase tracking-wider text-zinc-500">Pays</span>
+        <span className="label">Pays</span>
         <select
           value={countryCode}
           onChange={(e) => {
@@ -34,7 +32,7 @@ export function CountryPicker({
             const c = findCountry(code);
             onChange(code, c?.langs[0] ?? "en");
           }}
-          className="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500"
+          className="input"
         >
           {COUNTRIES.map((c) => (
             <option key={c.code} value={c.code}>
@@ -45,12 +43,12 @@ export function CountryPicker({
       </label>
 
       <label className="space-y-1.5 block">
-        <span className="text-xs uppercase tracking-wider text-zinc-500">Langue</span>
+        <span className="label">Langue</span>
         <select
           value={languageCode}
           disabled={country.langs.length === 1}
           onChange={(e) => onChange(countryCode, e.target.value)}
-          className="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 disabled:opacity-60"
+          className="input disabled:opacity-60"
         >
           {country.langs.map((lng) => (
             <option key={lng} value={lng}>

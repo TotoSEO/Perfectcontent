@@ -7,6 +7,7 @@ import { api, fetcher } from "@/lib/api";
 import { Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { RichTextarea } from "@/components/RichTextarea";
+import { Icon } from "@/components/Icon";
 
 type Estimate = { sources: number; chars_total: number; low: number; high: number };
 
@@ -80,25 +81,27 @@ export default function FusionPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold inline-flex items-center">
-          🧪 Fusion de contenus
+    <div className="space-y-6 max-w-5xl animate-fadein">
+      <header>
+        <div className="eyebrow mb-2">Création</div>
+        <h1 className="h-page inline-flex items-center gap-2">
+          <Icon name="fusion" size={24} className="text-accent-400" />
+          Fusion de contenus
           <HelpIcon
             side="right"
             content="Quand 2+ pages d'un site se cannibalisent sur le même mot-clé, fusionne-les en un seul contenu unifié sans répétitions. Pas une réécriture : une vraie synthèse intégrative."
           />
         </h1>
-        <p className="text-sm text-zinc-500">
+        <p className="h-sub max-w-2xl">
           Colle le contenu de chaque page (le rich text est préservé : titres,
           gras, tableaux, listes, citations).
         </p>
       </header>
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
+      <section className="card p-5 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="space-y-1 block">
-            <span className="text-xs uppercase tracking-wider text-zinc-500 inline-flex items-center">
+          <label className="space-y-1.5 block">
+            <span className="label inline-flex items-center">
               Mot-clé cible
               <HelpIcon content="Le mot-clé pour lequel les contenus se cannibalisent et que la fusion doit conserver côté SEO." />
             </span>
@@ -106,18 +109,16 @@ export default function FusionPage() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="ex: meilleure cafetière à grain"
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             />
           </label>
 
-          <label className="space-y-1 block">
-            <span className="text-xs uppercase tracking-wider text-zinc-500">
-              Dossier (optionnel)
-            </span>
+          <label className="space-y-1.5 block">
+            <span className="label">Dossier (optionnel)</span>
             <select
               value={folderId}
               onChange={(e) => setFolderId(e.target.value)}
-              className="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2"
+              className="input"
             >
               <option value="">(aucun)</option>
               {folders?.map((f) => (
@@ -126,51 +127,59 @@ export default function FusionPage() {
             </select>
           </label>
         </div>
-      </div>
+      </section>
 
       <div className="space-y-4">
-        {sources.map((s, i) => (
-          <div key={s.id} className="bg-ink-900 border border-ink-800 rounded-xl p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-wider text-zinc-500">
-                Contenu {i + 1}
-              </span>
-              {sources.length > 2 && (
-                <button
-                  onClick={() => remove(s.id)}
-                  className="text-xs text-red-400 hover:underline"
-                >
-                  Retirer
-                </button>
-              )}
+        {sources.map((s, i) => {
+          const words = s.html.replace(/<[^>]+>/g, "").trim().split(/\s+/).filter(Boolean).length;
+          return (
+            <div key={s.id} className="card p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="label inline-flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#13141a] border border-[var(--border)] inline-flex items-center justify-center text-[10px] text-zinc-300 tabular-nums">
+                    {i + 1}
+                  </span>
+                  Contenu {i + 1}
+                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-zinc-500 tabular-nums">{words} mots</span>
+                  {sources.length > 2 && (
+                    <button
+                      onClick={() => remove(s.id)}
+                      className="text-xs text-red-400 hover:text-red-300 inline-flex items-center gap-1"
+                    >
+                      <Icon name="x" size={12} /> Retirer
+                    </button>
+                  )}
+                </div>
+              </div>
+              <RichTextarea
+                value={s.html}
+                onChange={(html) => setSrc(s.id, html)}
+                minHeight={220}
+                placeholder={`Colle ici le contenu de la page ${i + 1}…`}
+              />
             </div>
-            <RichTextarea
-              value={s.html}
-              onChange={(html) => setSrc(s.id, html)}
-              minHeight={220}
-              placeholder={`Colle ici le contenu de la page ${i + 1}…`}
-            />
-            <p className="text-[10px] text-zinc-600">
-              {s.html.replace(/<[^>]+>/g, "").trim().split(/\s+/).filter(Boolean).length} mots
-            </p>
-          </div>
-        ))}
+          );
+        })}
 
         <button
           onClick={add}
-          className="w-full text-sm text-accent-500 hover:bg-ink-900/50 py-2 border border-dashed border-ink-800 rounded-xl"
+          className="w-full text-sm text-accent-400 hover:text-accent-300 py-2.5 border border-dashed border-[var(--border)] hover:border-accent-500/40 hover:bg-accent-500/5 rounded-xl transition-colors flex items-center justify-center gap-1.5"
         >
-          + Ajouter un autre contenu
+          <Icon name="plus" size={14} />
+          Ajouter un autre contenu
         </button>
       </div>
 
       {err && (
-        <div className="bg-red-900/30 border border-red-700 text-red-100 p-3 rounded-xl text-sm">
-          {err}
+        <div className="card border-red-700/50 bg-red-500/10 text-red-200 p-3 text-sm flex items-start gap-2">
+          <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+          <span>{err}</span>
         </div>
       )}
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl p-4 flex items-center justify-between gap-3 sticky bottom-3 backdrop-blur">
+      <div className="card-elevated p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur-md">
         <div className="text-sm">
           {validSources.length < 2 ? (
             <span className="text-zinc-500">
@@ -178,13 +187,16 @@ export default function FusionPage() {
             </span>
           ) : (
             <>
-              <div className="font-medium">
+              <div className="font-medium text-zinc-100">
                 {validSources.length} contenu{validSources.length > 1 ? "s" : ""} prêt{validSources.length > 1 ? "s" : ""} à fusionner
               </div>
               {estimate && (
                 <div className="text-xs text-zinc-400 mt-0.5">
-                  Estimation : <strong className="text-zinc-200">${estimate.low.toFixed(3)}</strong> – <strong className="text-zinc-200">${estimate.high.toFixed(3)}</strong>
-                  <span className="text-zinc-600 ml-1">· {estimate.chars_total.toLocaleString()} caractères en entrée</span>
+                  Estimation :{" "}
+                  <strong className="text-zinc-200 tabular-nums">${estimate.low.toFixed(3)}</strong>
+                  {" – "}
+                  <strong className="text-zinc-200 tabular-nums">${estimate.high.toFixed(3)}</strong>
+                  <span className="text-zinc-600 ml-1.5">· {estimate.chars_total.toLocaleString()} car. en entrée</span>
                 </div>
               )}
             </>
@@ -193,9 +205,17 @@ export default function FusionPage() {
         <button
           disabled={!keyword.trim() || validSources.length < 2 || busy}
           onClick={submit}
-          className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 px-5 py-2.5 rounded font-medium text-sm shadow"
+          className="btn-primary"
         >
-          {busy ? "Fusion en cours…" : "Fusionner les contenus"}
+          {busy ? (
+            <>
+              <Icon name="spinner" size={14} /> Fusion…
+            </>
+          ) : (
+            <>
+              <Icon name="fusion" size={14} /> Fusionner les contenus
+            </>
+          )}
         </button>
       </div>
     </div>

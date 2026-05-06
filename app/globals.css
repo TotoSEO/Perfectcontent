@@ -2,27 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url("https://rsms.me/inter/inter.css");
+
 :root {
-  --bg: #0b0b0d;
-  --bg-elevated: #131316;
-  --bg-hover: #1c1c20;
-  --border: #25252a;
-  --border-hover: #34343b;
+  --bg: #0a0b0e;
+  --bg-elevated: #101115;
+  --bg-hover: #16171c;
+  --surface: #0e0f13;
+  --surface-2: #16171c;
+  --border: #20222a;
+  --border-strong: #2c2e38;
   --text: #ededee;
   --text-muted: #8b8b94;
   --text-faint: #5e5e66;
   --accent: #6366f1;
-  --accent-hover: #7c7ff2;
+  --accent-hover: #7c84ff;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --err: #f87171;
 }
 
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-feature-settings: "ss01", "cv11";
+  font-family: "Inter var", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "ss01", "cv11", "cv02";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+body {
+  background-image:
+    radial-gradient(900px 600px at 12% -10%, rgba(99, 102, 241, 0.10), transparent 60%),
+    radial-gradient(700px 500px at 90% 0%, rgba(124, 132, 255, 0.06), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 * {
@@ -31,70 +46,133 @@ html, body {
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+::-webkit-scrollbar-thumb { background: #23252d; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: #33353f; border: 2px solid transparent; background-clip: padding-box; }
 
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
-/* Reusable component classes (limited, intentional) */
 @layer components {
+  .surface {
+    @apply bg-[var(--surface)] border border-[var(--border)];
+  }
   .card {
-    @apply bg-[#131316] border border-[#25252a] rounded-2xl;
+    @apply bg-[var(--surface)] border border-[var(--border)] rounded-2xl;
+  }
+  .card-elevated {
+    @apply card shadow-card;
   }
   .card-hover {
-    @apply transition-all duration-150 hover:border-[#34343b] hover:bg-[#1a1a1e];
+    @apply transition-all duration-150 hover:border-[var(--border-strong)] hover:bg-[#13141a];
   }
+  .card-section {
+    @apply px-5 py-3 border-b border-[var(--border)] flex items-center justify-between gap-3;
+  }
+
   .input {
-    @apply w-full bg-[#1c1c20] border border-[#2c2c32] rounded-lg px-3.5 py-2.5 text-sm
-           focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20
+    @apply w-full bg-[#13141a] border border-[#23252d] rounded-lg px-3.5 py-2.5 text-sm
+           focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25
            transition-colors duration-150 placeholder:text-zinc-600;
   }
   .label {
-    @apply text-[11px] font-medium uppercase tracking-[0.06em] text-zinc-400;
+    @apply text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400;
   }
+  .eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-300/90;
+  }
+  .h-page {
+    @apply text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-zinc-50;
+  }
+  .h-sub {
+    @apply text-sm text-zinc-500 mt-1.5 leading-relaxed;
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium
            transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
-           focus:outline-none focus:ring-2 focus:ring-accent-500/40;
+           focus:outline-none focus:ring-2 focus:ring-accent-500/40 active:scale-[.98];
   }
   .btn-primary {
-    @apply btn bg-accent-600 text-white hover:bg-accent-500 shadow-[0_4px_14px_-4px_rgba(99,102,241,0.5)];
+    @apply btn bg-accent-600 text-white hover:bg-accent-500 shadow-cta;
+  }
+  .btn-secondary {
+    @apply btn bg-[#1a1c22] text-zinc-100 border border-[#2a2c36] hover:bg-[#22242c] hover:border-[#3a3c48];
   }
   .btn-ghost {
-    @apply btn text-zinc-400 hover:text-white hover:bg-[#1c1c20];
+    @apply btn text-zinc-400 hover:text-white hover:bg-[#16171c];
   }
   .btn-danger {
-    @apply btn text-red-400 hover:text-red-300 hover:bg-red-500/10;
+    @apply btn text-red-300 hover:text-red-200 hover:bg-red-500/10 border border-transparent hover:border-red-500/30;
   }
+  .btn-icon {
+    @apply inline-flex items-center justify-center rounded-lg w-9 h-9 text-zinc-400
+           hover:text-white hover:bg-[#16171c] transition-colors
+           focus:outline-none focus:ring-2 focus:ring-accent-500/40;
+  }
+
   .chip {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border;
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border whitespace-nowrap;
   }
+  .chip-soft {
+    @apply chip border-[var(--border)] text-zinc-300 bg-[#15161b];
+  }
+  .chip-accent {
+    @apply chip border-accent-500/30 text-accent-200 bg-accent-500/10;
+  }
+  .chip-ok {
+    @apply chip border-emerald-700/50 text-emerald-300 bg-emerald-500/10;
+  }
+  .chip-warn {
+    @apply chip border-amber-600/50 text-amber-200 bg-amber-500/10;
+  }
+  .chip-err {
+    @apply chip border-red-700/50 text-red-300 bg-red-500/10;
+  }
+
   .skeleton {
-    @apply bg-[#1c1c20] rounded animate-pulse;
+    @apply rounded relative overflow-hidden bg-[#15161b];
   }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
   .focus-ring {
     @apply focus:outline-none focus:ring-2 focus:ring-accent-500/40;
+  }
+
+  .divider {
+    @apply h-px w-full bg-[var(--border)];
+  }
+
+  .empty {
+    @apply card p-12 text-center space-y-3 border-dashed animate-fadein;
+  }
+  .empty-icon {
+    @apply mx-auto w-12 h-12 rounded-2xl bg-accent-600/10 border border-accent-500/30 flex items-center justify-center text-accent-300;
+  }
+
+  .kbd {
+    @apply px-1.5 py-0.5 rounded border border-[var(--border)] bg-[#13141a] text-[10px] font-mono text-zinc-400;
   }
 }
 
 /* TipTap editor body styling */
-.tt { @apply max-w-none text-zinc-100; }
-.tt h1 { @apply text-2xl font-semibold mt-2 mb-3; }
-.tt h2 { @apply text-xl font-semibold mt-6 mb-2; }
-.tt h3 { @apply text-lg font-semibold mt-4 mb-2; }
-.tt p  { @apply leading-relaxed mb-3; }
-.tt a  { @apply text-accent-500 underline; }
+.tt { @apply max-w-none text-zinc-100 leading-relaxed; }
+.tt h1 { @apply text-2xl font-semibold mt-2 mb-3 tracking-tight; }
+.tt h2 { @apply text-xl font-semibold mt-7 mb-3 tracking-tight; }
+.tt h3 { @apply text-lg font-semibold mt-5 mb-2; }
+.tt p  { @apply leading-relaxed mb-3 text-zinc-200; }
+.tt a  { @apply text-accent-400 underline decoration-accent-500/40 underline-offset-2 hover:decoration-accent-400; }
 .tt ul { @apply list-disc pl-6 mb-3; }
 .tt ol { @apply list-decimal pl-6 mb-3; }
 .tt li { @apply mb-1; }
-.tt strong { @apply font-semibold; }
+.tt strong { @apply font-semibold text-white; }
 .tt em { @apply italic; }
-.tt table { @apply border-collapse w-full mb-3; }
-.tt th, .tt td { @apply border border-[#2c2c32] px-2 py-1; }
-.tt th { @apply font-semibold bg-[#1c1c20]; }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.animate-fadein { animation: fadeIn 0.2s ease-out; }
+.tt blockquote { @apply border-l-2 border-accent-500/60 pl-4 py-1 my-3 text-zinc-300 italic; }
+.tt table { @apply border-collapse w-full mb-3 text-sm; }
+.tt th, .tt td { @apply border border-[#23252d] px-3 py-2; }
+.tt th { @apply font-semibold bg-[#15161b] text-zinc-200; }
+.tt code { @apply px-1.5 py-0.5 rounded bg-[#16171c] text-accent-200 text-[0.9em] font-mono; }

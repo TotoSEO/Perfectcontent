@@ -7,6 +7,7 @@ import { api, fetcher } from "@/lib/api";
 import { ContentType, Domain, Folder } from "@/lib/types";
 import { HelpIcon } from "@/components/Tooltip";
 import { CountryPicker } from "@/components/CountryPicker";
+import { Icon } from "@/components/Icon";
 
 type Bucket = { type: ContentType; label: string; hint: string; emoji: string; color: string };
 
@@ -199,16 +200,17 @@ export default function NewContentPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl animate-fadein">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="label mb-1.5">Création</div>
-          <h1 className="text-[28px] font-semibold tracking-tight">Nouveau lot de contenus</h1>
-          <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
-            Colle tes mots-clés dans la bonne catégorie, ajuste maillage / image par
-            mot-clé si besoin, et lance.
-          </p>
-        </div>
+    <div className="space-y-7 animate-fadein">
+      <header>
+        <div className="eyebrow mb-2">Création</div>
+        <h1 className="h-page inline-flex items-center gap-2">
+          <Icon name="sparkles" size={24} className="text-accent-400" />
+          Nouveau lot de contenus
+        </h1>
+        <p className="h-sub max-w-2xl">
+          Colle tes mots-clés dans la bonne catégorie, ajuste maillage / image par
+          mot-clé si besoin, et lance.
+        </p>
       </header>
 
       {/* Step 1 — buckets */}
@@ -427,21 +429,21 @@ export default function NewContentPage() {
         </div>
       </section>
 
-      <div className="card p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)]">
+      <div className="card-elevated p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-3 backdrop-blur-md">
         <div className="text-sm">
           {totalCount === 0 ? (
             <span className="text-zinc-500">Aucun mot-clé pour l'instant.</span>
           ) : (
             <>
-              <div className="font-medium tabular-nums">
+              <div className="font-medium tabular-nums text-zinc-100">
                 {totalCount} contenu{totalCount > 1 ? "s" : ""} prêt{totalCount > 1 ? "s" : ""} à lancer
               </div>
               {estimate && (
                 <div className="text-xs text-zinc-400 mt-0.5">
                   Estimation totale :{" "}
-                  <strong className="text-zinc-200">${estimate.low_total.toFixed(2)}</strong>
+                  <strong className="text-zinc-200 tabular-nums">${estimate.low_total.toFixed(2)}</strong>
                   {" – "}
-                  <strong className="text-zinc-200">${estimate.high_total.toFixed(2)}</strong>
+                  <strong className="text-zinc-200 tabular-nums">${estimate.high_total.toFixed(2)}</strong>
                 </div>
               )}
             </>
@@ -452,12 +454,24 @@ export default function NewContentPage() {
           onClick={submit}
           className="btn-primary"
         >
-          {busy ? "Lancement…" : `Lancer${totalCount > 1 ? ` (${totalCount})` : ""}`}
+          {busy ? (
+            <>
+              <Icon name="spinner" size={14} /> Lancement…
+            </>
+          ) : (
+            <>
+              <Icon name="play" size={14} />
+              Lancer{totalCount > 1 ? ` (${totalCount})` : ""}
+            </>
+          )}
         </button>
       </div>
 
       {err && (
-        <div className="card border-red-700/50 bg-red-900/20 text-red-100 p-3 text-sm">{err}</div>
+        <div className="card border-red-700/50 bg-red-500/10 text-red-100 p-3 text-sm flex items-start gap-2">
+          <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+          <span>{err}</span>
+        </div>
       )}
     </div>
   );

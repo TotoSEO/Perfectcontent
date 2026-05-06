@@ -2,14 +2,14 @@ export function CoverageBadge({ score }: { score: number | null }) {
   if (score == null) return null;
   const tone =
     score >= 75
-      ? "bg-emerald-700/30 text-emerald-200 border-emerald-700"
+      ? "border-emerald-700/50 text-emerald-300 bg-emerald-500/10"
       : score >= 50
-      ? "bg-amber-700/30 text-amber-100 border-amber-700"
-      : "bg-red-800/30 text-red-200 border-red-700";
+      ? "border-amber-600/50 text-amber-200 bg-amber-500/10"
+      : "border-red-700/50 text-red-300 bg-red-500/10";
   return (
-    <div className={`inline-flex items-center gap-2 border rounded px-3 py-1 text-sm ${tone}`}>
-      <span className="font-semibold">{score.toFixed(1)}%</span>
-      <span className="text-xs opacity-80">couverture sémantique</span>
+    <div className={`inline-flex items-center gap-2 border rounded-full px-3 py-1 text-xs ${tone}`}>
+      <span className="font-semibold tabular-nums">{score.toFixed(1)}%</span>
+      <span className="opacity-75 text-[10px] uppercase tracking-wider">couverture</span>
     </div>
   );
 }

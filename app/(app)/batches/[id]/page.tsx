@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
-import { runBatch, Step } from "@/lib/pipeline";
+import { runBatch } from "@/lib/pipeline";
 import { Job } from "@/lib/types";
+import { Icon } from "@/components/Icon";
 
 const STEP_LABELS: Record<string, string> = {
   serp: "SERP",
@@ -21,12 +22,12 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const STATUS_TONE: Record<string, string> = {
-  done: "bg-emerald-700/30 text-emerald-200 border-emerald-700",
-  running: "bg-accent-500/20 text-accent-100 border-accent-500",
-  queued: "bg-ink-800 text-zinc-400 border-ink-700",
-  paused: "bg-amber-700/30 text-amber-100 border-amber-700",
-  failed: "bg-red-800/30 text-red-200 border-red-700",
-  capped: "bg-orange-800/30 text-orange-200 border-orange-700",
+  done: "border-emerald-700/50 text-emerald-300 bg-emerald-500/10",
+  running: "border-accent-500/40 text-accent-200 bg-accent-500/10",
+  queued: "border-zinc-700 text-zinc-400 bg-zinc-800/30",
+  paused: "border-amber-600/50 text-amber-200 bg-amber-500/10",
+  failed: "border-red-700/50 text-red-300 bg-red-500/10",
+  capped: "border-orange-600/50 text-orange-200 bg-orange-500/10",
 };
 
 export default function BatchPage() {
@@ -42,7 +43,6 @@ export default function BatchPage() {
   const cancelled = useRef(false);
   const [running, setRunning] = useState(false);
 
-  // Auto-start orchestration once when the batch loads with queued jobs
   useEffect(() => {
     if (!jobs || running) return;
     const queued = jobs.filter((j) => j.status === "queued");
@@ -53,9 +53,7 @@ export default function BatchPage() {
       onJobUpdate: () => mutate(),
       cancelled: () => cancelled.current,
     })
-      .catch(() => {
-        /* errors surface via job rows */
-      })
+      .catch(() => { /* errors surface via job rows */ })
       .finally(() => {
         setRunning(false);
         mutate();
@@ -70,17 +68,24 @@ export default function BatchPage() {
   const live = jobs.filter((j) => ["queued", "running", "paused"].includes(j.status)).length;
   const failed = jobs.filter((j) => ["failed", "capped"].includes(j.status)).length;
   const totalCost = jobs.reduce((acc, j) => acc + Number(j.cost_actual || 0), 0);
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6 animate-fadein">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">
+          <div className="eyebrow mb-2">Lot en cours</div>
+          <h1 className="h-page">
             Lot de {total} contenu{total > 1 ? "s" : ""}
           </h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {done} terminé{done > 1 ? "s" : ""} · {live} en cours · {failed} en échec ·
-            coût total ${totalCost.toFixed(4)}
+          <p className="h-sub flex flex-wrap gap-x-3 gap-y-1">
+            <span><span className="text-emerald-300 font-medium">{done}</span> terminé{done > 1 ? "s" : ""}</span>
+            <span className="text-zinc-700">·</span>
+            <span><span className="text-accent-300 font-medium">{live}</span> en cours</span>
+            <span className="text-zinc-700">·</span>
+            <span><span className="text-red-300 font-medium">{failed}</span> en échec</span>
+            <span className="text-zinc-700">·</span>
+            <span className="tabular-nums">${totalCost.toFixed(4)} dépensés</span>
           </p>
         </div>
         {running && (
@@ -89,22 +94,41 @@ export default function BatchPage() {
               cancelled.current = true;
               setRunning(false);
             }}
-            className="text-xs text-red-400 hover:underline"
+            className="btn-danger px-3 py-2 text-xs"
           >
+            <Icon name="pause" size={12} />
             Arrêter le batch
           </button>
         )}
+      </header>
+
+      <div className="card p-4 flex items-center gap-4">
+        <div className="flex-1">
+          <div className="flex items-center justify-between text-xs text-zinc-500 mb-1.5">
+            <span className="label">Progression</span>
+            <span className="tabular-nums text-zinc-300">{done} / {total} · {pct}%</span>
+          </div>
+          <div className="h-2 bg-[#15161b] rounded-full overflow-hidden">
+            <div
+              className="h-2 bg-gradient-to-r from-accent-500 to-accent-400 rounded-full transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
       </div>
 
       {running && (
-        <div className="bg-accent-500/10 border border-accent-500/40 text-accent-100 rounded-xl p-3 text-sm">
-          Génération en cours… <strong>garde cet onglet ouvert</strong> pendant la
-          durée du batch (≈ 1 min par mot-clé). Tu peux naviguer dans l'app dans
-          un autre onglet.
+        <div className="card border-accent-500/40 bg-accent-500/8 text-accent-100 p-3 text-sm flex items-start gap-2">
+          <Icon name="info" size={14} className="mt-0.5 shrink-0 text-accent-300" />
+          <span>
+            Génération en cours… <strong className="text-white">garde cet onglet ouvert</strong> pendant la
+            durée du batch (≈ 1 min par mot-clé). Tu peux naviguer dans l'app dans
+            un autre onglet.
+          </span>
         </div>
       )}
 
-      <div className="bg-ink-900 border border-ink-800 rounded-xl divide-y divide-ink-800">
+      <div className="card divide-y divide-[var(--border)] overflow-hidden">
         {jobs.map((j) => (
           <BatchRow key={j.id} job={j} />
         ))}
@@ -121,19 +145,19 @@ function BatchRow({ job }: { job: Job }) {
   return (
     <Link
       href={href}
-      className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-4 py-3 hover:bg-ink-800/50"
+      className="group grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-5 py-3.5 hover:bg-[#13141a] transition-colors"
     >
       <div className="min-w-0">
-        <div className="font-medium truncate">{job.keyword}</div>
-        <div className="text-xs text-zinc-500">
+        <div className="font-medium truncate text-zinc-100">{job.keyword}</div>
+        <div className="text-xs text-zinc-500 mt-0.5">
           {job.content_type} · {stepLabel}
         </div>
       </div>
-      <div className={`text-xs border rounded px-2 py-0.5 ${tone}`}>{job.status}</div>
+      <span className={`chip ${tone}`}>{job.status}</span>
       <div className="text-xs text-zinc-500 tabular-nums">
         ${Number(job.cost_actual).toFixed(4)}
       </div>
-      <div className="text-xs text-accent-500">→</div>
+      <Icon name="chevron-right" size={14} className="text-zinc-600 group-hover:text-accent-400 transition-colors" />
     </Link>
   );
 }
