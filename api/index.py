@@ -51,4 +51,46 @@ if _import_error is not None:
         })
         await send({"type": "http.response.body", "body": body})
 else:
-    app = _app  # the real FastAPI app
+    # Last-resort wrapper. FastAPI's @exception_handler should catch every
+    # error in route handlers, but if anything escapes (e.g. a low-level
+    # psycopg exception during commit() that doesn't propagate cleanly
+    # through SQLAlchemy's async layer), it bubbles up to Vercel as
+    # FUNCTION_INVOCATION_FAILED → opaque HTML 500. This wrapper ensures the
+    # user always gets the JSON error type + message on the wire.
+    _real_app = _app
+
+    async def app(scope, receive, send):  # type: ignore[no-redef]
+        if scope["type"] != "http":
+            await _real_app(scope, receive, send)
+            return
+        response_started = False
+
+        async def _send_wrapper(message):
+            nonlocal response_started
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await _real_app(scope, receive, _send_wrapper)
+        except Exception as exc:  # noqa: BLE001
+            payload = {
+                "ok": False,
+                "stage": "asgi-tail",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "traceback": traceback.format_exc().splitlines()[-15:],
+                "method": scope.get("method"),
+                "path": scope.get("path"),
+            }
+            body = json.dumps(payload, default=str).encode()
+            if not response_started:
+                await send({
+                    "type": "http.response.start",
+                    "status": 500,
+                    "headers": [(b"content-type", b"application/json")],
+                })
+                await send({"type": "http.response.body", "body": body})
+            # If the response already started, we can't send a new header;
+            # at least surface the error in stdout so it's in Vercel logs.
+            print(f"[ASGI-TAIL] {payload}", flush=True)
