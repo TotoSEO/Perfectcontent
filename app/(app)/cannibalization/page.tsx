@@ -39,12 +39,21 @@ export default function CannibalizationPage() {
 
   function fuseAndGo() {
     if (!ready) return;
-    sessionStorage.setItem(
-      "fusion-prefill",
-      JSON.stringify({
-        sources: [plainToHtml(textA), plainToHtml(textB)],
-      }),
-    );
+    // sessionStorage.setItem can throw in private browsing modes that cap
+    // storage to 0 bytes (Safari ITP, locked-down enterprise profiles) or
+    // when the JSON payload exceeds the per-origin quota for very long
+    // pastes (~5MB). Either way, navigate anyway — the user can paste the
+    // contents into /fusion manually as a fallback.
+    try {
+      sessionStorage.setItem(
+        "fusion-prefill",
+        JSON.stringify({
+          sources: [plainToHtml(textA), plainToHtml(textB)],
+        }),
+      );
+    } catch {
+      /* sessionStorage unavailable or quota exceeded — graceful no-op */
+    }
     router.push("/fusion");
   }
 
@@ -153,7 +162,11 @@ export default function CannibalizationPage() {
         )}
       </section>
 
-      {/* Highlighted previews */}
+      {/* Highlighted previews — IMPORTANT: pass debounced* not live text*.
+          The ranges array stores character positions computed against the
+          debounced text. If we used live text* (which can be 1-2 keystrokes
+          ahead during typing) the .slice(start, end) calls would land on
+          shifted characters and we'd mark the wrong words. */}
       {ready && result.runs > 0 && (
         <section
           className="grid grid-cols-1 lg:grid-cols-2 gap-3 animate-rise"
@@ -161,13 +174,13 @@ export default function CannibalizationPage() {
         >
           <Preview
             label="Aperçu A"
-            text={textA}
+            text={debouncedA}
             ranges={result.rangesA}
             color={tone.color}
           />
           <Preview
             label="Aperçu B"
-            text={textB}
+            text={debouncedB}
             ranges={result.rangesB}
             color={tone.color}
           />

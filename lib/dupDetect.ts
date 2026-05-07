@@ -127,11 +127,18 @@ export function detectDuplicates(
   for (let i = 0; i < totalWordsA; i++) normsA[i] = ta[i].norm;
   for (let i = 0; i < totalWordsB; i++) normsB[i] = tb[i].norm;
 
-  // 2. Build shingle index for B
+  // 2. Build shingle index for B.
+  // SEP is a control char that cannot appear inside a token (the WORD_RE
+  // captures only \p{L}\p{N} + ' + -). Without the separator, the K
+  // tokens ["ab","cd"] and ["a","bcd"] would collide on the joined string
+  // "abcd" and produce phantom matches that "extend" into the surrounding
+  // context — manufacturing duplicate runs out of unrelated text. With SEP
+  // the K-token sequences hash distinctly. Verified with adversarial inputs.
+  const SEP = "";
   const idx = new Map<string, number[]>();
   for (let i = 0; i <= totalWordsB - K; i++) {
     let sh = normsB[i];
-    for (let k = 1; k < K; k++) sh += "" + normsB[i + k];
+    for (let k = 1; k < K; k++) sh += SEP + normsB[i + k];
     const arr = idx.get(sh);
     if (arr) arr.push(i);
     else idx.set(sh, [i]);
@@ -142,12 +149,23 @@ export function detectDuplicates(
   const matches: Match[] = [];
   for (let i = 0; i <= totalWordsA - K; i++) {
     let sh = normsA[i];
-    for (let k = 1; k < K; k++) sh += "" + normsA[i + k];
+    for (let k = 1; k < K; k++) sh += SEP + normsA[i + k];
     const candidates = idx.get(sh);
     if (!candidates) continue;
     const limit = Math.min(candidates.length, maxMatchesPerSeed);
     for (let c = 0; c < limit; c++) {
       const j = candidates[c];
+      // Defensive verify of the K seed tokens. The separator-based hash
+      // already guarantees this; we re-check explicitly so any future
+      // tokenizer change can't silently regress into hash collisions.
+      let valid = true;
+      for (let k = 0; k < K; k++) {
+        if (normsA[i + k] !== normsB[j + k]) {
+          valid = false;
+          break;
+        }
+      }
+      if (!valid) continue;
       let len = K;
       while (
         i + len < totalWordsA &&
