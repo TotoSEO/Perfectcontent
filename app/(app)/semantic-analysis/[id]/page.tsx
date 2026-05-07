@@ -261,14 +261,57 @@ export default function SemanticAnalysisDetailPage() {
                 </div>
               </section>
 
-              {/* SECONDARY DATA */}
-              {(data.entities?.length || data.common_subthemes?.length || data.content_gaps?.length) && (
-                <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <ChipsBlock title="Entités détectées" items={data.entities || []} />
-                  <ChipsBlock title="Sous-thèmes communs" items={data.common_subthemes || []} />
-                  <ChipsBlock title="Content gaps" items={data.content_gaps || []} />
+              {/* SECONDARY DATA — Claude's qualitative analysis. Long-form
+                  items (subthemes, gaps) get bullet cards that wrap; only
+                  short tokens (entities) get chips. */}
+              {(data.entities?.length || data.common_subthemes?.length ||
+                data.rare_subthemes?.length || data.content_gaps?.length) ? (
+                <section className="space-y-4">
+                  {data.content_gaps && data.content_gaps.length > 0 && (
+                    <BulletCard
+                      title="Content gaps — opportunités à exploiter"
+                      icon="alert"
+                      tone="amber"
+                      items={data.content_gaps}
+                    />
+                  )}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {data.common_subthemes && data.common_subthemes.length > 0 && (
+                      <BulletCard
+                        title="Sous-thèmes communs"
+                        icon="check"
+                        tone="emerald"
+                        items={data.common_subthemes}
+                      />
+                    )}
+                    {data.rare_subthemes && data.rare_subthemes.length > 0 && (
+                      <BulletCard
+                        title="Sous-thèmes rares — différenciation"
+                        icon="sparkles"
+                        tone="violet"
+                        items={data.rare_subthemes}
+                      />
+                    )}
+                  </div>
+                  {data.entities && data.entities.length > 0 && (
+                    <div className="card overflow-hidden">
+                      <div className="card-section">
+                        <span className="label">Entités détectées</span>
+                        <span className="text-xs text-zinc-500 tabular-nums">
+                          {data.entities.length}
+                        </span>
+                      </div>
+                      <div className="px-4 py-3 flex flex-wrap gap-1.5">
+                        {data.entities.map((it, i) => (
+                          <span key={i} className="chip">
+                            {it}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </section>
-              )}
+              ) : null}
             </>
           )}
         </>
@@ -483,18 +526,74 @@ function TermRow({ stat }: { stat: TermStat }) {
   );
 }
 
-function ChipsBlock({ title, items }: { title: string; items: string[] }) {
+function BulletCard({
+  title,
+  icon,
+  tone,
+  items,
+}: {
+  title: string;
+  icon: "alert" | "check" | "sparkles";
+  tone: "amber" | "emerald" | "violet";
+  items: string[];
+}) {
   if (!items || items.length === 0) return null;
+  const TONES = {
+    amber: {
+      ring: "border-amber-500/25",
+      bg: "bg-amber-500/[0.025]",
+      iconBg: "bg-amber-500/15 border-amber-500/35 text-amber-200",
+      bullet: "bg-amber-500/15 border-amber-500/35 text-amber-200",
+      title: "text-amber-200/90",
+    },
+    emerald: {
+      ring: "border-emerald-500/25",
+      bg: "bg-emerald-500/[0.02]",
+      iconBg: "bg-emerald-500/15 border-emerald-500/35 text-emerald-200",
+      bullet: "bg-emerald-500/15 border-emerald-500/35 text-emerald-200",
+      title: "text-emerald-200/90",
+    },
+    violet: {
+      ring: "border-violet-500/30",
+      bg: "bg-violet-500/[0.025]",
+      iconBg: "bg-violet-500/15 border-violet-500/35 text-violet-200",
+      bullet: "bg-violet-500/15 border-violet-500/35 text-violet-200",
+      title: "text-violet-200/90",
+    },
+  } as const;
+  const t = TONES[tone];
   return (
-    <div className="card p-4">
-      <div className="label mb-2.5">{title}</div>
-      <div className="flex flex-wrap gap-1.5">
-        {items.slice(0, 24).map((it, i) => (
-          <span key={i} className="chip">
-            {it}
+    <div className={`card overflow-hidden ${t.ring} ${t.bg}`}>
+      <div className="px-5 py-3 flex items-center justify-between gap-3 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 ${t.iconBg}`}
+          >
+            <Icon name={icon} size={11} />
           </span>
-        ))}
+          <span className={`text-[12px] font-semibold tracking-wide ${t.title}`}>
+            {title}
+          </span>
+        </div>
+        <span className="text-[11px] text-zinc-500 tabular-nums shrink-0">
+          {items.length}
+        </span>
       </div>
+      <ul className="divide-y divide-[var(--border)]">
+        {items.map((it, i) => (
+          <li
+            key={i}
+            className="px-5 py-3 flex items-start gap-3 text-[13px] leading-relaxed text-zinc-200"
+          >
+            <span
+              className={`shrink-0 w-5 h-5 rounded-full border text-[10px] font-semibold tabular-nums flex items-center justify-center mt-0.5 ${t.bullet}`}
+            >
+              {i + 1}
+            </span>
+            <span className="min-w-0 break-words">{it}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

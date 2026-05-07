@@ -188,35 +188,51 @@ def _is_stop(w: str) -> bool:
     return w in ALL_STOPWORDS or _normalize_accents(w) in ALL_STOPWORDS
 
 
+# Sentence boundaries we slice on before extracting n-grams. Without this, a
+# bigram can span a period: "Doudoune. Pourquoi ..." → (doudoune, pourquoi)
+# becomes a phantom n-gram. We split on common terminators + bullet markers
+# + table cell separators so each chunk represents one continuous clause.
+_SENTENCE_SPLIT_RE = re.compile(r"[.!?;:|\n\r]+|[—–]{1,}|\s•\s|\s>\s")
+
+
+def _split_sentences(text: str) -> list[str]:
+    return [s.strip() for s in _SENTENCE_SPLIT_RE.split(text) if s.strip()]
+
+
 def extract_ngrams(text: str) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, str, str]]]:
     """Return (unigram_surfaces, bigrams, trigrams).
 
     - Unigrams: stop-word-filtered single tokens (still surface form here;
-      caller will stem them).
-    - Bigrams: any 2 adjacent raw tokens whose union has at least one
-      non-stop-word.
-    - Trigrams: any 3 adjacent raw tokens with at least one non-stop-word.
-      We allow a stop word in the middle (e.g. "agence de référencement") —
-      that is the whole point of trigrams.
+      caller will stem them). Collected from the WHOLE text (no boundary
+      restriction — single-token unigrams can't span anything anyway).
+    - Bigrams: any 2 adjacent raw tokens within the SAME SENTENCE whose
+      union has at least one non-stop-word.
+    - Trigrams: any 3 adjacent raw tokens within the SAME SENTENCE with the
+      first and last carrying meaning. Middle slot is a stopword connector
+      ("de", "à", "en", "du", …) — that's where trigrams add value
+      ("agence de marketing"). The sentence-boundary constraint kills
+      cross-clause artefacts like "synthétique quelle matière" (from
+      "...synthétique. Quelle matière...").
     """
-    raw = _raw_tokens(text)
-    unigrams = [w for w in raw if not _is_stop(w)]
+    raw_all = _raw_tokens(text)
+    unigrams = [w for w in raw_all if not _is_stop(w)]
     bigrams: list[tuple[str, str]] = []
     trigrams: list[tuple[str, str, str]] = []
-    # Bigram: both tokens must carry meaning.
-    for i in range(len(raw) - 1):
-        a, b = raw[i], raw[i + 1]
-        if _is_stop(a) or _is_stop(b):
-            continue
-        bigrams.append((a, b))
-    # Trigram: only the first and last must carry meaning. The middle slot
-    # is allowed to be a stopword connector ("de", "à", "en", "du", …) — that
-    # is exactly where trigrams add value over bigrams ("agence de marketing").
-    for i in range(len(raw) - 2):
-        a, b, c = raw[i], raw[i + 1], raw[i + 2]
-        if _is_stop(a) or _is_stop(c):
-            continue
-        trigrams.append((a, b, c))
+
+    for sentence in _split_sentences(text):
+        raw = _raw_tokens(sentence)
+        # Bigram: both tokens must carry meaning.
+        for i in range(len(raw) - 1):
+            a, b = raw[i], raw[i + 1]
+            if _is_stop(a) or _is_stop(b):
+                continue
+            bigrams.append((a, b))
+        # Trigram: only the first and last must carry meaning.
+        for i in range(len(raw) - 2):
+            a, b, c = raw[i], raw[i + 1], raw[i + 2]
+            if _is_stop(a) or _is_stop(c):
+                continue
+            trigrams.append((a, b, c))
     return unigrams, bigrams, trigrams
 
 
