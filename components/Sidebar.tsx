@@ -14,8 +14,9 @@ const ITEMS: Item[] = [
   { href: "/new/silo", label: "Silo SEO", icon: "silo", group: "Création" },
   { href: "/rewrite", label: "Réécriture", icon: "rewrite", group: "Création" },
   { href: "/fusion", label: "Fusion", icon: "fusion", group: "Création" },
-  { href: "/audits", label: "Audit technique", icon: "audit", group: "Audit" },
+  { href: "/semantic-analysis", label: "Analyse sémantique", icon: "audit", group: "Audit" },
   { href: "/cannibalization", label: "Cannibalisation", icon: "fusion", group: "Audit" },
+  { href: "/audits", label: "Audit technique", icon: "audit", group: "Audit" },
   { href: "/domains", label: "Domaines", icon: "globe", group: "Système" },
   { href: "/console", label: "Console", icon: "terminal", group: "Système" },
 ];
