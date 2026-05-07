@@ -205,7 +205,7 @@ export default function NewContentPage() {
   }
 
   return (
-    <div className="space-y-7 animate-fadein">
+    <div className="page-shell space-y-7 animate-fadein">
       <header className="flex items-start justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Création — mode bulk</div>

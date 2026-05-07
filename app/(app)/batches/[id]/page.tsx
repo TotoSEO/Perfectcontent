@@ -71,7 +71,7 @@ export default function BatchPage() {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <div className="space-y-6 animate-fadein">
+    <div className="page-shell space-y-6 animate-fadein">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="eyebrow mb-2">Lot en cours</div>

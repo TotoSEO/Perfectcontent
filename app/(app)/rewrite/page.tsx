@@ -96,7 +96,7 @@ export default function RewritePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl animate-fadein">
+    <div className="page-shell space-y-6 animate-fadein">
       <header>
         <div className="eyebrow mb-2">Création</div>
         <h1 className="h-page inline-flex items-center gap-2">

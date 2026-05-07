@@ -82,14 +82,16 @@ export default function AuditPage() {
 
   if (loadErr) {
     return (
+      <div className="page-shell page-shell-mid">
       <div className="card p-6 text-sm text-red-300">
         Audit indisponible. Si l'erreur mentionne <code>relation "audits" does not exist</code>,
         applique la migration SQL fournie dans Supabase.
       </div>
+      </div>
     );
   }
-  if (!audit) return <p className="text-zinc-500">Chargement…</p>;
-  if (!audit.summary) return <p className="text-zinc-500">Cet audit n'a pas encore de rapport.</p>;
+  if (!audit) return <div className="page-shell"><p className="text-zinc-500">Chargement…</p></div>;
+  if (!audit.summary) return <div className="page-shell"><p className="text-zinc-500">Cet audit n'a pas encore de rapport.</p></div>;
 
   const generatedDate = new Date(audit.summary.generated_at).toLocaleDateString("fr-FR", {
     day: "numeric",
@@ -98,7 +100,7 @@ export default function AuditPage() {
   });
 
   return (
-    <div className="space-y-4 max-w-[1320px] mx-auto animate-fadein">
+    <div className="page-shell space-y-4 animate-fadein" style={{ maxWidth: 1320 }}>
       {/* App-side header */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">

@@ -68,7 +68,7 @@ export default function FolderDetailPage() {
   }
 
   return (
-    <div className="space-y-7 animate-fadein">
+    <div className="page-shell space-y-7 animate-fadein">
       <div>
         <Link
           href="/folders"

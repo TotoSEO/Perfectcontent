@@ -15,7 +15,7 @@ type AuditListItem = {
 export default function AuditsListPage() {
   const { data: audits } = useSWR<AuditListItem[]>("/srv/audits", fetcher);
   return (
-    <div className="space-y-6 max-w-5xl animate-fadein">
+    <div className="page-shell space-y-6 animate-fadein">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="label mb-1.5">Audit technique</div>

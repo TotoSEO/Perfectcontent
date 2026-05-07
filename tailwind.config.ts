@@ -70,6 +70,10 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        appRise: {
+          "0%": { opacity: "0", transform: "translateY(14px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
@@ -85,6 +89,7 @@ const config: Config = {
       },
       animation: {
         fadein: "fadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both",
+        rise: "appRise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both",
         shimmer: "shimmer 1.6s linear infinite",
         "pulse-soft": "pulseSoft 1.8s ease-in-out infinite",
         glow: "glow 2.4s ease-in-out infinite",

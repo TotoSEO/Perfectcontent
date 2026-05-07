@@ -89,7 +89,7 @@ export default function JobPage() {
   const tone = STATUS_TONE[job.status] || STATUS_TONE.queued;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadein">
+    <div className="page-shell grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadein">
       <div className="lg:col-span-1 space-y-4">
         <div className="card p-5 space-y-3">
           <div className="space-y-1">

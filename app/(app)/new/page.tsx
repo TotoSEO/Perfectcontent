@@ -177,8 +177,8 @@ export default function NewContentHeroPage() {
   }
 
   return (
-    <ParallaxStage>
-      <div className="relative max-w-3xl mx-auto pt-6 sm:pt-10 pb-24">
+    <div className="hero-stage relative w-full min-h-screen flex items-center justify-center px-4 sm:px-8 py-10 sm:py-14">
+      <div className="relative w-full max-w-3xl mx-auto">
         {/* Floating bulk-mode link */}
         <div className="flex justify-end mb-8 sm:mb-10">
           <Link
@@ -594,18 +594,7 @@ export default function NewContentHeroPage() {
             transform: translateY(0);
           }
         }
-        :global(.animate-rise) {
-          opacity: 0;
-          animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        :global(.animate-fadein) {
-          opacity: 0;
-          animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-
         @media (prefers-reduced-motion: reduce) {
-          :global(.animate-rise),
-          :global(.animate-fadein),
           .bucket-btn,
           .hero-cta-bg {
             animation: none !important;
@@ -613,153 +602,10 @@ export default function NewContentHeroPage() {
           }
         }
       `}</style>
-    </ParallaxStage>
-  );
-}
-
-/* -------------------------- Parallax background stage -------------------------- */
-
-function ParallaxStage({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) return;
-    let raf = 0;
-    let tx = 0,
-      ty = 0;
-    function onMove(e: MouseEvent) {
-      const r = el!.getBoundingClientRect();
-      const nx = (e.clientX - r.left) / r.width - 0.5;
-      const ny = (e.clientY - r.top) / r.height - 0.5;
-      tx = nx;
-      ty = ny;
-      if (!raf) raf = requestAnimationFrame(apply);
-    }
-    function apply() {
-      raf = 0;
-      el!.style.setProperty("--mx", tx.toFixed(3));
-      el!.style.setProperty("--my", ty.toFixed(3));
-    }
-    el.addEventListener("mousemove", onMove);
-    return () => {
-      el.removeEventListener("mousemove", onMove);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  return (
-    <div
-      ref={ref}
-      className="relative -mx-4 sm:-mx-6 -my-6 px-4 sm:px-6 py-6 min-h-[calc(100vh-3rem)] overflow-hidden"
-      style={
-        {
-          "--mx": 0,
-          "--my": 0,
-        } as CSSProperties
-      }
-    >
-      {/* Layer 1 — far depth: deep aurora orbs that drift with mouse */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0"
-        style={{
-          transform:
-            "translate3d(calc(var(--mx) * -22px), calc(var(--my) * -22px), 0)",
-          transition: "transform 600ms cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        <div
-          className="absolute rounded-full blur-[120px] opacity-70"
-          style={{
-            top: "-12%",
-            left: "-8%",
-            width: "55%",
-            height: "55%",
-            background:
-              "radial-gradient(circle at 30% 30%, rgba(124,132,255,0.5), transparent 65%)",
-            animation: "float1 18s ease-in-out infinite",
-          }}
-        />
-        <div
-          className="absolute rounded-full blur-[140px] opacity-60"
-          style={{
-            top: "10%",
-            right: "-15%",
-            width: "60%",
-            height: "60%",
-            background:
-              "radial-gradient(circle at 70% 30%, rgba(168,85,247,0.4), transparent 65%)",
-            animation: "float2 22s ease-in-out infinite",
-          }}
-        />
-        <div
-          className="absolute rounded-full blur-[160px] opacity-50"
-          style={{
-            bottom: "-20%",
-            left: "20%",
-            width: "70%",
-            height: "70%",
-            background:
-              "radial-gradient(circle at 50% 70%, rgba(56,189,248,0.32), transparent 65%)",
-            animation: "float3 26s ease-in-out infinite",
-          }}
-        />
-      </div>
-
-      {/* Layer 2 — mid depth: faint topographic relief grid */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 opacity-[0.18]"
-        style={{
-          transform:
-            "translate3d(calc(var(--mx) * -10px), calc(var(--my) * -10px), 0)",
-          transition: "transform 500ms cubic-bezier(0.16, 1, 0.3, 1)",
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.18) 1px, transparent 1.5px)",
-          backgroundSize: "44px 44px",
-          maskImage:
-            "radial-gradient(ellipse 70% 60% at 50% 35%, black 0%, transparent 80%)",
-          WebkitMaskImage:
-            "radial-gradient(ellipse 70% 60% at 50% 35%, black 0%, transparent 80%)",
-        }}
-      />
-
-      {/* Layer 3 — near depth: cursor follower halo */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0"
-        style={{
-          background:
-            "radial-gradient(440px circle at calc((var(--mx) + 0.5) * 100%) calc((var(--my) + 0.5) * 100%), rgba(124,132,255,0.10), transparent 55%)",
-          transition: "background 200ms linear",
-        }}
-      />
-
-      <div className="relative z-10">{children}</div>
-
-      <style jsx>{`
-        @keyframes float1 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(4%, 6%) scale(1.08); }
-        }
-        @keyframes float2 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(-5%, 4%) scale(1.05); }
-        }
-        @keyframes float3 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(3%, -4%) scale(1.06); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          [aria-hidden] { animation: none !important; }
-        }
-      `}</style>
     </div>
   );
 }
+
 
 /* -------------------------- Hero keyword input -------------------------- */
 

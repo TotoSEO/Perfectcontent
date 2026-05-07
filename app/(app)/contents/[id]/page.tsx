@@ -91,7 +91,7 @@ export default function ContentPage() {
   const justSaved = savedAt && Date.now() - savedAt < 2200;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadein">
+    <div className="page-shell grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadein">
       <div className="lg:col-span-2 space-y-4 min-w-0">
         <div className="card p-5 flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">

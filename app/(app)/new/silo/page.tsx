@@ -136,7 +136,7 @@ export default function NewSiloPage() {
   }
 
   return (
-    <div className="space-y-7 animate-fadein">
+    <div className="page-shell space-y-7 animate-fadein">
       <header>
         <div className="eyebrow mb-2">Création</div>
         <h1 className="h-page flex items-center gap-2">

@@ -133,7 +133,7 @@ export default function SiloPage() {
   const total = silo.members.length;
 
   return (
-    <div className="space-y-6 animate-fadein">
+    <div className="page-shell space-y-6 animate-fadein">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <div className="eyebrow mb-2">Silo SEO</div>

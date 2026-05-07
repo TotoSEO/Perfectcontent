@@ -60,8 +60,8 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="space-y-8 animate-fadein">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="page-shell space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-4 animate-rise" style={{ animationDelay: "0ms" }}>
         <div>
           <div className="eyebrow mb-2">Bibliothèque</div>
           <h1 className="h-page">Tes contenus</h1>
@@ -75,7 +75,7 @@ export default function DashboardPage() {
         </Link>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 animate-rise" style={{ animationDelay: "80ms" }}>
         <Stat label="Total" value={(contents || []).length} />
         <Stat label="Actifs" value={stats.active} />
         <Stat
@@ -85,7 +85,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex flex-wrap gap-2 items-center animate-rise" style={{ animationDelay: "160ms" }}>
         <div className="relative flex-1 min-w-[260px]">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
             <Icon name="search" size={14} />
@@ -119,7 +119,7 @@ export default function DashboardPage() {
         <EmptyState empty={contents.length === 0} />
       )}
       {filtered.length > 0 && (
-        <ul className="card divide-y divide-[var(--border)] overflow-hidden">
+        <ul className="card divide-y divide-[var(--border)] overflow-hidden animate-rise" style={{ animationDelay: "220ms" }}>
           {filtered.map((c) => {
             const label = TYPE_LABELS[c.content_type] || c.content_type;
             const statusLabel = STATUS_LABELS[c.status] || c.status;
@@ -182,7 +182,15 @@ export default function DashboardPage() {
 
 function Stat({ label, value, help }: { label: string; value: number | string; help?: string }) {
   return (
-    <div className="card card-hover p-4">
+    <div className="relative card card-hover p-4 overflow-hidden group">
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px opacity-30 group-hover:opacity-100 transition-opacity"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent, rgba(124,132,255,0.7), transparent)",
+        }}
+      />
       <div className="label inline-flex items-center">
         {label}
         {help && <HelpIcon content={help} />}

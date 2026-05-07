@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Icon } from "@/components/Icon";
+import { AppBackground } from "@/components/AppBackground";
 
 export default function LoginPage() {
   const [password, setPassword] = useState("");
@@ -27,6 +28,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+      <AppBackground />
       {/* Subtle orbital grid */}
       <div
         aria-hidden

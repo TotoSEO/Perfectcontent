@@ -50,8 +50,8 @@ export default function FoldersPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-3xl animate-fadein">
-      <header>
+    <div className="page-shell page-shell-narrow space-y-8">
+      <header className="animate-rise">
         <div className="eyebrow mb-2">Bibliothèque</div>
         <h1 className="h-page inline-flex items-center">
           Dossiers
@@ -63,7 +63,7 @@ export default function FoldersPage() {
         <p className="h-sub">Organisation simple par client / projet / thématique.</p>
       </header>
 
-      <form onSubmit={add} className="card p-5 grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end">
+      <form onSubmit={add} className="card p-5 grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end animate-rise" style={{ animationDelay: "80ms" }}>
         <div>
           <label className="label block mb-1.5">Nom du dossier</label>
           <input
@@ -112,7 +112,7 @@ export default function FoldersPage() {
       )}
 
       {(folders || []).length > 0 && (
-        <ul className="card divide-y divide-[var(--border)] overflow-hidden">
+        <ul className="card divide-y divide-[var(--border)] overflow-hidden animate-rise" style={{ animationDelay: "160ms" }}>
           {folders?.map((f) => {
             const count = countByFolder.get(f.id) || 0;
             return (

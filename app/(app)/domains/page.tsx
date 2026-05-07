@@ -59,7 +59,7 @@ export default function DomainsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl animate-fadein">
+    <div className="page-shell page-shell-mid space-y-8 animate-fadein">
       <header>
         <div className="eyebrow mb-2">Système</div>
         <h1 className="h-page inline-flex items-center">

@@ -180,7 +180,7 @@ export default function NewAuditPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl animate-fadein">
+    <div className="page-shell page-shell-mid space-y-6 animate-fadein">
       <header>
         <div className="label mb-1.5">Audit technique</div>
         <h1 className="text-[28px] font-semibold tracking-tight">Importer un crawl</h1>
