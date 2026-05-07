@@ -324,31 +324,34 @@ export function SemanticChart({ stats, height = 360 }: Props) {
           );
         })}
 
-        {/* X axis labels — alternate top/bottom to avoid overlap */}
+        {/* X axis labels — show ALL terms. With 40 columns rotated -55°,
+            8.5 px font, truncated to 14 chars, they fit without overlap. */}
         {stats.map((s, i) => {
           const x = xFor(i, stats.length);
           const isHover = hover === i;
-          // Show every-other label by default to keep readability; on hover
-          // always show the hovered one. Show first + last always.
-          const visible =
-            isHover ||
-            i === 0 ||
-            i === stats.length - 1 ||
-            i % 2 === 0;
-          if (!visible) return null;
           return (
             <g
               key={`lbl-${s.term}`}
-              transform={`translate(${x} ${H - PAD_B + 14}) rotate(-42)`}
-              opacity={isHover ? 1 : 0.65}
+              transform={`translate(${x} ${H - PAD_B + 12}) rotate(-55)`}
+              opacity={isHover ? 1 : 0.78}
             >
               <text
-                fontSize={isHover ? 11 : 10}
-                fill={isHover ? "#ffffff" : "rgba(255,255,255,0.7)"}
+                fontSize={isHover ? 10.5 : 8.5}
+                fill={
+                  isHover
+                    ? "#ffffff"
+                    : s.status === "ok"
+                    ? "rgba(167,243,208,0.85)"
+                    : s.status === "missing" || s.status === "low"
+                    ? "rgba(252,165,165,0.85)"
+                    : s.status === "danger"
+                    ? "rgba(252,165,165,0.95)"
+                    : "rgba(253,186,116,0.85)"
+                }
                 textAnchor="end"
-                fontWeight={isHover ? 600 : 400}
+                fontWeight={isHover ? 600 : 500}
               >
-                {truncate(s.term, 16)}
+                {truncate(s.term, 14)}
               </text>
             </g>
           );
@@ -359,9 +362,13 @@ export function SemanticChart({ stats, height = 360 }: Props) {
           const s = stats[hover];
           const x = xFor(hover, stats.length);
           const y = yFor(s.ratio);
-          // Tooltip box positioning, clamp inside chart
-          const w = 200;
-          const h = 78;
+          // Surface forms beyond the canonical — these are also counted
+          const otherSurfaces = (s.surface_forms || [])
+            .filter((sf) => sf.toLowerCase() !== s.term.toLowerCase())
+            .slice(0, 4);
+          const showSurfaces = otherSurfaces.length > 0;
+          const w = 220;
+          const h = showSurfaces ? 96 : 80;
           let tx = x + 14;
           if (tx + w > W - PAD_R) tx = x - w - 14;
           let ty = y - h / 2;
@@ -375,11 +382,11 @@ export function SemanticChart({ stats, height = 360 }: Props) {
                 width={w}
                 height={h}
                 rx={8}
-                fill="rgba(14,16,24,0.95)"
+                fill="rgba(14,16,24,0.96)"
                 stroke="rgba(255,255,255,0.14)"
               />
               <text x={tx + 12} y={ty + 18} fontSize={12} fontWeight={600} fill="#fff">
-                {truncate(s.term, 22)}
+                {truncate(s.term, 24)}
               </text>
               <text x={tx + 12} y={ty + 36} fontSize={11} fill="rgba(255,255,255,0.7)">
                 Compte : <tspan fill="#fff" fontWeight={600}>{s.count}</tspan>
@@ -388,7 +395,18 @@ export function SemanticChart({ stats, height = 360 }: Props) {
               <text x={tx + 12} y={ty + 52} fontSize={10.5} fill="rgba(255,255,255,0.55)">
                 Plage : {s.min}–{s.max}
               </text>
-              <text x={tx + 12} y={ty + 67} fontSize={10.5} fill={STATUS_COLOR[s.status]} fontWeight={600}>
+              {showSurfaces && (
+                <text x={tx + 12} y={ty + 68} fontSize={10} fill="rgba(255,255,255,0.55)">
+                  +&nbsp;{otherSurfaces.join(", ")}
+                </text>
+              )}
+              <text
+                x={tx + 12}
+                y={ty + (showSurfaces ? 86 : 70)}
+                fontSize={10.5}
+                fill={STATUS_COLOR[s.status]}
+                fontWeight={600}
+              >
                 {STATUS_LABEL[s.status]}
               </text>
             </g>

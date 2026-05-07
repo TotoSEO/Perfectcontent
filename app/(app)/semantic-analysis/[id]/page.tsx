@@ -424,16 +424,30 @@ function TermRow({ stat }: { stat: TermStat }) {
       ? "#f97316"
       : "#ef4444";
 
+  // Surface forms beyond the canonical — what the count really sums up
+  const otherSurfaces = (stat.surface_forms || [])
+    .filter((s) => s.toLowerCase() !== stat.term.toLowerCase())
+    .slice(0, 4);
+
+  const allSurfacesTitle = (stat.surface_forms || [stat.term]).join(", ");
+
   return (
-    <li className="px-4 py-2.5">
-      <div className="flex items-baseline justify-between gap-2 mb-1.5">
-        <span className="text-[13px] text-zinc-100 font-medium truncate flex items-center gap-1.5">
+    <li
+      className="px-4 py-2.5"
+      title={
+        otherSurfaces.length > 0
+          ? `Surfaces comptées : ${allSurfacesTitle}`
+          : undefined
+      }
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-0.5">
+        <span className="text-[13px] text-zinc-100 font-medium truncate flex items-center gap-1.5 min-w-0">
           {stat.is_ngram && (
-            <span className="text-[8.5px] uppercase tracking-wider text-zinc-500 bg-white/[0.04] border border-white/[0.06] px-1 rounded">
+            <span className="text-[8.5px] uppercase tracking-wider text-zinc-500 bg-white/[0.04] border border-white/[0.06] px-1 rounded shrink-0">
               n-gram
             </span>
           )}
-          {stat.term}
+          <span className="truncate">{stat.term}</span>
         </span>
         <span className={`text-[11px] tabular-nums shrink-0 ${tones[stat.status]}`}>
           {stat.count}
@@ -443,7 +457,12 @@ function TermRow({ stat }: { stat: TermStat }) {
           </span>
         </span>
       </div>
-      <div className="h-1 bg-white/[0.05] rounded-full overflow-hidden relative">
+      {otherSurfaces.length > 0 && (
+        <div className="text-[10px] text-zinc-500 truncate mb-1">
+          + {otherSurfaces.join(", ")}
+        </div>
+      )}
+      <div className="h-1 bg-white/[0.05] rounded-full overflow-hidden relative mt-1">
         <div
           className="h-full rounded-full transition-all duration-300"
           style={{ width: `${pct * 100}%`, background: barColor }}

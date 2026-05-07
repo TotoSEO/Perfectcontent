@@ -59,6 +59,7 @@ STOPWORDS_EN = {
 }
 STOPWORDS_WEB = {
     "https", "http", "www", "url", "href", "src", "ftp", "mailto",
+    "blob", "localhost",
     "com", "fr", "org", "net", "eu", "io", "co", "uk", "de", "es", "it",
     "html", "htm", "css", "json", "xml", "rss", "pdf", "jpg", "jpeg", "png",
     "gif", "svg", "webp", "mp4", "webm", "ico",
@@ -75,6 +76,26 @@ STOPWORDS_WEB = {
 }
 
 ALL_STOPWORDS = STOPWORDS_FR | STOPWORDS_EN | STOPWORDS_WEB
+
+# Words we drop AT THE UNIGRAM LEVEL ONLY. They're useful inside multi-word
+# phrases ("comment choisir", "service client", "fiche produit") so we keep
+# them as bigram/trigram tokens — but they're noise as standalone targets.
+UNIGRAM_DROPLIST = {
+    # Interrogatives — always boilerplate as standalone unigrams
+    "comment", "pourquoi", "combien", "quand", "que", "quoi",
+    "quel", "quelle", "quels", "quelles",
+    # E-commerce / blog menu boilerplate
+    "client", "clients", "produit", "produits", "service", "services",
+    "guide", "guides", "actualité", "actualités",
+    "image", "images", "photo", "photos", "video", "videos", "vidéo", "vidéos",
+    "histoire", "histoires", "presse", "marque", "marques",
+    "livraison", "livraisons", "retour", "retours", "panier", "commande",
+    "compte", "abonnement", "abonné", "abonnés",
+    # CTA verbs
+    "personnaliser", "personnalisez", "personnalisé", "personnalisée",
+    "découvrir", "découvrez", "contactez", "abonnez", "inscrivez",
+    "rejoignez", "essayez", "testez",
+}
 
 WORD_RE = re.compile(
     r"[a-zA-ZàâäéèêëïîôöùûüÿñçœÀÂÄÉÈÊËÏÎÔÖÙÛÜŸÑÇŒ][a-zA-ZàâäéèêëïîôöùûüÿñçœÀÂÄÉÈÊËÏÎÔÖÙÛÜŸÑÇŒ\-']*",
@@ -233,6 +254,22 @@ def _vowel_ratio(s: str) -> float:
     return v / len(letters)
 
 
+# Stem-level stopword sets — computed lazily once. Catches morphological
+# variants of stop words: "blogs" stems to "blog" (already in STOPWORDS_WEB),
+# "personnalisez" stems close to "personnalis" so we drop the family.
+_STOP_STEMS: set[str] = set()
+_UNIGRAM_DROP_STEMS: set[str] = set()
+
+
+def _build_stem_sets() -> None:
+    global _STOP_STEMS, _UNIGRAM_DROP_STEMS
+    _STOP_STEMS = {stem_fr(w) for w in ALL_STOPWORDS if len(w) >= MIN_WORD_LEN}
+    _UNIGRAM_DROP_STEMS = {stem_fr(w) for w in UNIGRAM_DROPLIST if len(w) >= MIN_WORD_LEN}
+
+
+_build_stem_sets()
+
+
 def _is_keyword_variant(stem: str, keyword_stems: set[str]) -> bool:
     if stem in keyword_stems:
         return True
@@ -337,6 +374,21 @@ def compute_term_targets(
         # Keyword variant?
         if _is_keyword_variant(stem, keyword_stems):
             continue
+        # Stem-level stopword check: catches plurals/conjugations of stop
+        # words ("blogs" → stem "blog" which IS in STOPWORDS_WEB) that the
+        # raw-form filter misses.
+        if stem in _STOP_STEMS:
+            continue
+        # Unigram-only droplist: interrogatives + menu/CTA boilerplate.
+        # Both the canonical surface AND any of the underlying surfaces are
+        # checked so morphological variants ("personnalisez" / "personnaliser")
+        # get caught too.
+        if canonical in UNIGRAM_DROPLIST:
+            continue
+        if any(s in UNIGRAM_DROPLIST for s in surfaces_counter.keys()):
+            continue
+        if stem in _UNIGRAM_DROP_STEMS:
+            continue
         # Skew filter
         max_freq = max(per_doc)
         avg_freq = sum(per_doc) / n_docs
@@ -396,6 +448,17 @@ def compute_term_targets(
                 and content_stems
                 and content_stems.issubset(keyword_stems)
             ):
+                continue
+            # Reject n-grams whose ENTIRE content payload is droplist
+            # boilerplate (e.g. "client produit", "image vidéo"). We still
+            # accept hybrid n-grams like "service client" or "fiche produit"
+            # because they have a real content token.
+            if content_stems and content_stems.issubset(_UNIGRAM_DROP_STEMS):
+                continue
+            # Reject n-grams contaminated with URL artefacts that leak from
+            # raw markdown ("blob http localhost", "élevé plus doudoune"
+            # from "lire plus").
+            if any(t in {"blob", "localhost"} for t in ng_tokens):
                 continue
             # Skew filter
             max_freq = max(per_doc)

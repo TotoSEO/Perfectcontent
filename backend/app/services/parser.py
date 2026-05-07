@@ -169,6 +169,7 @@ def _from_html(url: str, html: str) -> ParsedPage:
 
 
 def _from_markdown(url: str, md: str) -> ParsedPage:
+    md = clean_markdown_text(md)
     h1_match = re.search(r"^#\s+(.*)$", md, flags=re.MULTILINE)
     h2 = [m.group(1).strip() for m in re.finditer(r"^##\s+(.*)$", md, flags=re.MULTILINE)]
     h3 = [m.group(1).strip() for m in re.finditer(r"^###\s+(.*)$", md, flags=re.MULTILINE)]
@@ -192,6 +193,65 @@ def _from_markdown(url: str, md: str) -> ParsedPage:
         tables_count=tables_count,
         word_count=sum(1 for w in md.split() if any(c.isalnum() for c in w)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Markdown cleaning — applied before BM25 ingestion and before _from_markdown
+# parsing so menu items, image refs and JS blob URLs don't pollute the corpus.
+# ---------------------------------------------------------------------------
+
+# Jina r.jina.ai prepends a structured header. Strip it before counting.
+_JINA_HEADER_RE = re.compile(
+    r"^(?:Title|URL Source|Published Time|Markdown Content|Warning):.*$\n?",
+    re.MULTILINE,
+)
+# Image references — drop entirely, we don't want alt-text inflating BM25
+_MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
+# Markdown links — keep the anchor text only (the URL itself is noise)
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]+\)")
+# blob: and data: URLs leak from in-page JS previews ("blob:http://localhost/...")
+_BLOB_DATA_RE = re.compile(r"\b(?:blob|data):[^\s)\]]+", re.IGNORECASE)
+# Table separator rows like |---|---|
+_TABLE_SEP_RE = re.compile(r"^\s*\|[-:|\s]+\|\s*$\n?", re.MULTILINE)
+# Code fences ```...``` — copy-pasted code shouldn't drive BM25 either
+_CODE_FENCE_RE = re.compile(r"```[\s\S]*?```", re.MULTILINE)
+# Pure-URL lines
+_BARE_URL_LINE_RE = re.compile(r"^\s*https?://\S+\s*$\n?", re.MULTILINE)
+# HTML tags that may leak through (rare but possible)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def clean_markdown_text(md: str) -> str:
+    """Remove the obvious junk from a scraped markdown payload before it
+    feeds BM25.
+
+    What we strip (in order):
+      1. Jina header block (Title/URL Source/Published Time/Markdown Content/Warning)
+      2. Code fences — copy-pasted snippets shouldn't drive term targets
+      3. Image references ![alt](src) — alt text often duplicates anchors / brand
+      4. Markdown links [anchor](url) → anchor (drop the URL)
+      5. Table separator rows |---|---|
+      6. blob: and data: URLs (JS-blob preview leaks)
+      7. Pure-URL lines
+      8. Stray HTML tags
+      9. Collapse runs of blank lines
+
+    The output is plain prose ready for tokenisation. We DON'T strip
+    headings — they're a strong topical signal that BM25 weights through
+    the heading boost.
+    """
+    if not md:
+        return ""
+    out = _JINA_HEADER_RE.sub("", md)
+    out = _CODE_FENCE_RE.sub("", out)
+    out = _MD_IMAGE_RE.sub(" ", out)
+    out = _MD_LINK_RE.sub(r"\1", out)
+    out = _TABLE_SEP_RE.sub("", out)
+    out = _BLOB_DATA_RE.sub(" ", out)
+    out = _BARE_URL_LINE_RE.sub("", out)
+    out = _HTML_TAG_RE.sub(" ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 
 def _extract_jsonld(soup: BeautifulSoup) -> list[dict]:

@@ -36,6 +36,7 @@ export const STOPWORDS_EN = new Set<string>([
 
 export const STOPWORDS_WEB = new Set<string>([
   "https", "http", "www", "url", "href", "src", "ftp", "mailto",
+  "blob", "localhost",
   "com", "fr", "org", "net", "eu", "io", "co", "uk", "de", "es", "it",
   "html", "htm", "css", "json", "xml", "rss", "pdf", "jpg", "jpeg", "png",
   "gif", "svg", "webp", "mp4", "webm", "ico",

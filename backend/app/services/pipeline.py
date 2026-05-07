@@ -386,7 +386,10 @@ async def _step_analyze(job_id: UUID) -> None:
         vecs = await embeddings.embed([expected_text])
         expected_vec = vecs[0] if vecs else None
 
-    competitor_texts = [p.get("markdown", "") for p in await _hydrate_scraped(job_id)]
+    competitor_texts = [
+        parser.clean_markdown_text(p.get("markdown", "") or "")
+        for p in await _hydrate_scraped(job_id)
+    ]
     # Headings carry the strongest editorial signal: any candidate term that
     # surfaces in any competitor's H1/H2 gets a 1.4× heading boost in BM25.
     headings_text = " . ".join(

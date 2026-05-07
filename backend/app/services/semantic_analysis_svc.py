@@ -88,9 +88,14 @@ async def run(analysis_id: UUID) -> None:
                 },
             ))
 
-        # BM25 ingests the scraped markdown directly — same as the content
-        # pipeline does in _step_analyze.
-        competitor_texts = [raw.markdown for raw in batch.pages]
+        # BM25 ingests the CLEANED markdown — Jina headers, blob/data URLs,
+        # image refs, table separators, code fences and bare URL lines have
+        # all been stripped by parser.clean_markdown_text. Without this step
+        # the corpus inflates with menu items and JS-blob artefacts that
+        # produce noise targets like "blob http localhost".
+        competitor_texts = [
+            parser.clean_markdown_text(raw.markdown) for raw in batch.pages
+        ]
         headings_text = " . ".join(
             " ".join(filter(None, [parsed.h1 or ""] + list(parsed.h2)))
             for parsed, _ in parsed_rows
