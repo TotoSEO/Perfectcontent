@@ -105,15 +105,31 @@ async def run(analysis_id: UUID) -> None:
         )
 
         # 5. Claude semantic report (entities / subthemes / gaps).
-        # Lighter than the full content pipeline call: we don't need
-        # required_terms (term_freq already covers that more reliably).
-        report = await analysis_svc.semantic_report(
-            keyword=keyword,
-            intent="informational",
-            parsed=[(p, 0.0) for p, _ in parsed_rows],
-            related=[r.keyword for r in related] if related else [],
-        )
-        cost += report.llm_cost
+        # Best-effort: if Claude fails or times out, we still ship the BM25
+        # targets, which is the actionable data the editor needs.
+        common_subthemes: list[str] = []
+        rare_subthemes: list[str] = []
+        entities: list[str] = []
+        content_gaps: list[str] = []
+        try:
+            report = await analysis_svc.semantic_report(
+                keyword=keyword,
+                intent="informational",
+                parsed=[(p, 0.0) for p, _ in parsed_rows],
+                related=[r.keyword for r in related] if related else [],
+            )
+            cost += report.llm_cost
+            common_subthemes = list(report.common_subthemes)
+            rare_subthemes = list(report.rare_subthemes)
+            entities = list(report.entities)
+            content_gaps = list(report.content_gaps)
+        except Exception as exc:  # noqa: BLE001
+            await syslog.error(
+                f"semantic-analysis Claude step failed (non-fatal): {exc}",
+                module="semantic_analysis_svc",
+                analysis_id=str(analysis_id),
+                error=str(exc),
+            )
 
         # 6. Persist
         async with SessionLocal() as session:
@@ -137,10 +153,10 @@ async def run(analysis_id: UUID) -> None:
             }
             row.related_keywords = [r.__dict__ for r in related]
             row.competitors = [meta for _, meta in parsed_rows]
-            row.common_subthemes = list(report.common_subthemes)
-            row.rare_subthemes = list(report.rare_subthemes)
-            row.entities = list(report.entities)
-            row.content_gaps = list(report.content_gaps)
+            row.common_subthemes = common_subthemes
+            row.rare_subthemes = rare_subthemes
+            row.entities = entities
+            row.content_gaps = content_gaps
             row.term_targets = [t.to_dict() for t in targets]
             row.cost = round(cost, 4)
             row.status = "done"

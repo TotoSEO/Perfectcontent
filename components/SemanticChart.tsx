@@ -383,7 +383,7 @@ export function SemanticChart({ stats, height = 360 }: Props) {
               </text>
               <text x={tx + 12} y={ty + 36} fontSize={11} fill="rgba(255,255,255,0.7)">
                 Compte : <tspan fill="#fff" fontWeight={600}>{s.count}</tspan>
-                <tspan dx={6}>/ cible {Math.round(s.target)}</tspan>
+                <tspan dx={6}>/ cible {Math.max(1, Math.round(s.target))}</tspan>
               </text>
               <text x={tx + 12} y={ty + 52} fontSize={10.5} fill="rgba(255,255,255,0.55)">
                 Plage : {s.min}–{s.max}

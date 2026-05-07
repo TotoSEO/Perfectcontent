@@ -53,6 +53,7 @@ export default function SemanticAnalysisDetailPage() {
   const targets = data?.term_targets || [];
   const [text, setText] = useState<string>("");
   const initialised = useRef(false);
+  const runKicked = useRef(false);
 
   // Hydrate the editor with the persisted draft once the analysis loads
   useEffect(() => {
@@ -60,6 +61,18 @@ export default function SemanticAnalysisDetailPage() {
     initialised.current = true;
     if (data.draft_html) setText(htmlToPlainOrText(data.draft_html));
   }, [data]);
+
+  // Safety net: if the row is still 'queued' on arrival, the listing page's
+  // fire-and-forget run might have been killed by the serverless cold-start
+  // / network. Kick it again from here. Idempotent — re-running on a queued
+  // or failed row is fine.
+  useEffect(() => {
+    if (!data || !id || runKicked.current) return;
+    if (data.status === "queued") {
+      runKicked.current = true;
+      api(`/srv/semantic-analyses/${id}/run`, { method: "POST" }).catch(() => {});
+    }
+  }, [data, id]);
 
   // Debounced persistence of the draft
   useEffect(() => {
@@ -154,11 +167,10 @@ export default function SemanticAnalysisDetailPage() {
                   : "Pipeline en cours…"}
               </p>
             </div>
-            {data.status === "done" && (
-              <div className="flex items-center gap-2">
-                <RetryButton id={id} mutate={mutate} />
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <ExplainerButton />
+              {data.status === "done" && <RetryButton id={id} mutate={mutate} />}
+            </div>
           </header>
 
           {data.status === "running" || data.status === "queued" ? (
@@ -198,6 +210,9 @@ export default function SemanticAnalysisDetailPage() {
                   </div>
                 </div>
               </section>
+
+              {/* PRIORITY MISSING TERMS — actionable shortlist */}
+              <MissingTermsStrip stats={stats} />
 
               {/* CHART */}
               <section className="card p-4 sm:p-5">
@@ -424,7 +439,7 @@ function TermRow({ stat }: { stat: TermStat }) {
           {stat.count}
           <span className="text-zinc-600">
             {" / "}
-            {Math.round(stat.target)}
+            {Math.max(1, Math.round(stat.target))}
           </span>
         </span>
       </div>
@@ -600,5 +615,410 @@ function RetryButton({ id, mutate }: { id: string; mutate: () => void }) {
       {busy ? <Icon name="spinner" size={12} /> : <Icon name="refresh" size={12} />}
       Re-analyser
     </button>
+  );
+}
+
+/* ----------------------------- Missing terms strip ----------------------------- */
+
+function MissingTermsStrip({ stats }: { stats: TermStat[] }) {
+  const missing = useMemo(
+    () =>
+      stats
+        .filter((s) => s.count === 0)
+        .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+        .slice(0, 12),
+    [stats],
+  );
+  const lowOnes = useMemo(
+    () =>
+      stats
+        .filter((s) => s.count > 0 && s.count < s.min)
+        .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+        .slice(0, 8),
+    [stats],
+  );
+
+  if (missing.length === 0 && lowOnes.length === 0) {
+    return (
+      <div className="card overflow-hidden border-emerald-700/30 bg-emerald-500/[0.02]">
+        <div className="px-5 py-3 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <span className="text-sm text-emerald-200/90">
+            Tous les termes prioritaires sont couverts. Tu peux affiner sur le tableau
+            ci-dessous pour ramener les autres en zone verte.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  async function copyTerm(t: string) {
+    try {
+      await navigator.clipboard.writeText(t);
+    } catch {
+      /* noop */
+    }
+  }
+
+  return (
+    <section className="card overflow-hidden">
+      <div className="card-section">
+        <span className="label inline-flex items-center gap-2">
+          <Icon name="alert" size={11} className="text-amber-400" />
+          Termes prioritaires à intégrer
+        </span>
+        <span className="text-xs text-zinc-500">
+          {missing.length} manquant{missing.length > 1 ? "s" : ""}
+          {lowOnes.length > 0 && (
+            <>
+              {" · "}
+              {lowOnes.length} sous-utilisé{lowOnes.length > 1 ? "s" : ""}
+            </>
+          )}
+        </span>
+      </div>
+      <div className="px-4 py-3 space-y-2.5">
+        {missing.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {missing.map((m) => (
+              <button
+                key={m.term}
+                onClick={() => copyTerm(m.term)}
+                title="Copier le terme"
+                className="group relative chip border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15 transition-colors"
+              >
+                {m.is_ngram && (
+                  <span className="text-[8px] uppercase tracking-wider opacity-60 mr-0.5">
+                    n-gram
+                  </span>
+                )}
+                {m.term}
+                <span className="ml-1 text-[9px] tabular-nums opacity-60">
+                  ×{Math.max(1, Math.round(m.target))}
+                </span>
+                <Icon name="copy" size={9} className="ml-1 opacity-50 group-hover:opacity-100" />
+              </button>
+            ))}
+          </div>
+        )}
+        {lowOnes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {lowOnes.map((m) => (
+              <button
+                key={m.term}
+                onClick={() => copyTerm(m.term)}
+                title="Copier le terme"
+                className="group chip border-amber-500/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15 transition-colors"
+              >
+                {m.term}
+                <span className="ml-1 text-[9px] tabular-nums opacity-70">
+                  {m.count}/{Math.max(1, Math.round(m.target))}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------- Explainer modal ----------------------------- */
+
+function ExplainerButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="btn-secondary px-3 py-2 text-xs"
+        title="Voir comment on calcule"
+      >
+        <Icon name="info" size={12} />
+        Comment ça marche
+      </button>
+      {open && <ExplainerModal onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function ExplainerModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto card-elevated"
+      >
+        <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between sticky top-0 bg-[var(--bg-elevated)]/95 backdrop-blur-md z-10">
+          <h3 className="font-semibold text-base">Comment fonctionne l'analyse</h3>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none">
+            ×
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-5 text-[13.5px] leading-relaxed text-zinc-300">
+          <ExplainerSection title="1. Récupération de la SERP" badge="DataForSEO">
+            <p>
+              Sur ton mot-clé, on appelle DataForSEO Google Organic pour récupérer
+              les <strong>7 premiers résultats organiques</strong> (top-7), avec
+              leurs URLs, titres et descriptions, plus les People Also Ask et les
+              SERP features. En parallèle on tire jusqu'à <strong>30 mots-clés
+              associés</strong> via DataForSEO Labs (intent + volume).
+            </p>
+            <p className="text-xs text-zinc-500">
+              Cache 24 h sur (mot-clé, location, langue) — re-runner ne re-facture pas.
+            </p>
+          </ExplainerSection>
+
+          <ExplainerSection title="2. Scraping des concurrents" badge="Firecrawl + Jina">
+            <p>
+              Chaque URL est scrappée en parallèle. <strong>Firecrawl</strong>
+              en priorité (10 s timeout) puis <strong>Jina r.jina.ai</strong>
+              en fallback. Tolérance <strong>4 sur 7</strong> minimum : si plus
+              de 3 pages échouent, l'analyse s'arrête proprement.
+            </p>
+            <p>
+              Un <strong>quality-gate</strong> rejette les bot-blocks (Cloudflare,
+              captcha, paywall, JS-shell), les pages &lt; 400 caractères de prose,
+              et les pages &gt; 60 % de liens (menus / index). Comme ça aucune fausse
+              donnée ne pollue le tableau de termes.
+            </p>
+          </ExplainerSection>
+
+          <ExplainerSection title="3. Parsing structurel" badge="BeautifulSoup">
+            <p>
+              On retire le boilerplate (nav, footer, sidebar, share, related,
+              cookie banners, sponsorisé) puis on extrait la <strong>zone de
+              contenu principale</strong> (article, main, role=main, ou
+              .post-content / .entry-content). Ça permet de compter mots / H2 /
+              listes / tableaux uniquement sur le contenu éditorial — pas sur
+              les menus.
+            </p>
+          </ExplainerSection>
+
+          <ExplainerSection title="4. Tokenisation française" badge="regex + stemmer maison">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                Tokenisation : regex Unicode FR, longueur min 3 caractères, on
+                vire les apostrophes/tirets de bord.
+              </li>
+              <li>
+                Stop-words : 200+ mots FR + EN + 80 termes <em>web noise</em>
+                (https, com, html, menu, cookie, sitemap, …) — la liste est
+                identique entre backend et frontend pour que le compteur live
+                soit cohérent.
+              </li>
+              <li>
+                Stemmer FR maison « longest-suffix-first » : 90+ suffixes (issements,
+                ations, ements, ables, eurs, ières, …), 2 passes pour collapser
+                pluriel → singulier → racine. Garde min 4 lettres en racine.
+              </li>
+              <li>
+                N-grams 2 et 3 : bi-grams (les 2 tokens doivent porter du sens),
+                tri-grams autorisent un stop-word au milieu (« agence DE
+                marketing »).
+              </li>
+            </ul>
+          </ExplainerSection>
+
+          <ExplainerSection title="5. Score BM25-Okapi" badge="cœur de l'algo">
+            <p>
+              Pour chaque candidat (uni + bi + tri), on calcule un score{" "}
+              <strong>BM25-Okapi</strong> sommé sur le corpus :
+            </p>
+            <pre className="text-[11.5px] leading-snug bg-[#0e0e11] border border-[#25252a] rounded-lg p-3 overflow-x-auto font-mono text-zinc-300">
+{`idf(t)   = log( (N − df + 0.5) / (df + 0.5) + 1 )
+tf_sat   = tf · (k1 + 1) / (tf + k1 · (1 − b + b · |d| / avgdl))
+bm25     = Σ_d  idf(t) · tf_sat(t, d)
+           avec k1=1.5, b=0.75 (paramètres standards)`}
+            </pre>
+            <p>
+              <strong>BM25 vs TF-IDF</strong> : BM25 sature la fréquence (un mot
+              répété 50 fois ne pèse pas 50× plus qu'un mot répété 5 fois) et
+              normalise par la longueur du document. C'est ce que les SOTA
+              comme YourTextGuru utilisent.
+            </p>
+            <p>Puis on applique 3 pondérations métier :</p>
+            <pre className="text-[11.5px] leading-snug bg-[#0e0e11] border border-[#25252a] rounded-lg p-3 overflow-x-auto font-mono text-zinc-300">
+{`importance = bm25
+           × (0.3 + 0.7 · presence)        ← favorise les termes qui
+                                              apparaissent dans BEAUCOUP
+                                              de concurrents, pas qu'un seul
+           × heading_boost (×1.4 si dans un H1/H2 concurrent)
+           × ngram_bias    (×1.15 bigram, ×1.25 trigram)`}
+            </pre>
+          </ExplainerSection>
+
+          <ExplainerSection title="6. Filtres anti-bruit" badge="précision">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                <strong>df &ge; 2</strong> : doit apparaître dans au moins 2 docs
+                du corpus.
+              </li>
+              <li>
+                <strong>presence &ge; 25 %</strong> : présent dans au moins ¼
+                des concurrents — sinon ce n'est pas un terme « SEO consensus ».
+              </li>
+              <li>
+                <strong>vowel ratio &ge; 20 %</strong> + longueur 4-22 : drop les
+                artefacts genre « xxx », « hhh ».
+              </li>
+              <li>
+                <strong>variant exclusion</strong> : on retire le mot-clé lui-même
+                et ses variantes proches (sinon « cafetière » serait toujours en
+                tête, ce n'est pas une cible utile).
+              </li>
+              <li>
+                <strong>skew filter</strong> : si max &ge; 10 × moyenne, c'est un
+                outlier d'un seul site → drop.
+              </li>
+              <li>
+                <strong>density floor</strong> : si médiane &lt; 1 ET max &lt; 2
+                → trop sporadique, drop.
+              </li>
+            </ul>
+          </ExplainerSection>
+
+          <ExplainerSection title="7. Cibles et plages" badge="par terme">
+            <p>Pour chaque terme retenu on stocke :</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                <strong>cible (target)</strong> = <strong>médiane</strong> des
+                fréquences sur les concurrents (médiane plutôt que moyenne →
+                robuste aux outliers).
+              </li>
+              <li>
+                <strong>min</strong> = la plus petite fréquence vue sur un
+                concurrent qui l'utilise.
+              </li>
+              <li>
+                <strong>max</strong> = la plus grande. Au-delà = sur-utilisation.
+              </li>
+              <li>
+                <strong>importance</strong> = score normalisé 0-1, top du
+                classement = 1.
+              </li>
+              <li>
+                <strong>surface_forms</strong> = toutes les formes vues
+                (« cafetière », « cafetières ») — c'est avec ça que ton compteur
+                live retrouve les occurrences dans ton texte, sans avoir besoin
+                de stemmer côté frontend.
+              </li>
+            </ul>
+          </ExplainerSection>
+
+          <ExplainerSection title="8. Statut par terme dans l'éditeur" badge="live">
+            <pre className="text-[11.5px] leading-snug bg-[#0e0e11] border border-[#25252a] rounded-lg p-3 font-mono text-zinc-300">
+{`MISSING   count = 0                   (rouge — à ajouter)
+LOW       0 < count < min              (orange — sous-utilisé)
+OK        min ≤ count ≤ max            (vert — bon)
+OVER      max < count ≤ 3 × cible      (orange — sur-utilisé)
+DANGER    count > 3 × cible            (rouge — risque keyword stuffing)`}
+            </pre>
+          </ExplainerSection>
+
+          <ExplainerSection title="9. Score d'optimisation (0-120)" badge="vise 90-110">
+            <pre className="text-[11.5px] leading-snug bg-[#0e0e11] border border-[#25252a] rounded-lg p-3 font-mono text-zinc-300">
+{`opti = 100 × Σ ( importance_t × min(1.2, count_t / target_t) )
+                     ───────────────────────────────────────────
+                                  Σ importance_t
+
+→ contribue proportionnellement à l'importance du terme
+→ plafonne à 1.2 par terme pour ne pas récompenser le sur-emploi
+→ score 100 = chaque terme est ≥ sa cible. 90-110 = zone idéale.`}
+            </pre>
+          </ExplainerSection>
+
+          <ExplainerSection title="10. Score de sur-optimisation (0-100)" badge="vise &lt; 25">
+            <pre className="text-[11.5px] leading-snug bg-[#0e0e11] border border-[#25252a] rounded-lg p-3 font-mono text-zinc-300">
+{`pour chaque terme avec count > max :
+  x = (count − max) / max
+  pen = min(1, x²)            ← saturating quadratique
+
+danger = 100 × Σ (importance_t × pen_t) / Σ importance_t
+
+→ 0 quand tous les termes restent dans leur plage
+→ croît rapidement dès qu'on dépasse max sur des termes importants
+→ &gt; 25 = signal de keyword stuffing potentiel.`}
+            </pre>
+          </ExplainerSection>
+
+          <ExplainerSection title="11. Entités et sous-thèmes (Claude Sonnet)">
+            <p>
+              En plus de BM25, on appelle Claude Sonnet sur la fiche structurée
+              des concurrents pour extraire :
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                <strong>Sous-thèmes communs</strong> (présents dans la majorité
+                des concurrents) — à couvrir.
+              </li>
+              <li>
+                <strong>Sous-thèmes rares</strong> (1-2 concurrents seulement) —
+                opportunités de différenciation.
+              </li>
+              <li>
+                <strong>Entités nommées</strong> (marques, produits, personnes,
+                lieux).
+              </li>
+              <li>
+                <strong>Content gaps</strong> — questions et angles que les
+                concurrents oublient.
+              </li>
+            </ul>
+            <p className="text-xs text-zinc-500">
+              Cette étape est <strong>tolérante aux pannes</strong> : si Claude
+              échoue, l'analyse se livre quand même avec les 40 termes BM25, qui
+              sont la donnée actionnable principale.
+            </p>
+          </ExplainerSection>
+
+          <ExplainerSection title="12. Cohérence backend ↔ frontend" badge="zéro drift">
+            <p>
+              Le compteur live de l'éditeur utilise le <strong>même
+              tokenizer</strong>, la <strong>même liste de stop-words</strong>{" "}
+              et le <strong>même comptage par surface</strong> que le backend.
+              Le frontend ne stemme pas — il match les surfaces exactes que le
+              backend a vues dans le corpus, donc « cafetière » et « cafetières »
+              sont comptés ensemble si les deux ont été vus. Pas de divergence
+              possible entre ce que l'algo cible et ce que ton score affiche.
+            </p>
+          </ExplainerSection>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExplainerSection({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <h4 className="text-[13px] font-semibold text-zinc-100 inline-flex items-center gap-2">
+        {title}
+        {badge && (
+          <span className="text-[9px] uppercase tracking-[0.14em] text-accent-200 bg-accent-500/15 border border-accent-500/30 px-1.5 py-0.5 rounded">
+            {badge}
+          </span>
+        )}
+      </h4>
+      <div className="space-y-2">{children}</div>
+    </section>
   );
 }
