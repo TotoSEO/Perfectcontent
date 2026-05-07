@@ -27,6 +27,31 @@ export default function FusionPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Prefill from the duplication detector hand-off. The cannibalization
+  // page stores a JSON {sources: string[]} in sessionStorage before
+  // routing here, so the user lands with both contents already pasted.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.sessionStorage.getItem("fusion-prefill");
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      if (Array.isArray(data?.sources) && data.sources.length >= 2) {
+        const next = data.sources
+          .filter((h: unknown): h is string => typeof h === "string")
+          .map((html: string) => ({ id: crypto.randomUUID(), html }));
+        if (next.length >= 2) {
+          setSources(next);
+          setPrefilled(true);
+        }
+      }
+    } catch {
+      /* ignore malformed payload */
+    }
+    window.sessionStorage.removeItem("fusion-prefill");
+  }, []);
 
   const validSources = sources.filter((s) => s.html.trim().length > 50);
 
@@ -97,6 +122,13 @@ export default function FusionPage() {
           gras, tableaux, listes, citations).
         </p>
       </header>
+
+      {prefilled && (
+        <div className="card border-accent-500/30 bg-accent-500/[0.05] px-4 py-2.5 inline-flex items-center gap-2 text-xs text-accent-100">
+          <Icon name="check" size={11} />
+          Contenus pré-remplis depuis la détection de duplication.
+        </div>
+      )}
 
       <section className="card p-5 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
