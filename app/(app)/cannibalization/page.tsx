@@ -75,11 +75,9 @@ export default function CannibalizationPage() {
         <ExplainerButton />
       </header>
 
-      {/* Editor row — stacked vertically: easier to scroll inside long
-          contents, and keeps the textarea full-width for comfortable
-          pasting / typing. */}
+      {/* Editor row — side by side */}
       <section
-        className="space-y-3 animate-rise"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-3 animate-rise"
         style={{ animationDelay: "60ms" }}
       >
         <Editor
@@ -164,15 +162,15 @@ export default function CannibalizationPage() {
         )}
       </section>
 
-      {/* Highlighted previews — stacked vertically too, with the duplicated
-          spans wrapped in <mark>. IMPORTANT: pass debounced* not live text*.
+      {/* Highlighted previews — side by side, with the duplicated spans
+          wrapped in <mark>. IMPORTANT: pass debounced* not live text*.
           The ranges array stores character positions computed against the
           debounced text. If we used live text* (which can be 1-2 keystrokes
           ahead during typing) the .slice(start, end) calls would land on
           shifted characters and we'd mark the wrong words. */}
       {ready && result.runs > 0 && (
         <section
-          className="space-y-3 animate-rise"
+          className="grid grid-cols-1 lg:grid-cols-2 gap-3 animate-rise"
           style={{ animationDelay: "180ms" }}
         >
           <Preview

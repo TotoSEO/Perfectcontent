@@ -161,7 +161,10 @@ export default function FusionPage() {
         </div>
       </section>
 
-      <div className="space-y-4">
+      {/* Sources side by side. Two-column on lg+, single column below so
+          mobile / narrow screens still get full-width editors. The dashed
+          "+ Ajouter" button below sits across both columns. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {sources.map((s, i) => {
           const words = s.html.replace(/<[^>]+>/g, "").trim().split(/\s+/).filter(Boolean).length;
           return (
@@ -197,7 +200,7 @@ export default function FusionPage() {
 
         <button
           onClick={add}
-          className="w-full text-sm text-accent-400 hover:text-accent-300 py-2.5 border border-dashed border-[var(--border)] hover:border-accent-500/40 hover:bg-accent-500/5 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+          className="lg:col-span-2 w-full text-sm text-accent-400 hover:text-accent-300 py-2.5 border border-dashed border-[var(--border)] hover:border-accent-500/40 hover:bg-accent-500/5 rounded-xl transition-colors flex items-center justify-center gap-1.5"
         >
           <Icon name="plus" size={14} />
           Ajouter un autre contenu
