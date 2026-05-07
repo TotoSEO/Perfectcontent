@@ -168,8 +168,25 @@ export default function NewContentPage() {
       }
     }, 350);
     return () => clearTimeout(t);
+    // The deps cover every value that ends up in the estimate JSON body.
+    // Toggling defaultHaiku, costCap, doRefinement or doSchemaJsonld must
+    // re-trigger the call so the displayed cost matches reality (Haiku is
+    // 66% cheaper, refinement adds ~50%, etc.).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalCount, locationCode, languageCode, domainId, defaultLinking, defaultImage, autoValidate]);
+  }, [
+    totalCount,
+    locationCode,
+    languageCode,
+    domainId,
+    defaultLinking,
+    defaultImage,
+    defaultHaiku,
+    autoValidate,
+    costCap,
+    doRefinement,
+    doSchemaJsonld,
+    overrides,
+  ]);
 
   async function submit() {
     if (totalCount === 0) return;

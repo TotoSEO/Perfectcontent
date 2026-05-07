@@ -192,7 +192,7 @@ def _is_stop(w: str) -> bool:
 # bigram can span a period: "Doudoune. Pourquoi ..." → (doudoune, pourquoi)
 # becomes a phantom n-gram. We split on common terminators + bullet markers
 # + table cell separators so each chunk represents one continuous clause.
-_SENTENCE_SPLIT_RE = re.compile(r"[.!?;:|\n\r]+|[—–]{1,}|\s•\s|\s>\s")
+_SENTENCE_SPLIT_RE = re.compile(r"[.!?;:|\n\r…]+|[—–]{1,}|\s•\s|\s>\s")
 
 
 def _split_sentences(text: str) -> list[str]:

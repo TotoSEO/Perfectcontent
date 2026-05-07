@@ -19,12 +19,18 @@ export function RichTextarea({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
+  // Sync the prop into innerHTML whenever it ACTUALLY differs from what's
+  // already in the DOM. The strict equality check is the safety net that
+  // avoids resetting the caret while the user is typing: when a keystroke
+  // triggers onInput → onChange(html) → re-render with the same html,
+  // ref.current.innerHTML already equals the new value so we skip the
+  // assignment. External updates (parent setState, prefill from session
+  // storage, programmatic reset) DO differ → they sync correctly.
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== value) {
       ref.current.innerHTML = value;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value === "" ? "" : null]);
+  }, [value]);
 
   return (
     <div className="relative">

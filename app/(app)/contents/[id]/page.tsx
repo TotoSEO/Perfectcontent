@@ -32,16 +32,41 @@ export default function ContentPage() {
   const [chosenIdx, setChosenIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Tracks whether the local html/chosen state has user changes that
+  // haven't been persisted yet. Without this, the SWR refreshInterval
+  // (every 4s) would silently overwrite the editor's content with the
+  // last server-side version on each poll, losing the user's typing.
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    if (content?.html) setHtml(content.html);
-    if (content?.title_variants && content.chosen_title) {
-      const idx = content.title_variants.findIndex(
-        (v) => v.title === content.chosen_title
-      );
-      if (idx >= 0) setChosenIdx(idx);
+    // Sync the LOCAL state from the server only when:
+    //  1. We don't yet have local content (first load), OR
+    //  2. The user has saved everything (dirty === false) AND the server
+    //     has a genuinely newer html (e.g., a regenerate-section call
+    //     just landed). The "differs" check avoids redundant setStates
+    //     that would re-trigger the editor and reset the caret.
+    if (!content) return;
+    if (dirty) return;
+    if (content.html && content.html !== html) {
+      setHtml(content.html);
     }
-  }, [content?.html, content?.chosen_title, content?.title_variants]);
+    if (content.title_variants && content.chosen_title) {
+      const idx = content.title_variants.findIndex(
+        (v) => v.title === content.chosen_title,
+      );
+      if (idx >= 0 && idx !== chosenIdx) setChosenIdx(idx);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content?.html, content?.chosen_title, content?.title_variants, dirty]);
+
+  function onEditorChange(next: string) {
+    setHtml(next);
+    setDirty(true);
+  }
+  function onChooseVariant(idx: number) {
+    setChosenIdx(idx);
+    setDirty(true);
+  }
 
   if (!content) return <p className="text-zinc-500">Chargement…</p>;
 
@@ -60,6 +85,7 @@ export default function ContentPage() {
         },
       });
       setSavedAt(Date.now());
+      setDirty(false);
       mutate();
     } finally {
       setSaving(false);
@@ -186,7 +212,7 @@ export default function ContentPage() {
                         name="title"
                         className="sr-only"
                         checked={chosenIdx === i}
-                        onChange={() => setChosenIdx(i)}
+                        onChange={() => onChooseVariant(i)}
                       />
                       <div className="min-w-0 flex-1">
                         <div className={`text-sm font-medium ${chosenIdx === i ? "text-white" : "text-zinc-200"}`}>
@@ -202,7 +228,7 @@ export default function ContentPage() {
           </div>
         )}
 
-        <ContentEditor html={html} onChange={setHtml} />
+        <ContentEditor html={html} onChange={onEditorChange} />
 
         <div className="flex flex-wrap gap-2 text-xs">
           <a

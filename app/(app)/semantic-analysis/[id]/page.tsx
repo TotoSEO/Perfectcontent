@@ -67,11 +67,18 @@ export default function SemanticAnalysisDetailPage() {
   // / network. Kick it again from here. Idempotent — re-running on a queued
   // or failed row is fine.
   useEffect(() => {
-    if (!data || !id || runKicked.current) return;
-    if (data.status === "queued") {
-      runKicked.current = true;
-      api(`/srv/semantic-analyses/${id}/run`, { method: "POST" }).catch(() => {});
+    if (!data || !id) return;
+    // Reset the auto-kick latch when status leaves "queued" so a future
+    // failed → re-analyse → queued transition can re-trigger the kick.
+    // Without this, a row that gets stuck in queued a second time stays
+    // stuck until the user reloads the page.
+    if (data.status !== "queued") {
+      runKicked.current = false;
+      return;
     }
+    if (runKicked.current) return;
+    runKicked.current = true;
+    api(`/srv/semantic-analyses/${id}/run`, { method: "POST" }).catch(() => {});
   }, [data, id]);
 
   // Debounced persistence of the draft

@@ -4,6 +4,11 @@ Reuses the same SERP→scrape→parse→BM25 stack as the content generator, but
 the result is exposed as an editable workspace for the user to compose
 their own copy against the targets.
 
+Concurrency model: a single SemanticAnalysis row should never be processed by
+two concurrent invocations of `run()`. We enforce this via a row-level lock
++ status guard. If a previous invocation died (Vercel timeout, OOM) and left
+the row stuck in "running", we recover it after 5 minutes of inactivity.
+
 Pipeline (one short async run, ~40-90s):
   1. fetch_serp + fetch_related (DataForSEO, parallel)
   2. scrape_urls top-7 (Firecrawl/Jina + 72h cache)
@@ -16,6 +21,7 @@ Pipeline (one short async run, ~40-90s):
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from app.db import SessionLocal
@@ -32,10 +38,30 @@ async def run(analysis_id: UUID) -> None:
     """Run the full pipeline for one SemanticAnalysis row. Updates status
     in place: queued → running → done | failed. Idempotent (re-running on a
     'done' row is allowed and refreshes the data)."""
+    # Guard against concurrent invocations: when the listing-page fire-and-
+    # forget /run + the detail-page self-heal /run both reach the server
+    # within a few milliseconds of each other, both used to enter the full
+    # pipeline (double SERP fetch, double Claude call, double cost). Now we
+    # take a row-level lock and bail out if another invocation already
+    # flipped the status to "running".
     async with SessionLocal() as session:
-        sa = await session.get(SemanticAnalysis, analysis_id)
+        sa = await session.get(
+            SemanticAnalysis, analysis_id, with_for_update=True,
+        )
         if sa is None:
             return
+        if sa.status == "running":
+            # Another invocation owns this row — UNLESS it's stuck. A row
+            # whose updated_at is more than 5 min in the past was almost
+            # certainly killed by a serverless timeout / OOM and left
+            # stuck. Allow this invocation to take over.
+            try:
+                age = datetime.now(timezone.utc) - sa.updated_at
+                if age < timedelta(minutes=5):
+                    return
+            except Exception:
+                # If we can't compute the age, default to "don't run twice"
+                return
         sa.status = "running"
         sa.error = None
         await session.commit()
