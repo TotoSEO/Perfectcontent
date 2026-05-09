@@ -10,7 +10,7 @@ from app.auth import require_session
 from app.config import get_settings
 from app.db import get_db
 from app.routers import auth as auth_router
-from app.routers import audits, batches, contents, domains, folders, fusion, healthz, jobs, logs, semantic_analyses, silos
+from app.routers import audits, batches, contents, domains, folders, fusion, healthz, jobs, logs, optimize, semantic_analyses, silos
 
 
 @asynccontextmanager
@@ -198,4 +198,5 @@ app.include_router(logs.router, prefix="/srv/logs", tags=["logs"])
 app.include_router(silos.router, prefix="/srv/silos", tags=["silos"])
 app.include_router(audits.router, prefix="/srv/audits", tags=["audits"])
 app.include_router(semantic_analyses.router, prefix="/srv/semantic-analyses", tags=["semantic-analyses"])
+app.include_router(optimize.router, prefix="/srv/optimize", tags=["optimize"])
 app.include_router(healthz.router, prefix="/healthz", tags=["healthz"])
