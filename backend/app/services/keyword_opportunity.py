@@ -230,10 +230,63 @@ def _normalize(text: str) -> str:
     return s
 
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_HTML_SCRIPT_STYLE_RE = re.compile(
+    r"<(script|style)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL,
+)
+_HTML_ENTITY_RE = re.compile(r"&[a-zA-Z]+;|&#\d+;|&#x[0-9a-fA-F]+;")
+# Block-level closing tags become newlines so the sentence splitter
+# treats `<p>foo</p><p>bar</p>` as two separate sentences instead of
+# merging "foo bar" into one chunk.
+_HTML_BLOCK_END_RE = re.compile(
+    r"</(?:p|h[1-6]|li|tr|td|th|div|article|section|aside|header|footer|"
+    r"blockquote|pre|figcaption)\s*>",
+    re.IGNORECASE,
+)
+# Self-closing or void block-level break-makers
+_HTML_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+
+
+def _strip_html_for_tokens(text: str) -> str:
+    """Replace HTML tags + their attributes with whitespace before
+    tokenisation. Without this:
+      - URLs in href/src/class would be tokenised ("cafetiere-chaude" →
+        bigram (cafetiere, chaude)) and inflate the count of any keyword
+        whose surface appears in a slug.
+      - Block-level boundaries would be invisible to the sentence splitter
+        and the semi-exact match could span paragraph borders.
+
+    Example:
+      <p>Pour la doudoune.</p><p>Choisis la matière.</p>
+        → "Pour la doudoune.\nChoisis la matière.\n" (two sentences)
+      <a href="/cafetiere-chaude">cafetière chaude</a>
+        → " cafetière chaude " (URL slug not tokenised)
+    """
+    if not text or "<" not in text:
+        return text
+    # Strip <script>/<style> bodies entirely (their content is not prose).
+    out = _HTML_SCRIPT_STYLE_RE.sub(" ", text)
+    # Block boundaries → newline (acts as a sentence terminator downstream).
+    out = _HTML_BLOCK_END_RE.sub("\n", out)
+    out = _HTML_BR_RE.sub("\n", out)
+    # All other tags → space so adjacent words don't merge.
+    out = _HTML_TAG_RE.sub(" ", out)
+    out = out.replace("&nbsp;", " ").replace("&amp;", "&")
+    out = _HTML_ENTITY_RE.sub(" ", out)
+    return out
+
+
 def _tokens_with_offsets(text: str) -> list[tuple[str, int, int]]:
-    """List of (normalised_token, char_start, char_end) for the original text."""
+    """List of (normalised_token, char_start, char_end) for the original text.
+
+    The text is HTML-stripped first so URLs / classes / IDs don't get
+    tokenised. Char offsets are relative to the STRIPPED text — this is
+    fine because the optimize tool only uses counts (no highlighting in
+    the UI).
+    """
+    stripped = _strip_html_for_tokens(text)
     out: list[tuple[str, int, int]] = []
-    for m in _WORD_RE.finditer(text):
+    for m in _WORD_RE.finditer(stripped):
         w = m.group(0).lower().strip("-'")
         if len(w) < 1:
             continue
@@ -312,17 +365,31 @@ def detect_occurrences(content: str, query: str) -> tuple[int, int, list[tuple[i
     if len(q_content_norm) == 1:
         return len(exact_ranges), 0, exact_ranges
 
-    # For 2-token queries we require BOTH tokens in the sentence (otherwise
-    # "duvet d'oie" would semi-match any sentence mentioning "duvet" alone,
-    # which is too loose). For longer queries we require ⌈2n/3⌉ tokens —
-    # the corpus must really echo the query, not just brush against it.
+    # Required-tokens-in-sentence for a semi-exact match.
+    #   n=2  → 2 (both)            "duvet oie" needs both
+    #   n=3  → 3 (all)             "doudoune chaude cher" needs all three —
+    #                              dropping "cher" loses the intent
+    #   n=4+ → ⌈2n/3⌉              4→3, 5→4, 6→4, 7→5, 8→6
+    # Rationale: SEO queries are typically 2-4 tokens; the discriminating
+    # word is rarely redundant. We only relax to 2/3 when the query is
+    # long enough that any subset still carries the topic signal.
     n = len(q_content_norm)
-    needed = max(2, (n * 2 + 2) // 3)
+    if n <= 3:
+        needed = n
+    else:
+        needed = max(2, (n * 2 + 2) // 3)
     q_set = set(q_content_norm)
 
-    # Sentence boundaries by character position
+    # Sentence boundaries by character position. We split on the same
+    # HTML-stripped string the token offsets are relative to, so the
+    # `ts >= sentence_starts[i+1]` comparison stays consistent.
+    # Tags + their content (script/style) act as paragraph breaks, not
+    # mid-sentence boundaries — block-level closing tags become whitespace
+    # which the tokenizer already handles. We also treat the synthetic
+    # "</p>" / "</li>" boundaries by adding > to the regex.
+    stripped_for_sentences = _strip_html_for_tokens(content)
     sentence_breaks = [
-        m.start() for m in re.finditer(r"[.!?…\n]+", content)
+        m.start() for m in re.finditer(r"[.!?…\n]+", stripped_for_sentences)
     ]
     sentence_starts = [0] + [b + 1 for b in sentence_breaks]
 

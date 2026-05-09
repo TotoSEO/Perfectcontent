@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Icon } from "@/components/Icon";
 import { HelpIcon } from "@/components/Tooltip";
+import { RichTextarea } from "@/components/RichTextarea";
 
 type Opportunity = {
   query: string;
@@ -26,6 +27,7 @@ type ParseResponse = {
 
 type RewriteResponse = {
   rewritten: string;
+  cleaned_input: string;
   cost: number;
   input_tokens: number;
   output_tokens: number;
@@ -46,6 +48,7 @@ export default function OptimizePage() {
   const [parseLoading, setParseLoading] = useState(false);
 
   const [rewritten, setRewritten] = useState<string | null>(null);
+  const [cleanedInput, setCleanedInput] = useState<string | null>(null);
   const [rewriteCost, setRewriteCost] = useState<number>(0);
   const [rewriteLoading, setRewriteLoading] = useState(false);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
@@ -157,6 +160,7 @@ export default function OptimizePage() {
         },
       });
       setRewritten(res.rewritten);
+      setCleanedInput(res.cleaned_input);
       setRewriteCost(res.cost);
     } catch (e) {
       setRewriteError(String(e));
@@ -284,25 +288,30 @@ export default function OptimizePage() {
           className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-rise"
           style={{ animationDelay: "120ms" }}
         >
-          {/* Content editor */}
+          {/* Content editor — uses RichTextarea (contenteditable) so a
+              copy/paste from the rendered page preserves <h1>, <h2>, <p>,
+              <a href>, <table>, <ul>, <strong> etc. The browser auto-converts
+              the formatted clipboard to HTML; the underlying state stores
+              the inner HTML. */}
           <div className="card overflow-hidden flex flex-col">
             <div className="card-section">
               <span className="label inline-flex items-center gap-2">
                 <Icon name="edit" size={11} />
                 Étape 2 — Coller le contenu de la page
+                <HelpIcon content="Copie depuis ta page rendue (titres, paragraphes, listes, tableaux, liens internes, gras…). Le format est préservé pour que Claude puisse intégrer les mots-clés sans casser ta structure." />
               </span>
               <span className="text-[11px] text-zinc-500 tabular-nums">
                 {wordCount(content)} mot{wordCount(content) > 1 ? "s" : ""}
               </span>
             </div>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Colle ici le contenu HTML ou texte de ta page. Les compteurs se mettent à jour en direct."
-              spellCheck={false}
-              className="w-full bg-transparent px-5 py-4 text-[13.5px] leading-relaxed text-zinc-100 focus:outline-none resize-none flex-1"
-              style={{ minHeight: 480 }}
-            />
+            <div className="p-3 flex-1">
+              <RichTextarea
+                value={content}
+                onChange={setContent}
+                placeholder="Colle ici le contenu de ta page. Le format (titres, liens, tableaux, listes…) est conservé."
+                minHeight={460}
+              />
+            </div>
           </div>
 
           {/* Keyword table */}
@@ -482,40 +491,20 @@ export default function OptimizePage() {
           className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-rise"
           style={{ animationDelay: "60ms" }}
         >
-          <div className="card overflow-hidden flex flex-col">
-            <div className="card-section">
-              <span className="label">Avant</span>
-              <span className="text-[11px] text-zinc-500 tabular-nums">
-                {wordCount(content)} mots
-              </span>
-            </div>
-            <pre
-              className="px-5 py-4 text-[13px] leading-relaxed text-zinc-300 whitespace-pre-wrap break-words font-sans overflow-y-auto"
-              style={{ maxHeight: 600 }}
-            >
-              {content}
-            </pre>
-          </div>
-          <div className="card overflow-hidden flex flex-col border-emerald-500/30">
-            <div className="card-section bg-emerald-500/[0.03]">
-              <span className="label inline-flex items-center gap-2 text-emerald-200">
-                <Icon name="check" size={11} />
-                Après — termes intégrés
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-zinc-500 tabular-nums">
-                  {wordCount(rewritten)} mots · ${rewriteCost.toFixed(4)}
-                </span>
-                <CopyButton text={rewritten} />
-              </div>
-            </div>
-            <pre
-              className="px-5 py-4 text-[13px] leading-relaxed text-zinc-100 whitespace-pre-wrap break-words font-sans overflow-y-auto"
-              style={{ maxHeight: 600 }}
-            >
-              {rewritten}
-            </pre>
-          </div>
+          <RenderedPane
+            label="Avant (HTML nettoyé)"
+            html={cleanedInput || content}
+            words={wordCount(cleanedInput || content)}
+            tone="neutral"
+          />
+          <RenderedPane
+            label="Après — termes intégrés"
+            html={rewritten}
+            words={wordCount(rewritten)}
+            cost={rewriteCost}
+            tone="success"
+            copy
+          />
         </section>
       )}
     </div>
@@ -524,6 +513,95 @@ export default function OptimizePage() {
 
 function wordCount(s: string): number {
   return s.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Side-by-side preview of an HTML payload. Default is the rendered view
+ * (uses .tt typography classes for h1/h2/p/a/table/etc.) so the user sees
+ * what their page looks like with the new keywords in place. A toggle
+ * exposes the raw HTML source — useful for double-checking Claude didn't
+ * touch href URLs, table structure, etc.
+ */
+function RenderedPane({
+  label,
+  html,
+  words,
+  cost,
+  tone,
+  copy,
+}: {
+  label: string;
+  html: string;
+  words: number;
+  cost?: number;
+  tone: "neutral" | "success";
+  copy?: boolean;
+}) {
+  const [mode, setMode] = useState<"rendered" | "html">("rendered");
+  const ringClass =
+    tone === "success" ? "border-emerald-500/30" : "";
+  const headerBg =
+    tone === "success" ? "bg-emerald-500/[0.03]" : "";
+  const headerLabelClass =
+    tone === "success" ? "text-emerald-200" : "";
+  return (
+    <div className={`card overflow-hidden flex flex-col ${ringClass}`}>
+      <div className={`card-section ${headerBg}`}>
+        <span className={`label inline-flex items-center gap-2 ${headerLabelClass}`}>
+          {tone === "success" && <Icon name="check" size={11} />}
+          {label}
+        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-zinc-500 tabular-nums">
+            {words} mots
+            {cost !== undefined && ` · $${cost.toFixed(4)}`}
+          </span>
+          <div className="inline-flex bg-white/[0.04] border border-white/[0.08] rounded-md p-0.5 gap-0.5">
+            <button
+              onClick={() => setMode("rendered")}
+              className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider transition-colors ${
+                mode === "rendered"
+                  ? "bg-white/10 text-white"
+                  : "text-zinc-500 hover:text-zinc-200"
+              }`}
+            >
+              rendu
+            </button>
+            <button
+              onClick={() => setMode("html")}
+              className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-mono transition-colors ${
+                mode === "html"
+                  ? "bg-white/10 text-white"
+                  : "text-zinc-500 hover:text-zinc-200"
+              }`}
+            >
+              html
+            </button>
+          </div>
+          {copy && <CopyButton text={html} />}
+        </div>
+      </div>
+      {mode === "rendered" ? (
+        <div
+          className="tt px-5 py-4 overflow-y-auto"
+          style={{ maxHeight: 600 }}
+          // The HTML comes from either (a) the user's own paste — same-origin,
+          // and they're the only user of this single-user app — or (b) Claude's
+          // rewrite of that paste. Both are trusted in this context. We still
+          // render in a contained card with `overflow-hidden` so any errant
+          // <script> would be neutered by the missing parsing context.
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <pre
+          className="px-5 py-4 text-[12px] leading-relaxed text-zinc-300 whitespace-pre-wrap break-words font-mono overflow-y-auto"
+          style={{ maxHeight: 600 }}
+        >
+          {html}
+        </pre>
+      )}
+    </div>
+  );
 }
 
 function CopyButton({ text }: { text: string }) {

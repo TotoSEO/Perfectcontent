@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import require_session
 from app.schemas.optimize import ParseCsvIn, RewriteIn
-from app.services import gsc_csv, keyword_opportunity, optimize_rewriter
+from app.services import gsc_csv, html_sanitize, keyword_opportunity, optimize_rewriter
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -63,6 +63,17 @@ async def recount(payload: ParseCsvIn) -> dict:
     return {"opportunities": [k.to_dict() for k in opportunities]}
 
 
+@router.post("/clean-html")
+async def clean_html(payload: dict) -> dict:
+    """Return the sanitised HTML that WOULD be sent to Claude. Lets the
+    frontend show users what's actually about to be processed (and lets
+    them spot anything that got over-cleaned)."""
+    raw = (payload or {}).get("content", "")
+    if not isinstance(raw, str):
+        raw = ""
+    return {"cleaned": html_sanitize.sanitize_html(raw)}
+
+
 @router.post("/rewrite")
 async def rewrite(payload: RewriteIn) -> dict:
     req = optimize_rewriter.RewriteRequest(
@@ -72,6 +83,7 @@ async def rewrite(payload: RewriteIn) -> dict:
     result = await optimize_rewriter.rewrite(req)
     return {
         "rewritten": result.rewritten,
+        "cleaned_input": result.cleaned_input,
         "cost": result.cost,
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,

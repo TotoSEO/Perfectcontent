@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.services import llm
+from app.services.html_sanitize import sanitize_html
 
 
 SYSTEM = (
@@ -24,6 +25,14 @@ SYSTEM = (
     "paragraphes au maximum, à condition qu'ils soient pertinents, placés au "
     "bon endroit dans la progression de l'article, et qu'ils ne répètent rien "
     "qui existe déjà.\n\n"
+    "RÈGLES STRICTES POUR LE FORMAT HTML :\n"
+    "- Conserve EXACTEMENT toutes les balises (<h1>, <h2>, <h3>, <p>, <ul>, "
+    "  <ol>, <li>, <table>, <tr>, <td>, <strong>, <em>, <blockquote>, etc.).\n"
+    "- Conserve EXACTEMENT tous les liens <a href=\"...\"> avec leur URL "
+    "  intacte. Ne modifie JAMAIS une URL. Ne supprime JAMAIS un lien interne.\n"
+    "- Conserve EXACTEMENT toutes les balises <img> avec leur src et alt.\n"
+    "- Conserve la hiérarchie des titres et l'ordre des sections.\n"
+    "- N'ajoute aucun commentaire HTML, aucun attribut class/style/id.\n\n"
     "Réponds avec UNIQUEMENT le contenu modifié — pas d'introduction, pas de "
     "récapitulatif, pas de commentaire entre crochets. Garde exactement le "
     "format d'entrée (HTML si HTML, texte plain si texte plain)."
@@ -67,6 +76,7 @@ class RewriteRequest:
 @dataclass
 class RewriteResult:
     rewritten: str
+    cleaned_input: str  # the sanitised HTML that was actually sent to Claude
     cost: float
     input_tokens: int
     output_tokens: int
@@ -86,9 +96,18 @@ def _format_terms(terms: list[dict]) -> str:
 
 
 async def rewrite(req: RewriteRequest) -> RewriteResult:
+    # Sanitise the user's HTML BEFORE composing the prompt. CMS / Word /
+    # Google Docs paste come loaded with class/style/id/Mso* / <span> /
+    # <font> noise that wastes Claude's attention budget AND tempts the
+    # model to "tidy up" beyond just integrating keywords. After
+    # sanitisation we have a deterministic skeleton (h1-h6, p, a[href],
+    # tables, lists, strong/em, blockquote) — Claude focuses on the
+    # editorial work.
+    clean_content = sanitize_html(req.content)
+
     user = USER_TEMPLATE.format(
         terms_block=_format_terms(req.terms),
-        content=req.content,
+        content=clean_content,
     )
     # Sonnet for quality. The integration task is editorial — Haiku would
     # over-rewrite and break the "don't touch the structure" constraint.
@@ -99,8 +118,13 @@ async def rewrite(req: RewriteRequest) -> RewriteResult:
         model=llm.SONNET,
         temperature=0.3,
     )
+    # Re-sanitise Claude's output too — it occasionally wraps things in
+    # cosmetic <span> or adds a class. Idempotent, cheap, guarantees the
+    # final HTML matches the same clean skeleton the user got via /clean.
+    cleaned_output = sanitize_html(_strip_code_fences(resp.text))
     return RewriteResult(
-        rewritten=_strip_code_fences(resp.text),
+        rewritten=cleaned_output,
+        cleaned_input=clean_content,
         cost=resp.cost,
         input_tokens=resp.input_tokens,
         output_tokens=resp.output_tokens,
