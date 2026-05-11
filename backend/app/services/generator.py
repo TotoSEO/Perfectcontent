@@ -128,11 +128,44 @@ style, br. Section H2 ≥ 200 mots.
 
 Préfère "Et"/"Mais" en début de phrase à un connecteur formel.
 
-DIVERSITÉ DES EXPRESSIONS (anti keyword stuffing) : les fréquences cibles
-couvrent un CONCEPT, pas une formulation exacte. "Gouvernance
-conversationnelle" 5× → alterne avec "pilotage du chatbot", "cadre de
-pilotage", "garde-fous". Expression strictement identique répétée >2× =
-signal de bourrage.
+DIVERSITÉ DES EXPRESSIONS — anti keyword stuffing (PRIORITÉ ABSOLUE) :
+
+Les fréquences cibles ci-dessous comptent le CONCEPT, pas la formulation
+exacte. La SEULE règle qui prime sur la fréquence, c'est la naturalité.
+
+a) Une phrase exacte ne peut PAS être répétée plus de 2 fois dans l'article.
+   À partir du 3ème usage du même concept : reformule, paraphrase, utilise
+   un synonyme, un pronom de reprise ("la plateforme", "celui-ci",
+   "cette formule"), une périphrase, ou tout simplement le mot tout seul
+   sans son qualificatif.
+
+   Exemple — terme cible "plans tarifaires Webflow", 5 mentions :
+     1. "Webflow propose quatre plans tarifaires distincts" (forme complète)
+     2. "Chaque formule répond à un profil différent" (reformulation)
+     3. "Le plan Pro à 23 $/mois..." (mention partielle)
+     4. "Cette offre permet..." (pronom + paraphrase)
+     5. "L'abonnement Business..." (synonyme)
+
+b) INTERDICTION FORMELLE — insérer un terme cible au mépris de la grammaire
+   ou de la fluidité naturelle. Exemples de ce qui est REJETÉ :
+     ✗ "Un site vitrine Webflow tarif simple"
+     ✗ "site e-commerce Webflow coût avec 50 produits"
+     ✗ "les facteurs influençant prix Webflow les plus importants"
+     ✗ "le budget site Webflow réel peut surprendre"
+     ✗ "La plupart des créer site commerciaux"
+   Ces formulations crient "écrit pour le SEO" et seront pénalisées par
+   l'algorithme Google (Helpful Content Update). Si un terme ne s'intègre
+   pas grammaticalement, NE l'insère PAS — naturalité > fréquence.
+
+c) TEST OBLIGATOIRE avant chaque phrase contenant un terme cible : un
+   rédacteur humain dirait-il EXACTEMENT cela ? Si la phrase paraît
+   forcée, contournée, ou agrammaticale, REFORMULE en supprimant le
+   terme cible ou en le déplaçant. Mieux vaut 4 occurrences naturelles
+   que 6 occurrences forcées.
+
+d) Les fréquences cibles tolèrent ±50 % SI la marge sert la naturalité.
+   Une cible de 5× peut très bien finir à 3× si les 2 mentions
+   supprimées seraient apparues comme du stuffing.
 
 INTRO + CONCLUSION (zéro pitch) : les 200 premiers mots et 150 derniers
 ne contiennent NI le nom du domaine cible NI de formule promo ("nous
@@ -479,11 +512,36 @@ async def generate_content(
         type_brief=PROMPTS.get(content_type, PROMPTS["blog"]),
         rules=EDITORIAL_RULES,
     )
-    targets_text = (
-        "\n".join(
-            f"- {t.get('term')} : ~{t.get('target')} occurrences (entre {t.get('min')} et {t.get('max')})"
-            for t in (term_targets or [])[:25]
+    # Targets are presented as CONCEPTS with alternative surface forms, not
+    # as "use this exact phrase N times". Claude was taking the literal
+    # frequency as gospel and producing ungrammatical inserts like
+    # "Webflow tarif simple", "facteurs influençant prix Webflow". By
+    # framing each line as "concept + variants", we steer it toward
+    # paraphrasing instead of verbatim repetition.
+    def _format_target(t: dict) -> str:
+        term = t.get("term", "")
+        target = t.get("target", 1)
+        target_disp = max(1, int(round(float(target))))
+        surfaces = t.get("surface_forms") or []
+        # De-dup case-insensitively while preserving order
+        seen = set()
+        alts: list[str] = []
+        for s in surfaces:
+            s_norm = (s or "").lower().strip()
+            if s_norm and s_norm != term.lower() and s_norm not in seen:
+                seen.add(s_norm)
+                alts.append(s)
+            if len(alts) >= 4:
+                break
+        alt_block = (
+            f" · variantes vues dans la SERP : {', '.join(alts)}"
+            if alts
+            else ""
         )
+        return f"- « {term} » → environ {target_disp} mentions du CONCEPT{alt_block}"
+
+    targets_text = (
+        "\n".join(_format_target(t) for t in (term_targets or [])[:25])
         if term_targets
         else "(non calculé)"
     )
