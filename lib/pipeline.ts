@@ -63,6 +63,9 @@ export async function runJobToCompletion(
 /**
  * Silo orchestration:
  *  1. Drive every member job through SERP -> blueprint (parallel, all auto-paused).
+ *     Jobs already at status="paused" / "done" are detected and skipped so a
+ *     resumed orchestration (after a tab refresh, network glitch, or manual
+ *     trigger) doesn't waste 60-90s re-running cached steps.
  *  2. Build link manifest server-side (cosine on blueprint embeddings).
  *  3. Drive satellites through `generate` ... `score` (parallel).
  *  4. Drive the pillar last (it links to every satellite).
@@ -79,18 +82,44 @@ export async function runSiloToCompletion(
 ): Promise<{ status: "done" | "partial" | "failed" | "cancelled"; error?: string; audit?: any }> {
   const allJobs = members.map((m) => m.jobId);
 
-  // Phase 1 — every job up to blueprint (auto-paused thanks to mode=silo)
+  // Phase 1 — every job up to blueprint (auto-paused thanks to mode=silo).
+  // Smart resume: a paused job has already completed serp→blueprint, no point
+  // re-running. We fetch each job's current state and short-circuit the
+  // pipeline for jobs that are already past it.
   opts.onPhase?.("blueprint");
   const phase1 = await Promise.all(
-    allJobs.map((jobId) =>
-      runJobToCompletion(jobId, {
+    allJobs.map(async (jobId) => {
+      try {
+        const job = await api<{
+          status: string;
+          current_step: string | null;
+          error: string | null;
+        }>(`/srv/jobs/${jobId}`);
+        // Already past the blueprint pause → nothing to do for phase 1
+        if (job.status === "paused" || job.status === "done") {
+          opts.onJob?.(jobId, job.status, (job.current_step as Step) || undefined);
+          return { jobId, status: job.status as "paused" | "done", lastStep: (job.current_step as Step) || undefined };
+        }
+        // Already failed / capped → don't bother retrying inside phase 1, the
+        // user must explicitly re-launch the silo
+        if (job.status === "failed" || job.status === "capped") {
+          return {
+            jobId,
+            status: job.status as "failed" | "capped",
+            error: job.error || undefined,
+          };
+        }
+      } catch {
+        // If the status probe fails, fall through to the regular pipeline
+        // run — it'll surface a real error on the first step call.
+      }
+      const r = await runJobToCompletion(jobId, {
         onStep: (step) => opts.onJob?.(jobId, "running", step),
         cancelled: opts.cancelled,
-      }).then((r) => {
-        opts.onJob?.(jobId, r.status, r.lastStep);
-        return { jobId, ...r };
-      }),
-    ),
+      });
+      opts.onJob?.(jobId, r.status, r.lastStep);
+      return { jobId, ...r };
+    }),
   );
   if (opts.cancelled?.()) return { status: "cancelled" };
   const stuck = phase1.filter((p) => p.status !== "paused" && p.status !== "done");
@@ -109,35 +138,65 @@ export async function runSiloToCompletion(
     return { status: "failed", error: `manifest build failed: ${e}` };
   }
 
-  // Phase 3 — satellites in parallel through `generate` ... `score`
+  // Phase 3 — satellites in parallel through `generate` ... `score`.
+  // Same smart-resume: satellites already done (or stuck failed/capped) are
+  // skipped so a resumed orchestration doesn't redo work.
   opts.onPhase?.("satellites");
   const sats = members.filter((m) => m.role === "satellite");
   const satResults = await Promise.all(
-    sats.map((m) =>
-      runJobToCompletion(m.jobId, {
+    sats.map(async (m) => {
+      try {
+        const job = await api<{ status: string; current_step: string | null; error: string | null }>(
+          `/srv/jobs/${m.jobId}`,
+        );
+        if (job.status === "done") {
+          opts.onJob?.(m.jobId, "done", (job.current_step as Step) || undefined);
+          return { status: "done" as const, lastStep: (job.current_step as Step) || undefined, jobId: m.jobId };
+        }
+        if (job.status === "failed" || job.status === "capped") {
+          return { status: job.status as "failed" | "capped", error: job.error || undefined, jobId: m.jobId };
+        }
+      } catch {
+        /* ignore probe error, fall through */
+      }
+      const r = await runJobToCompletion(m.jobId, {
         fromStep: "generate",
         onStep: (step) => opts.onJob?.(m.jobId, "running", step),
         cancelled: opts.cancelled,
-      }).then((r) => {
-        opts.onJob?.(m.jobId, r.status, r.lastStep);
-        return { ...r, jobId: m.jobId };
-      }),
-    ),
+      });
+      opts.onJob?.(m.jobId, r.status, r.lastStep);
+      return { ...r, jobId: m.jobId };
+    }),
   );
   if (opts.cancelled?.()) return { status: "cancelled" };
 
-  // Phase 4 — pillar last (so it can link to every satellite)
+  // Phase 4 — pillar last (so it can link to every satellite). Skipped if
+  // already done.
   const pillar = members.find((m) => m.role === "pillar");
   if (pillar) {
     opts.onPhase?.("pillar");
-    const r = await runJobToCompletion(pillar.jobId, {
-      fromStep: "generate",
-      onStep: (step) => opts.onJob?.(pillar.jobId, "running", step),
-      cancelled: opts.cancelled,
-    });
-    opts.onJob?.(pillar.jobId, r.status, r.lastStep);
-    if (r.status === "failed" || r.status === "capped") {
-      return { status: "failed", error: `pillar ${r.status}: ${r.error ?? ""}` };
+    let alreadyDone = false;
+    try {
+      const job = await api<{ status: string }>(`/srv/jobs/${pillar.jobId}`);
+      if (job.status === "done") {
+        opts.onJob?.(pillar.jobId, "done");
+        alreadyDone = true;
+      } else if (job.status === "failed" || job.status === "capped") {
+        return { status: "failed", error: `pillar ${job.status}` };
+      }
+    } catch {
+      /* ignore probe error, fall through */
+    }
+    if (!alreadyDone) {
+      const r = await runJobToCompletion(pillar.jobId, {
+        fromStep: "generate",
+        onStep: (step) => opts.onJob?.(pillar.jobId, "running", step),
+        cancelled: opts.cancelled,
+      });
+      opts.onJob?.(pillar.jobId, r.status, r.lastStep);
+      if (r.status === "failed" || r.status === "capped") {
+        return { status: "failed", error: `pillar ${r.status}: ${r.error ?? ""}` };
+      }
     }
   }
 

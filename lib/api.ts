@@ -4,22 +4,53 @@
 // production. In dev, set NEXT_PUBLIC_API_BASE=http://localhost:8000.
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
-export type ApiOptions = Omit<RequestInit, "body"> & { json?: unknown };
+export type ApiOptions = Omit<RequestInit, "body"> & {
+  json?: unknown;
+  /** Hard timeout in ms. Default 120_000 (2 min) — long enough for the
+   *  heaviest pipeline step (semantic analyse / Claude generate) but
+   *  short enough that a Vercel-hung request doesn't deadlock the
+   *  browser-driven orchestrators forever. */
+  timeoutMs?: number;
+};
 
 export async function api<T = unknown>(
   path: string,
   opts: ApiOptions = {}
 ): Promise<T> {
-  const { json, headers, ...rest } = opts;
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    headers: {
-      ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(headers || {}),
-    },
-    body: json !== undefined ? JSON.stringify(json) : undefined,
-    ...rest,
-  });
+  const { json, headers, timeoutMs = 120_000, signal: callerSignal, ...rest } = opts;
+
+  // Combine caller's AbortSignal (if any) with our timeout signal so the
+  // request is cancelled on the first trigger.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error(`api timeout (${timeoutMs}ms): ${path}`)), timeoutMs);
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      ctrl.abort(callerSignal.reason);
+    } else {
+      callerSignal.addEventListener("abort", () => ctrl.abort(callerSignal.reason), { once: true });
+    }
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      credentials: "include",
+      headers: {
+        ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(headers || {}),
+      },
+      body: json !== undefined ? JSON.stringify(json) : undefined,
+      signal: ctrl.signal,
+      ...rest,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if ((err as Error)?.name === "AbortError") {
+      throw new Error(`timeout — ${path} (${timeoutMs}ms)`);
+    }
+    throw err;
+  }
+  clearTimeout(timer);
   if (res.status === 401 && typeof window !== "undefined") {
     window.location.href = "/login";
     throw new Error("unauthenticated");

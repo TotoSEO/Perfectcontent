@@ -163,6 +163,29 @@ export default function SiloPage() {
               Annuler
             </button>
           )}
+          {!running && silo.status !== "done" && (
+            <button
+              onClick={() => {
+                // The orchestrator is browser-driven: if the tab was refreshed,
+                // closed mid-run, or the network dropped, the silo can sit in
+                // a stale state. This button resets the latch and re-fires the
+                // mount effect via state churn. Smart-resume in
+                // runSiloToCompletion handles already-paused/already-done jobs.
+                startedRef.current = false;
+                cancelled.current = false;
+                setPhase(null);
+                // Triggering a SWR refetch flips the dep object reference, so
+                // the orchestration useEffect runs again.
+                mutate();
+                mutateJobs();
+              }}
+              className="btn-secondary text-xs px-2.5 py-1.5"
+              title="Forcer la reprise de l'orchestration depuis l'état actuel des jobs"
+            >
+              <Icon name="refresh" size={12} />
+              Reprendre
+            </button>
+          )}
         </div>
       </header>
 
