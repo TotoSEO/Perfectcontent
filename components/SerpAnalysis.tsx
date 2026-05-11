@@ -86,12 +86,12 @@ function SerpModal({ contentId, onClose }: { contentId: string; onClose: () => v
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 lg:p-6"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-6xl max-h-[92vh] flex flex-col card overflow-hidden"
+        className="w-full max-w-6xl max-h-[96vh] sm:max-h-[92vh] flex flex-col card overflow-hidden"
       >
         <div className="px-5 py-3 border-b border-[#25252a] flex items-baseline justify-between">
           <div className="flex items-center gap-3">
@@ -207,8 +207,8 @@ function CompetitorsPane({
   }
 
   return (
-    <div className="flex h-full">
-      <div className="w-72 border-r border-[#25252a] overflow-y-auto bg-[#0e0e11]">
+    <div className="flex flex-col lg:flex-row h-full min-h-0">
+      <div className="w-full lg:w-72 lg:shrink-0 lg:border-r border-b lg:border-b-0 border-[#25252a] overflow-y-auto bg-[#0e0e11] max-h-[40vh] lg:max-h-none">
         {competitors.map((c, i) => (
           <button
             key={i}

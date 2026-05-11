@@ -61,12 +61,12 @@ function PromptModal({ contentId, onClose }: { contentId: string; onClose: () =>
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 lg:p-6"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-5xl max-h-[90vh] flex flex-col card overflow-hidden"
+        className="w-full max-w-5xl max-h-[95vh] sm:max-h-[92vh] flex flex-col card overflow-hidden"
       >
         <div className="px-5 py-3 border-b border-[#25252a] flex items-baseline justify-between">
           <div className="flex items-center gap-3">

@@ -333,25 +333,81 @@ function CopyEverythingButton({
   }
 
   async function copy() {
-    const body = htmlToText(html || "");
-    const payload =
+    const plainBody = htmlToText(html || "");
+    const plainPayload =
       `Title : ${title}\n` +
       `Metadescription : ${meta}\n` +
       `Slug : ${slug}\n\n` +
-      body;
+      plainBody;
+
+    // Rich-HTML version: a small header block then the article HTML.
+    // When pasted into Google Docs / Word / WordPress visual editor, the
+    // formatting (h1/h2/p/strong/a href/tables/lists) is preserved.
+    function escape(s: string): string {
+      return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+    const htmlPayload =
+      `<p><strong>Title :</strong> ${escape(title)}</p>` +
+      `<p><strong>Metadescription :</strong> ${escape(meta)}</p>` +
+      `<p><strong>Slug :</strong> ${escape(slug)}</p>` +
+      `<hr>` +
+      (html || "");
+
+    // Modern clipboard API: write both text/html and text/plain in one
+    // ClipboardItem. The pasting app picks whichever MIME it understands
+    // (Google Docs picks text/html, a plain-text editor picks text/plain).
     try {
-      await navigator.clipboard.writeText(payload);
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([htmlPayload], { type: "text/html" }),
+            "text/plain": new Blob([plainPayload], { type: "text/plain" }),
+          }),
+        ]);
+      } else {
+        // Browser without ClipboardItem (older Firefox): use the rich-copy
+        // execCommand trick on a hidden contenteditable so the formatting
+        // still makes it into the clipboard.
+        const div = document.createElement("div");
+        div.contentEditable = "true";
+        div.style.position = "fixed";
+        div.style.left = "-9999px";
+        div.innerHTML = htmlPayload;
+        document.body.appendChild(div);
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(div);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        document.execCommand("copy");
+        sel?.removeAllRanges();
+        div.remove();
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      // fallback for older browsers
-      const ta = document.createElement("textarea");
-      ta.value = payload;
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand("copy"); setCopied(true); } catch { /* noop */ }
-      ta.remove();
-      setTimeout(() => setCopied(false), 1800);
+      // Last-resort plain-text fallback
+      try {
+        await navigator.clipboard.writeText(plainPayload);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = plainPayload;
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+          setCopied(true);
+        } catch {
+          /* noop */
+        }
+        ta.remove();
+        setTimeout(() => setCopied(false), 1800);
+      }
     }
   }
 

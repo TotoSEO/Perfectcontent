@@ -101,9 +101,24 @@ pas "significatif").
 CONCLUSION : pas de résumé. Conseil actionnable, question ouverte, ou
 prise de position. Jamais "En résumé/Pour conclure/Dans l'ensemble".
 
-GRAS : dans CHAQUE paragraphe de prose, mets en <strong> 4-8 mots
-CONTIGUS qui portent l'info clé. UN seul groupe par paragraphe. Lus à
-la suite, ces passages doivent former phrase.
+GRAS — RÈGLE STRICTE :
+- Dans CHAQUE paragraphe de prose, mets en <strong> EXACTEMENT 2 à 7
+  mots CONTIGUS (collés, jamais en pointillé), une seule fois par
+  paragraphe.
+- Le passage en gras = l'INFO LA PLUS IMPORTANTE du paragraphe (chiffre,
+  prise de position, conséquence, fait clé). C'est ce qu'un lecteur
+  pressé doit retenir s'il ne lit que les gras de l'article.
+- INTERDIT : mettre en gras les mots-clés sémantiques (les termes du
+  brief / des targets), un mot-clé seul, un nom de marque seul, ou un
+  groupe nominal sans verbe. Le gras ne sert pas le SEO, il sert la
+  lisibilité — c'est le résumé tactile du paragraphe.
+- Exemple de bon gras : "le coût total atteint 12 000 €", "rallonge de
+  3 à 6 mois le délai", "double le taux de conversion".
+- Exemple de MAUVAIS gras (rejeté) : un seul mot-clé "doudoune chaude",
+  un nom propre "Primaloft", un terme isolé "isolation thermique".
+- Lus à la suite à travers tout l'article, les passages en gras
+  doivent former une narration cohérente (le squelette factuel de
+  l'article).
 
 H3 (aération) : H2 > 4 paragraphes ou > 350 mots → découpe avec 1-3 h3.
 
