@@ -314,32 +314,71 @@ def _competitors_block(breakdown: list[dict] | None) -> str:
 # ---------------------------------------------------------------------------
 
 SILO_RULES_COMMON = """
-MAILLAGE INTERNE (zéro tolérance) :
-- Liens CONTEXTUELS, intégrés au fil de la phrase, ancre = pivot sémantique.
-- ANCRES BANNIES : "consultez notre article", "découvrez notre guide", "voir
-  aussi", "à lire également", "lire la suite", "plus d'infos ici", "cliquez
-  ici", "en savoir plus", "notre/cet autre article sur".
-- Ancres VARIÉES : jamais 2 ancres identiques (varie verbe / nom / expression).
-- Format : <a href="URL_EXACTE_FOURNIE">ancre courte</a>. Pas de target/rel/class.
-- 1 lien max par couple (source → cible). Pas 2 liens vers la même URL.
-- VOISINS uniquement : URL qui ne s'intègre pas naturellement → zéro lien
-  plutôt qu'un lien forcé. Le lien PILIER reste obligatoire dans TOUS les cas.
+MAILLAGE INTERNE — RÈGLES STRICTES :
+
+1. Liens CONTEXTUELS, intégrés AU FIL DE LA PHRASE. Le verbe ou le nom de
+   la phrase porte le lien. JAMAIS un lien qui prend toute la phrase
+   ("Pour Y, consultez X" = INTERDIT).
+
+2. ANCRES BANNIES : "consultez notre/cet article", "découvrez notre/comment",
+   "voir aussi", "à lire également", "lire la suite", "plus d'infos ici",
+   "cliquez ici", "en savoir plus", "notre/cet autre article sur",
+   "comparez avec", "et si X vous préoccupe", "avant de vous engager
+   consultez", "pour aller plus loin", "à retenir".
+
+3. SECTIONS BANNIES (zéro tolérance) :
+   - Pas de section finale "À retenir / Pour aller plus loin /
+     Conclusion / Ressources / À lire aussi" qui regroupe les liens.
+   - Les 3 DERNIERS paragraphes <p> de l'article NE DOIVENT contenir
+     AUCUN lien interne (ni pillar, ni voisin). Les liens vivent dans
+     le CORPS de l'article, jamais dans la fermeture.
+
+4. Format : <a href="URL_EXACTE_FOURNIE">ancre courte (3-7 mots)</a>.
+   Pas de target/rel/class/style. L'URL doit être copiée À LA LETTRE
+   depuis la spec fournie ci-dessous, jamais modifiée.
+
+5. DISTRIBUTION : 1 lien par paragraphe maximum. Liens RÉPARTIS dans
+   l'article (pas plus d'un dans les 2 premiers paragraphes, pas tous
+   concentrés dans une même section H2).
+
+6. Ancres VARIÉES : jamais 2 ancres identiques. Varie verbe / nom /
+   expression d'un lien à l'autre.
+
+7. 1 lien max par couple (source → cible). Pas 2 liens vers la même URL.
 """
 
 SILO_RULES_SATELLITE = """
 RÔLE : article satellite d'un silo.
 
 PILIER (URL exacte) : {pillar_url}
-→ 1 lien OBLIGATOIRE vers cette URL, dans l'intro OU les 3 premiers <p>.
-  Ancre contextuelle, intégrée au fil de la phrase.
-→ NON-NÉGOCIABLE. Vérifié automatiquement après génération. Reformule
-  l'intro si besoin pour que le lien s'y intègre naturellement.
+→ 1 lien OBLIGATOIRE vers cette URL, OBLIGATOIREMENT placé dans l'un des
+  3 PREMIERS paragraphes <p> de l'article (introduction comprise).
+  PAS dans un H2, PAS dans une liste, PAS dans un tableau, PAS après le
+  3ème <p>, PAS dans une section finale.
+→ Si l'introduction existante ne se prête pas à l'intégration, REFORMULE
+  l'intro pour qu'elle pose le contexte du pilier — sans citer textuellement
+  l'URL ni dire "voir le pilier".
+→ Ancre = pivot sémantique court qui décrit le sujet du pilier (3-7 mots).
+→ NON-NÉGOCIABLE. Vérifié automatiquement après génération.
 
-VOISINS (similarité décroissante) :
+VOISINS DU MÊME SILO ({peer_count}) — TOUS OBLIGATOIRES :
 {peer_block}
-→ 0 ou 1 lien max par voisin, posé quand le sujet voisin est mentionné
-  naturellement. Vise le PLUS de voisins possibles tant que c'est naturel ;
-  jamais forcé. Priorise le haut de liste.
+→ Pour CHAQUE voisin ci-dessus : 1 <a href="URL"> avec ancre contextuelle
+  obligatoirement présent dans le CORPS de l'article (entre le 4ème <p>
+  et l'avant-avant-dernier <p>). Vérifié automatiquement après génération.
+→ Si le sujet d'un voisin n'apparaît pas naturellement dans le plan
+  existant, AJOUTE 1-2 phrases (à l'intérieur d'un paragraphe existant
+  pertinent) qui amènent le sujet en pivot — par exemple :
+    "Les outils {{spécifiques au voisin}} demandent une approche
+    différente : on a creusé <a href='URL'>{{sujet du voisin}}</a> en
+    détail." ← intégré dans un paragraphe existant, PAS un paragraphe
+    autonome de fin d'article.
+→ Ancres VARIÉES : 3-7 mots qui décrivent DE QUOI parle le voisin (pas
+  d'appel à l'action). Une ancre différente par voisin.
+→ Dispersion OBLIGATOIRE : si tu as 3 voisins, ils doivent atterrir dans
+  3 paragraphes DIFFÉRENTS et non-adjacents. Jamais 2 voisins consécutifs.
+→ INTERDIT : paragraphe de fin d'article qui regroupe plusieurs voisins
+  ("Comparez aussi avec X et découvrez Y" = REJET de la génération).
 """
 
 SILO_RULES_PILLAR = """
@@ -373,13 +412,15 @@ def _silo_block(link_manifest: dict | None) -> str:
         return ""
     role = link_manifest.get("role")
     if role == "satellite":
-        peer_block = _format_satellite_block(link_manifest.get("peer_links") or [])
+        peers = link_manifest.get("peer_links") or []
+        peer_block = _format_satellite_block(peers)
         return (
             "\n\n=== CONTEXTE SILO ===\n"
             + SILO_RULES_COMMON
             + SILO_RULES_SATELLITE.format(
                 pillar_url=link_manifest.get("pillar_url", ""),
                 peer_block=peer_block,
+                peer_count=len(peers),
             )
         )
     if role == "pillar":

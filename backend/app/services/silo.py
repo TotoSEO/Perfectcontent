@@ -360,6 +360,14 @@ async def validate_mesh(db: AsyncSession, silo_id: uuid.UUID) -> dict[str, Any]:
         }
 
         if m.silo_role == "satellite":
+            # Total paragraph count of the article — used to compute the
+            # "is this link buried in the closing section?" check.
+            from bs4 import BeautifulSoup as _BS
+            total_p = len(_BS(m.html or "", "html.parser").find_all("p"))
+            # A link sitting in the LAST 3 <p> = "conclusion stuffing"
+            # anti-pattern (à lire aussi / pour aller plus loin).
+            in_closing = lambda p: total_p > 0 and p >= total_p - 3  # noqa: E731
+
             # Pillar link: present, exactly once, in first 3 <p>
             count = len(by_target.get(pillar_url_norm, []))
             positions = [p for _, p in by_target.get(pillar_url_norm, [])]
@@ -376,21 +384,50 @@ async def validate_mesh(db: AsyncSession, silo_id: uuid.UUID) -> dict[str, Any]:
                 if count == 0:
                     member_row["issues"].append("pillar link missing")
                 elif not any(0 <= p < 3 for p in positions):
-                    member_row["issues"].append("pillar link not in first 3 paragraphs")
-            # Peer links: at MOST 1 per peer, no duplicates
+                    pos_str = min(positions) if positions else "?"
+                    member_row["issues"].append(
+                        f"pillar link in paragraph {pos_str} (should be in first 3 paragraphs)"
+                    )
+
+            # Peer links: each peer MUST have exactly 1 contextual link in
+            # the BODY of the article (not in the last 3 paragraphs).
             for peer in (manifest.get("peer_links") or []):
                 purl = _normalize(peer.get("url", ""))
-                cnt = len(by_target.get(purl, []))
-                ok_peer = cnt <= 1
+                hits = by_target.get(purl, [])
+                cnt = len(hits)
+                peer_positions = [p for _, p in hits]
+                # cnt == 0 → missing (the new strict rule)
+                # cnt > 1 → duplicate
+                # cnt == 1 and link is in the closing section → bad placement
+                if cnt == 0:
+                    ok_peer = False
+                elif cnt > 1:
+                    ok_peer = False
+                elif all(in_closing(p) for p in peer_positions):
+                    ok_peer = False
+                else:
+                    ok_peer = True
                 member_row["expected"].append({
                     "target_url": peer.get("url"),
                     "kind": "peer",
                     "count": cnt,
+                    "first_position": min(peer_positions, default=None),
                     "ok": bool(ok_peer),
                     "similarity": peer.get("similarity"),
                 })
-                if cnt > 1:
-                    member_row["issues"].append(f"duplicate peer link: {peer.get('url')}")
+                if cnt == 0:
+                    member_row["issues"].append(
+                        f"peer link missing: {peer.get('url')}"
+                    )
+                elif cnt > 1:
+                    member_row["issues"].append(
+                        f"duplicate peer link: {peer.get('url')}"
+                    )
+                elif all(in_closing(p) for p in peer_positions):
+                    member_row["issues"].append(
+                        f"peer link in closing section ({peer.get('url')}) — "
+                        f"should be in the body, not the last 3 paragraphs"
+                    )
         elif m.silo_role == "pillar":
             # Pillar must point at every satellite, 1 link each
             for sat in (manifest.get("satellite_links") or []):
