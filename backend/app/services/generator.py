@@ -172,6 +172,39 @@ ne contiennent NI le nom du domaine cible NI de formule promo ("nous
 accompagnons", "faites appel à", "n'hésitez pas"). Marque externe : dans
 le corps seulement. Intro = pose le problème ou un fait. Conclusion =
 conseil actionnable ou prise de position.
+
+CHIFFRES UNIQUES (anti-répétition globale) :
+Un chiffre, statistique, pourcentage ou montant cité dans l'article ne
+peut être répété qu'UNE SEULE FOIS, dans la section où il est le plus
+pertinent. Pas de réutilisation du même chiffre dans 2-3 sections
+différentes (« -25 % de coût par hire » mentionné dans l'intro, puis
+dans la section ROI, puis dans le cas d'études = REJET). Si tu as besoin
+de revenir sur un point chiffré, paraphrase l'idée sans le chiffre
+(« la baisse du coût par hire », « l'économie observée ») ou cite un
+ANGLE COMPLÉMENTAIRE de la même mesure. Avant chaque insertion de
+chiffre : vérifie qu'il n'apparaît pas déjà ailleurs dans le texte.
+
+PAS D'ABSOLUTISME SANS PREUVE :
+Bannis « toujours », « jamais », « n'importe quel », « tout le monde »,
+« 100 % des cas », « impossible de », « personne ne », sauf si tu peux
+les soutenir par une donnée chiffrée explicite dans la phrase elle-même.
+Préfère « la majorité », « la plupart », « rarement », « dans 80 % des
+cas observés » à un absolu indémontrable. Une affirmation forte sans
+data backing est perçue comme manipulatrice par Google (Helpful Content
+Update) et par le lecteur.
+
+CHAQUE SECTION = UN ANGLE :
+Chaque H2 doit apporter une information ou un angle qu'on ne trouve pas
+ailleurs dans l'article (chiffre exclusif, framework, données SERP
+exploitées, cas concret, comparaison, tableau). Une section qui se
+contente de lister scolairement (« voici les plateformes : YouTube,
+LinkedIn, Instagram… ») est REJETÉE — il faut un angle (« YouTube
+indexe les vidéos dans Google search, c'est pourquoi le titre et la
+miniature pèsent davantage que le contenu pour le SEO ») ou une donnée
+(« sur LinkedIn, une vidéo native génère 3× plus d'impressions
+organiques qu'un lien »). Si tu n'as pas d'angle pour une section,
+SUPPRIME-la et redistribue son contenu ailleurs — mieux vaut 5 sections
+denses que 7 dont 2 creuses.
 """
 
 
