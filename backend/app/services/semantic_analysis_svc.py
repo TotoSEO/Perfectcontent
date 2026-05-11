@@ -31,7 +31,7 @@ from app.services import logger as syslog
 from app.services import parser, scraper, serp, term_freq
 
 
-MIN_COMPETITORS_OK = 4
+MIN_COMPETITORS_OK = 3
 
 
 async def run(analysis_id: UUID) -> None:

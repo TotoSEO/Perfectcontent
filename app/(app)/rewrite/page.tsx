@@ -28,7 +28,8 @@ export default function RewritePage() {
   const [languageCode, setLanguageCode] = useState("fr");
   const [domainId, setDomainId] = useState<string>("");
   const [folderId, setFolderId] = useState<string>("");
-  const [internalLinking, setInternalLinking] = useState(true);
+  const [internalLinking, setInternalLinking] = useState(false);
+  const [generateImage, setGenerateImage] = useState(false);
   const [costCap, setCostCap] = useState<number | "">(0.6);
   const [source, setSource] = useState("");
   const [busy, setBusy] = useState(false);
@@ -57,6 +58,7 @@ export default function RewritePage() {
               location_code: locationCode,
               language_code: languageCode,
               internal_linking: internalLinking && !!domainId,
+              generate_image: generateImage,
             },
           }
         );
@@ -67,7 +69,7 @@ export default function RewritePage() {
     }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source.length, internalLinking, domainId]);
+  }, [source.length, internalLinking, generateImage, domainId]);
 
   async function submit() {
     if (!ready) return;
@@ -85,6 +87,7 @@ export default function RewritePage() {
           domain_id: domainId || null,
           folder_id: folderId || null,
           internal_linking: internalLinking && !!domainId,
+          generate_image: generateImage,
           cost_cap: costCap === "" ? null : Number(costCap),
         },
       });
@@ -170,7 +173,7 @@ export default function RewritePage() {
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
             internalLinking && !!domainId
               ? "border-accent-500/40 bg-accent-500/5"
@@ -178,13 +181,31 @@ export default function RewritePage() {
           } ${!domainId ? "opacity-50 cursor-not-allowed" : ""}`}>
             <div className="flex items-center gap-2">
               <Icon name="link" size={14} className="text-zinc-400" />
-              <span className="text-sm text-zinc-200">Maillage interne après réécriture</span>
+              <span className="text-sm text-zinc-200">Maillage interne</span>
+              <HelpIcon content="Insère des liens vers les pages indexées du domaine sélectionné. Nécessite un domaine cible." />
             </div>
             <input
               type="checkbox"
               disabled={!domainId}
               checked={internalLinking && !!domainId}
               onChange={(e) => setInternalLinking(e.target.checked)}
+              className="accent-accent-500"
+            />
+          </label>
+          <label className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+            generateImage
+              ? "border-accent-500/40 bg-accent-500/5"
+              : "border-[var(--border)] bg-white/[0.04] hover:bg-white/[0.07]"
+          }`}>
+            <div className="flex items-center gap-2">
+              <Icon name="image" size={14} className="text-zinc-400" />
+              <span className="text-sm text-zinc-200">Image de couverture</span>
+              <HelpIcon content="Génère une image d'illustration (Fal.ai Flux). Ajoute ~$0.03 au coût." />
+            </div>
+            <input
+              type="checkbox"
+              checked={generateImage}
+              onChange={(e) => setGenerateImage(e.target.checked)}
               className="accent-accent-500"
             />
           </label>

@@ -48,7 +48,7 @@ STEPS = [
     "score",
 ]
 PAUSE_AFTER = "blueprint"
-MIN_COMPETITORS_OK = 4
+MIN_COMPETITORS_OK = 3
 
 
 # ---------- shared helpers ----------

@@ -113,4 +113,5 @@ class RewriteJobIn(BaseModel):
     domain_id: UUID | None = None
     folder_id: UUID | None = None
     internal_linking: bool = False
+    generate_image: bool = False
     cost_cap: float | None = None

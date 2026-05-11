@@ -104,7 +104,9 @@ async def estimate_rewrite(payload: RewriteJobIn) -> dict:
     """Cost estimate for the rewrite pipeline (SERP + scrape + analyse + rewrite)."""
     sanitized = fusion_sanitize.sanitize_html(payload.source_content)
     rng = cost.estimate_rewrite(
-        source_chars=len(sanitized), internal_linking=payload.internal_linking
+        source_chars=len(sanitized),
+        internal_linking=payload.internal_linking,
+        generate_image=payload.generate_image,
     )
     return {
         "low": rng.low,
@@ -124,10 +126,12 @@ async def create_rewrite_job(
     - blueprint step produces only target_words (no full plan)
     - generate step calls rewrite.rewrite_with_context() with source_content
     """
-    rng = cost.estimate(
-        content_type=payload.content_type, internal_linking=payload.internal_linking
-    )
     sanitized_source = fusion_sanitize.sanitize_html(payload.source_content)
+    rng = cost.estimate_rewrite(
+        source_chars=len(sanitized_source),
+        internal_linking=payload.internal_linking,
+        generate_image=payload.generate_image,
+    )
 
     content = Content(
         folder_id=payload.folder_id,
@@ -147,6 +151,7 @@ async def create_rewrite_job(
         language_code=payload.language_code,
         domain_id=payload.domain_id,
         internal_linking=payload.internal_linking,
+        generate_image=payload.generate_image,
         auto_validate_blueprint=True,
         mode="rewrite",
         source_content=sanitized_source,

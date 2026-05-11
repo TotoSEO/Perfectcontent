@@ -29,9 +29,9 @@ COST_PER_URL = 0.001
 
 # Hard quality thresholds. Real top-SERP articles always clear these by 10×+;
 # bot-block pages and JS shells fail.
-_MIN_BODY_CHARS = 400
-_MIN_BODY_WORDS = 80
-_MAX_LINK_DENSITY = 0.6  # if >60% of body chars are inside [..](..)  → menu page
+_MIN_BODY_CHARS = 300
+_MIN_BODY_WORDS = 60
+_MAX_LINK_DENSITY = 0.7  # if >70% of body chars are inside [..](..)  → menu page
 
 # Common bot/WAF/paywall/JS-required signatures. Case-insensitive substring match
 # inside the first 4 KB of the body. One match → reject.

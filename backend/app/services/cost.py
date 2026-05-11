@@ -86,7 +86,12 @@ def estimate_fusion(sources: list[str]) -> CostRange:
     )
 
 
-def estimate_rewrite(source_chars: int, *, internal_linking: bool = False) -> CostRange:
+def estimate_rewrite(
+    source_chars: int,
+    *,
+    internal_linking: bool = False,
+    generate_image: bool = False,
+) -> CostRange:
     # Pipeline phases that always run for a rewrite job
     base_low = SERP_LOW + SCRAPE_LOW + 0.05
     base_high = SERP_HIGH + SCRAPE_HIGH + 0.10
@@ -103,4 +108,7 @@ def estimate_rewrite(source_chars: int, *, internal_linking: bool = False) -> Co
     if internal_linking:
         low += LINKING_LOW
         high += LINKING_HIGH
+    if generate_image:
+        low += IMAGE_LOW
+        high += IMAGE_HIGH
     return CostRange(low=round(low, 4), high=round(high, 4))
