@@ -283,37 +283,64 @@ async def build_manifest(db: AsyncSession, silo_id: uuid.UUID) -> dict[str, Any]
 # ---------------------------------------------------------------------------
 
 def _normalize(url: str) -> str:
-    """Canonicalize URL for matching: drop trailing slash, lower scheme/host."""
+    """Canonicalize URL for matching. Returns 'host/path' with:
+      - scheme dropped (http vs https don't matter for identity)
+      - 'www.' prefix dropped
+      - trailing slash removed
+      - query/fragment stripped
+    Lenient by design: a link with href='https://www.striq.fr/x' must
+    match a manifest URL of 'https://striq.fr/x' or 'http://www.striq.fr/x/'.
+    Without this leniency, validation produces phantom "missing link"
+    issues every time Claude renders the URL slightly differently from
+    the manifest spec.
+    """
     try:
-        u = urlparse(url)
-        host = (u.netloc or "").lower()
-        path = (u.path or "").rstrip("/")
-        return f"{u.scheme.lower()}://{host}{path}".rstrip("/")
+        u = urlparse((url or "").strip())
+        host = (u.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        path = (u.path or "/").rstrip("/") or "/"
+        return f"{host}{path}"
     except Exception:
-        return url.rstrip("/")
+        return (url or "").strip().rstrip("/").lower()
 
 
-def _links_in_html(html: str) -> list[tuple[str, str, int]]:
-    """Return (href, anchor_text, paragraph_index_or_-1) for every <a href>.
+def _links_in_html(html: str) -> list[tuple[str, str, int, float]]:
+    """Return (href, anchor_text, paragraph_index_or_-1, doc_position_ratio)
+    for every <a href>.
 
-    paragraph_index counts <p> elements containing the anchor; -1 if the
-    anchor lives outside any <p> (e.g. inside <li>, <td>)."""
+      - paragraph_index counts <p> elements containing the anchor; -1 if
+        the anchor lives outside any <p> (e.g. inside <li>, <td>, header).
+      - doc_position_ratio (0.0..1.0): the link's position among all
+        block-level elements (h*, p, li, td). 0.0 = top of article,
+        1.0 = bottom. Lets validators check "is this link early /
+        middle / late" without being fooled by links inside <li> or
+        <td> (which previously got p_idx=-1 and failed the position
+        check unfairly).
+    """
     soup = BeautifulSoup(html or "", "html.parser")
-    out: list[tuple[str, str, int]] = []
+    out: list[tuple[str, str, int, float]] = []
     paragraphs = soup.find_all("p")
     p_to_idx = {id(p): idx for idx, p in enumerate(paragraphs)}
+    blocks = soup.find_all(["h1", "h2", "h3", "h4", "p", "li", "td"])
+    block_to_idx = {id(b): idx for idx, b in enumerate(blocks)}
+    total_blocks = max(len(blocks), 1)
     for a in soup.find_all("a", href=True):
         href = (a.get("href") or "").strip()
         anchor = a.get_text(" ", strip=True)
-        # Find enclosing <p>
+        # Walk ancestors to find the enclosing block + paragraph.
         p_idx = -1
+        block_idx: int | None = None
         cur = a.parent
         while cur is not None:
-            if id(cur) in p_to_idx:
+            if block_idx is None and id(cur) in block_to_idx:
+                block_idx = block_to_idx[id(cur)]
+            if id(cur) in p_to_idx and p_idx == -1:
                 p_idx = p_to_idx[id(cur)]
                 break
             cur = getattr(cur, "parent", None)
-        out.append((href, anchor, p_idx))
+        ratio = (block_idx / total_blocks) if block_idx is not None else 0.0
+        out.append((href, anchor, p_idx, ratio))
     return out
 
 
@@ -342,13 +369,13 @@ async def validate_mesh(db: AsyncSession, silo_id: uuid.UUID) -> dict[str, Any]:
     for m in members:
         manifest = m.link_manifest or {}
         links = _links_in_html(m.html or "")
-        # Map normalized href -> [(anchor, p_idx)]
-        by_target: dict[str, list[tuple[str, int]]] = {}
-        for href, anchor, p_idx in links:
+        # Map normalized href -> [(anchor, p_idx, doc_ratio)]
+        by_target: dict[str, list[tuple[str, int, float]]] = {}
+        for href, anchor, p_idx, ratio in links:
             n = _normalize(href)
             if not n:
                 continue
-            by_target.setdefault(n, []).append((anchor, p_idx))
+            by_target.setdefault(n, []).append((anchor, p_idx, ratio))
 
         member_row = {
             "content_id": str(m.id),
@@ -360,50 +387,59 @@ async def validate_mesh(db: AsyncSession, silo_id: uuid.UUID) -> dict[str, Any]:
         }
 
         if m.silo_role == "satellite":
-            # Total paragraph count of the article — used to compute the
-            # "is this link buried in the closing section?" check.
-            from bs4 import BeautifulSoup as _BS
-            total_p = len(_BS(m.html or "", "html.parser").find_all("p"))
-            # A link sitting in the LAST 3 <p> = "conclusion stuffing"
-            # anti-pattern (à lire aussi / pour aller plus loin).
-            in_closing = lambda p: total_p > 0 and p >= total_p - 3  # noqa: E731
+            # Position is evaluated via doc_ratio (0.0 = top, 1.0 = bottom)
+            # so it works for links inside <li>/<td>/<h2> too, not just <p>.
+            #   Pillar  : ratio <= 0.35  →  in first third of the article
+            #   Closing : ratio >= 0.85  →  in last 15 % of the article
+            # These thresholds tolerate the new prompt structure (résumé +
+            # intro + first H2) without flagging legitimate placements.
+            hits_for = lambda url_norm: by_target.get(url_norm, [])  # noqa: E731
 
-            # Pillar link: present, exactly once, in first 3 <p>
-            count = len(by_target.get(pillar_url_norm, []))
-            positions = [p for _, p in by_target.get(pillar_url_norm, [])]
-            ok = (count >= 1) and any(0 <= p < 3 for p in positions)
-            entry = {
+            # ----- Pillar link -----
+            pillar_hits = hits_for(pillar_url_norm)
+            pillar_count = len(pillar_hits)
+            pillar_ratios = [r for _, _, r in pillar_hits]
+            pillar_in_early = pillar_count >= 1 and any(
+                r <= 0.35 for r in pillar_ratios
+            )
+            pillar_ok = bool(pillar_in_early)
+            first_pos = (
+                min((p for _, p, _ in pillar_hits), default=None)
+                if pillar_count
+                else None
+            )
+            member_row["expected"].append({
                 "target_url": pillar_url,
                 "kind": "pillar",
-                "count": count,
-                "first_position": min(positions, default=None),
-                "ok": bool(ok),
-            }
-            member_row["expected"].append(entry)
-            if not ok:
-                if count == 0:
+                "count": pillar_count,
+                "first_position": first_pos,
+                "ok": pillar_ok,
+            })
+            if not pillar_ok:
+                if pillar_count == 0:
                     member_row["issues"].append("pillar link missing")
-                elif not any(0 <= p < 3 for p in positions):
-                    pos_str = min(positions) if positions else "?"
+                else:
+                    earliest = min(pillar_ratios) * 100
                     member_row["issues"].append(
-                        f"pillar link in paragraph {pos_str} (should be in first 3 paragraphs)"
+                        f"pillar link placé à {earliest:.0f} % de l'article "
+                        f"(devrait être dans le premier tiers, ≤ 35 %)"
                     )
 
-            # Peer links: each peer MUST have exactly 1 contextual link in
-            # the BODY of the article (not in the last 3 paragraphs).
+            # ----- Peer links -----
             for peer in (manifest.get("peer_links") or []):
                 purl = _normalize(peer.get("url", ""))
-                hits = by_target.get(purl, [])
+                hits = hits_for(purl)
                 cnt = len(hits)
-                peer_positions = [p for _, p in hits]
-                # cnt == 0 → missing (the new strict rule)
-                # cnt > 1 → duplicate
-                # cnt == 1 and link is in the closing section → bad placement
+                peer_ratios = [r for _, _, r in hits]
+                # A peer link is OK when:
+                #   - exactly 1 occurrence (no duplicate)
+                #   - that occurrence sits in the body (ratio < 0.85,
+                #     i.e. NOT in the last 15 % of the article)
                 if cnt == 0:
                     ok_peer = False
                 elif cnt > 1:
                     ok_peer = False
-                elif all(in_closing(p) for p in peer_positions):
+                elif all(r >= 0.85 for r in peer_ratios):
                     ok_peer = False
                 else:
                     ok_peer = True
@@ -411,8 +447,8 @@ async def validate_mesh(db: AsyncSession, silo_id: uuid.UUID) -> dict[str, Any]:
                     "target_url": peer.get("url"),
                     "kind": "peer",
                     "count": cnt,
-                    "first_position": min(peer_positions, default=None),
-                    "ok": bool(ok_peer),
+                    "first_position": min((p for _, p, _ in hits), default=None),
+                    "ok": ok_peer,
                     "similarity": peer.get("similarity"),
                 })
                 if cnt == 0:
@@ -423,10 +459,11 @@ async def validate_mesh(db: AsyncSession, silo_id: uuid.UUID) -> dict[str, Any]:
                     member_row["issues"].append(
                         f"duplicate peer link: {peer.get('url')}"
                     )
-                elif all(in_closing(p) for p in peer_positions):
+                elif all(r >= 0.85 for r in peer_ratios):
+                    last_ratio = max(peer_ratios) * 100
                     member_row["issues"].append(
-                        f"peer link in closing section ({peer.get('url')}) — "
-                        f"should be in the body, not the last 3 paragraphs"
+                        f"peer link ({peer.get('url')}) placé à {last_ratio:.0f} % "
+                        f"de l'article — devrait être dans le corps, pas la fermeture"
                     )
         elif m.silo_role == "pillar":
             # Pillar must point at every satellite, 1 link each

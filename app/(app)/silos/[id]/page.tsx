@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
@@ -97,31 +97,62 @@ export default function SiloPage() {
   const cancelled = useRef(false);
   const startedRef = useRef(false);
 
-  useEffect(() => {
-    if (!silo || !batchJobs || running || startedRef.current) return;
-    if (silo.status === "done" || silo.status === "partial") return;
-    const jobByContent = new Map<string, string>();
-    for (const j of batchJobs) if (j.content_id) jobByContent.set(j.content_id, j.id);
-    const ordered = silo.members
-      .map((m) => ({ jobId: jobByContent.get(m.content_id) || "", role: m.role }))
-      .filter((m) => m.jobId);
-    if (ordered.length !== silo.members.length) return;
-    startedRef.current = true;
-    setRunning(true);
-    cancelled.current = false;
-    runSiloToCompletion(silo.id, ordered, {
-      onJob: () => { mutate(); mutateJobs(); },
-      onPhase: (p) => setPhase(p),
-      cancelled: () => cancelled.current,
-    })
-      .catch((e) => console.error(e))
-      .finally(() => {
+  // The actual orchestration call, extracted so both the mount-effect AND
+  // the manual "Reprendre" button can invoke it. Previously, "Reprendre"
+  // just reset a ref and called mutate(), hoping the useEffect would
+  // re-fire — fragile when SWR returned cached data, and the button
+  // appeared to do nothing.
+  const runOrchestration = useCallback(
+    async (siloData: Silo, jobs: JobMini[]) => {
+      if (running || startedRef.current) return;
+      const jobByContent = new Map<string, string>();
+      for (const j of jobs) if (j.content_id) jobByContent.set(j.content_id, j.id);
+      const ordered = siloData.members
+        .map((m) => ({ jobId: jobByContent.get(m.content_id) || "", role: m.role }))
+        .filter((m) => m.jobId);
+      if (ordered.length !== siloData.members.length) return;
+      startedRef.current = true;
+      cancelled.current = false;
+      setRunning(true);
+      try {
+        await runSiloToCompletion(siloData.id, ordered, {
+          onJob: () => { mutate(); mutateJobs(); },
+          onPhase: (p) => setPhase(p),
+          cancelled: () => cancelled.current,
+        });
+      } catch (e) {
+        console.error(e);
+      } finally {
         setRunning(false);
         mutate();
         mutateJobs();
-      });
+      }
+    },
+    // mutate/mutateJobs are stable references from useSWR
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [running],
+  );
+
+  useEffect(() => {
+    if (!silo || !batchJobs || running || startedRef.current) return;
+    if (silo.status === "done" || silo.status === "partial") return;
+    runOrchestration(silo, batchJobs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [silo, batchJobs]);
+
+  // Wake the tab back up when it regains focus so we re-check whether the
+  // orchestration died while the user was away. Browser-driven pipelines
+  // can lose their event loop if the tab was throttled or unloaded.
+  useEffect(() => {
+    function onFocus() {
+      if (silo && batchJobs && !running && !startedRef.current &&
+          silo.status !== "done" && silo.status !== "partial") {
+        runOrchestration(silo, batchJobs);
+      }
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [silo, batchJobs, running, runOrchestration]);
 
   if (!silo) return <p className="text-zinc-500">Chargement…</p>;
 
@@ -165,19 +196,25 @@ export default function SiloPage() {
           )}
           {!running && silo.status !== "done" && (
             <button
-              onClick={() => {
-                // The orchestrator is browser-driven: if the tab was refreshed,
-                // closed mid-run, or the network dropped, the silo can sit in
-                // a stale state. This button resets the latch and re-fires the
-                // mount effect via state churn. Smart-resume in
-                // runSiloToCompletion handles already-paused/already-done jobs.
+              onClick={async () => {
+                // Run a fresh orchestration NOW, using whatever state the
+                // jobs are in. Smart-resume inside runSiloToCompletion
+                // detects already-done / already-paused jobs and skips
+                // them, so this is cheap to re-trigger. We pull fresh
+                // SWR data first to make sure we have the latest job
+                // statuses (otherwise we'd resume against a stale
+                // snapshot from 4s ago).
                 startedRef.current = false;
-                cancelled.current = false;
                 setPhase(null);
-                // Triggering a SWR refetch flips the dep object reference, so
-                // the orchestration useEffect runs again.
-                mutate();
-                mutateJobs();
+                const [freshSilo, freshJobs] = await Promise.all([
+                  mutate(),
+                  mutateJobs(),
+                ]);
+                const useS = freshSilo || silo;
+                const useJ = freshJobs || batchJobs;
+                if (useS && useJ) {
+                  await runOrchestration(useS, useJ);
+                }
               }}
               className="btn-secondary text-xs px-2.5 py-1.5"
               title="Forcer la reprise de l'orchestration depuis l'état actuel des jobs"
