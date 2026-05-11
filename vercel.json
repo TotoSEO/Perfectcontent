@@ -8,7 +8,7 @@
       "use": "@vercel/python@4.3.1",
       "config": {
         "includeFiles": "backend/app/**",
-        "maxDuration": 60
+        "maxDuration": 300
       }
     },
     { "src": "api/diag.py", "use": "@vercel/python@4.3.1" }

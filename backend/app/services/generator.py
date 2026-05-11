@@ -57,11 +57,25 @@ Sur 10 phrases consécutives, AU MOINS 2 phrases < 8 mots ET AU MOINS 2
 phrases > 25 mots. Le reste varie librement. Trois paragraphes
 consécutifs de longueur similaire = signal IA, à éviter absolument.
 
+PARAGRAPHES DENSES — 4 à 7 phrases max :
+Un paragraphe est une UNITÉ D'IDÉE. 4-7 phrases idéalement, jamais plus
+de 8. Au-delà, l'œil décroche et l'IA-détecteur repère du "remplissage".
+Une info qui demande 3 phrases tient en 3 phrases — ne déroule pas pour
+"faire long". Si le paragraphe excède 8 phrases : DÉCOUPE en 2.
+
 DENSITÉ > LONGUEUR :
 target_words est une CIBLE, pas une obligation. Si tu n'as plus rien à
 dire à 1500 mots et que la cible est 2000, ARRÊTE-toi. Inflate pour
 atteindre une cible = signal IA et perte de qualité. Mieux vaut 1500
 mots denses que 2000 mots dilués.
+
+H3 — SEGMENTATION OBLIGATOIRE :
+Une section H2 qui contient PLUSIEURS sous-sujets (chatbot classique +
+chatbot IA, maintenance + délai de traitement, avantages + inconvénients)
+DOIT être segmentée en H3, 1 par sous-sujet. Règle pratique : si tu
+écris "Un X… Un Y… L'autre type Z…" dans la même section, c'est qu'il
+te manque 2-3 H3. Une section H2 sans H3 ne traite QU'UN seul sujet.
+H2 > 4 paragraphes ou > 350 mots SANS H3 = signal de mauvaise structure.
 
 GRAS — règle stricte (à conserver pour l'opti on-page) :
 60-70 % des paragraphes du corps contiennent UN passage <strong> de 2 à
@@ -129,7 +143,8 @@ exceptées.
 INTERDITS COURTS (les seuls dead-giveaways qu'on filtre vraiment) :
 - "en outre", "par ailleurs", "il est essentiel de", "force est de"
 - "optimiser", "robuste", "afin de", "permettre de", "découvrez" (en début)
-- Em-dash (—, –) : utilise virgules, parenthèses, deux-points
+- Em-dash et double-tiret : —, –, "--", "––" → INTERDIT partout
+  (signal IA cash). Utilise virgules, parenthèses, deux-points.
 - Absolus sans preuve ("toujours", "jamais") sauf chiffre dans la phrase
 - "Ce n'est pas X, c'est Y" (1× max), triplets parallèles ("innovant,
   performant, durable")
@@ -194,14 +209,14 @@ Réponse en JSON strict (pas de markdown) :
   "image_prompt": "…"
 }}
 
-title_variants — 3 entrées, angles distincts. La règle CASSE DES TITRES
-définie plus haut s'applique aussi au title et au meta.
+title_variants — 3 entrées TOUTES DIFFÉRENTES entre elles ET du H1.
+Aucun title ne peut être identique au H1 ni à un autre title. Angles
+distincts, formulations distinctes. La règle CASSE DES TITRES s'applique
+aussi au title et au meta.
 - title : 50-60 car, mot-clé en début si naturel, zéro clickbait.
 - meta : 140-160 car. Mini-résumé qui répond presque au title : verdict
   d'abord puis invite ("Voir le comparatif.", "Détails ici."). Jamais
-  "Découvrez tout sur X". Ex : title "Webflow ou WordPress en 2026 ?" →
-  meta "Webflow pour les designers, WordPress pour les agences. Voir
-  le comparatif."
+  "Découvrez tout sur X".
 
 html — H1 = 1ère variante de title. Respecte la blueprint (sections, h2,
 bullets, must_terms par section). Atteins target_words ± 15 %. Exploite
@@ -342,15 +357,30 @@ def _competitors_block(breakdown: list[dict] | None) -> str:
 SILO_RULES_COMMON = """
 MAILLAGE INTERNE — RÈGLES STRICTES :
 
-1. Liens CONTEXTUELS, intégrés AU FIL DE LA PHRASE. Le verbe ou le nom de
-   la phrase porte le lien. JAMAIS un lien qui prend toute la phrase
-   ("Pour Y, consultez X" = INTERDIT).
+0. WORKFLOW MENTAL — non négociable :
+   Tu n'écris PAS l'article puis tu insères les liens à la fin. Tu
+   PLANIFIES dès le départ : "le paragraphe sur X parlera de Y, où je
+   poserai le lien vers la page Y". Le lien naît de la rédaction, il
+   ne s'y ajoute pas. Avant chaque H2/H3, demande-toi : "est-ce que
+   l'un des sujets voisins surgit ici naturellement ?". Si oui, le
+   paragraphe se construit AUTOUR de cette mention — pas l'inverse.
 
-2. ANCRES BANNIES : "consultez notre/cet article", "découvrez notre/comment",
-   "voir aussi", "à lire également", "lire la suite", "plus d'infos ici",
-   "cliquez ici", "en savoir plus", "notre/cet autre article sur",
-   "comparez avec", "et si X vous préoccupe", "avant de vous engager
-   consultez", "pour aller plus loin", "à retenir".
+1. ANCRE = le sujet du voisin, AU CŒUR de la phrase, jamais un méta-
+   référence. Le sujet de la page liée DOIT être ce dont la phrase parle.
+   ✓ "Pour <a>intégrer Stripe via webhook</a>, prévois un temps de…"
+   ✓ "Les <a>frais cachés du plan Pro</a> doublent souvent la facture."
+   ✗ "L'intégration technique est couverte dans ce
+     <a>guide d'intégration chatbot étape par étape</a>"
+     (méta-référence : la phrase parle d'AUTRE chose et renvoie ailleurs)
+   ✗ "Pour creuser, voir <a>notre comparatif</a>"
+     (l'ancre ne dit pas DE QUOI parle la page liée)
+
+2. ANCRES BANNIES (zéro tolérance) : "consultez notre/cet article",
+   "découvrez notre/comment", "voir aussi", "à lire également",
+   "lire la suite", "plus d'infos ici", "cliquez ici", "en savoir plus",
+   "notre/cet autre article sur", "comparez avec", "et si X vous
+   préoccupe", "avant de vous engager consultez", "pour aller plus loin",
+   "à retenir", "couvert en détail dans", "détaillé dans ce guide".
 
 3. SECTIONS BANNIES (zéro tolérance) :
    - Pas de section finale "À retenir / Pour aller plus loin /

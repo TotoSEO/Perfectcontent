@@ -360,7 +360,13 @@ function MeshAuditPanel({
   async function regenerate(contentId: string) {
     setBusyId(contentId);
     try {
-      await api(`/srv/silos/${siloId}/regenerate/${contentId}`, { method: "POST" });
+      // 4-min timeout — regenerate triggers a full Claude generate which
+      // on a 2 000-word satellite can sit around 90-150 s, occasionally
+      // more. Matches the Vercel maxDuration (300 s).
+      await api(`/srv/silos/${siloId}/regenerate/${contentId}`, {
+        method: "POST",
+        timeoutMs: 240_000,
+      });
       // Re-validate the mesh after regeneration
       try {
         await api(`/srv/silos/${siloId}/validate`, { method: "POST" });

@@ -30,6 +30,26 @@ export type StepResult = {
  * The browser is the orchestrator: each step is a serverless call that
  * persists its result to Postgres before returning.
  */
+// Per-step client-side timeout. The pipeline's slow steps (generate +
+// blueprint = Claude calls on 1500-2500 word outputs) regularly need
+// 60-180 s. We give them 4 min on the client to match the Vercel function
+// maxDuration we set (300 s). Cheaper steps (serp/scrape/parse/etc.)
+// don't need this much but giving them the same budget is harmless.
+const STEP_TIMEOUT_MS = 240_000;
+
+// Slow steps that benefit from an automatic single retry on timeout.
+// Generate is the most likely to hit the wall (longest Claude call); a
+// fresh retry usually completes because the cache from the first attempt
+// makes the prompt cheaper and the model is rarely stuck twice in a row.
+const RETRY_ON_TIMEOUT_STEPS: Set<Step> = new Set(["generate", "blueprint"]);
+
+
+function isTimeoutError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /timeout|aborted/i.test(msg);
+}
+
+
 export async function runJobToCompletion(
   jobId: string,
   opts: {
@@ -43,11 +63,31 @@ export async function runJobToCompletion(
     if (opts.cancelled?.()) return { status: "cancelled", lastStep: current };
 
     let res: StepResult;
-    try {
-      res = await api<StepResult>(`/srv/jobs/${jobId}/step/${current}`, { method: "POST" });
-    } catch (err) {
-      return { status: "failed", lastStep: current, error: String(err) };
+    let attempt = 0;
+    const maxAttempts = RETRY_ON_TIMEOUT_STEPS.has(current) ? 2 : 1;
+    let lastErr: unknown = null;
+    while (attempt < maxAttempts) {
+      try {
+        res = await api<StepResult>(
+          `/srv/jobs/${jobId}/step/${current}`,
+          { method: "POST", timeoutMs: STEP_TIMEOUT_MS },
+        );
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        attempt++;
+        // Only retry on timeout — a 4xx/5xx with content is not going to
+        // change on a retry.
+        if (attempt >= maxAttempts || !isTimeoutError(err)) break;
+      }
     }
+    if (lastErr) {
+      return { status: "failed", lastStep: current, error: String(lastErr) };
+    }
+    // res is guaranteed assigned at this point because we either set it
+    // and broke, or returned via the error branch.
+    res = res!;
     opts.onStep?.(current, res);
 
     if (res.error) return { status: "failed", lastStep: current, error: res.error };
