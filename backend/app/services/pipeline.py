@@ -18,7 +18,7 @@ from sqlalchemy import select
 from app import cache
 from app.audit import log_step
 from app.db import SessionLocal
-from app.models import Content, Domain, Job, SemanticReport
+from app.models import Content, Domain, FanoutReport, Job, SemanticReport
 from app.services import logger as syslog
 from app.services import (
     analysis,
@@ -451,6 +451,21 @@ async def _step_blueprint(job_id: UUID) -> None:
         structural_signals={},
         llm_cost=0.0,
     )
+
+    # PAA + Fan-Out queries → forced as `must_questions` in the blueprint so
+    # the H2 outline maps to the decomposed intent (Google PAA + LLM AI Overview
+    # fan-out). Without this the blueprint risks ignoring entire sub-questions
+    # the SERP and LLMs treat as core.
+    bp_paa: list[str] = []
+    for item in (sr.serp_raw or {}).get("paa", []) or []:
+        if isinstance(item, str):
+            bp_paa.append(item)
+        elif isinstance(item, dict):
+            q = item.get("question") or item.get("title") or item.get("query")
+            if isinstance(q, str):
+                bp_paa.append(q)
+    bp_fan_out = await _load_fanout_queries_for(job.keyword)
+
     cap_bp: dict = {}
     bp = await blueprint_svc.build_blueprint(
         keyword=job.keyword,
@@ -458,6 +473,8 @@ async def _step_blueprint(job_id: UUID) -> None:
         content_type=job.content_type,
         report=fake_report,
         term_targets=list(sr.term_targets or []),
+        paa=bp_paa,
+        fan_out_queries=bp_fan_out,
         capture=cap_bp,
     )
     await _add_cost(job_id, bp.llm_cost)
@@ -765,6 +782,36 @@ async def _load_domain_host(domain_id: UUID) -> str | None:
     async with SessionLocal() as session:
         d = await session.get(Domain, domain_id)
         return d.hostname if d else None
+
+
+async def _load_fanout_queries_for(keyword: str) -> list[str]:
+    """Pull the unique_queries from the latest done FanoutReport for this
+    keyword. Returns [] if none exists — we never auto-run a fan-out here
+    (it would silently add ~$0.005-0.01 to every generation). The user is
+    expected to manually run /fan-out beforehand if they want this data fed
+    into the blueprint."""
+    from sqlalchemy import select
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(
+                select(FanoutReport)
+                .where(FanoutReport.keyword == keyword.strip())
+                .where(FanoutReport.status == "done")
+                .order_by(FanoutReport.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if row is None or not row.unique_queries:
+        return []
+    out: list[str] = []
+    for q in row.unique_queries:
+        if isinstance(q, dict):
+            qs = q.get("query")
+            if isinstance(qs, str) and qs.strip():
+                out.append(qs.strip())
+        elif isinstance(q, str) and q.strip():
+            out.append(q.strip())
+    return out
 
 
 def _quick_image_prompt(blueprint: dict) -> str:

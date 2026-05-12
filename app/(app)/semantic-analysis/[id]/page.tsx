@@ -114,6 +114,25 @@ export default function SemanticAnalysisDetailPage() {
     return m;
   }, [debounced]);
 
+  // Entity coverage — for each entity from the semantic_report, count
+  // case/accent-insensitive whole-word occurrences in the draft. Surfaces a
+  // checklist so the writer can spot missing entities without scanning the
+  // full term list (some entities are bigrams or proper nouns that wouldn't
+  // surface in the BM25/Claude term targets).
+  const entityCoverage = useMemo(() => {
+    const ents = data?.entities || [];
+    if (!ents.length) return { items: [], covered: 0, total: 0 };
+    const items = ents.map((e) => ({
+      term: e,
+      count: countSurfaces(debounced, [e]),
+    }));
+    return {
+      items,
+      covered: items.filter((i) => i.count > 0).length,
+      total: items.length,
+    };
+  }, [data?.entities, debounced]);
+
   const stats = useMemo(() => {
     if (!targets.length) return [];
     // For unigrams use the count map directly; for n-grams fall back to
@@ -300,20 +319,61 @@ export default function SemanticAnalysisDetailPage() {
                       />
                     )}
                   </div>
-                  {data.entities && data.entities.length > 0 && (
+                  {entityCoverage.total > 0 && (
                     <div className="card overflow-hidden">
                       <div className="card-section">
-                        <span className="label">Entités détectées</span>
-                        <span className="text-xs text-zinc-500 tabular-nums">
-                          {data.entities.length}
+                        <div className="flex items-center gap-2">
+                          <span className="label">Couverture d'entités</span>
+                          <span
+                            className="text-[10px] uppercase tracking-[0.16em] text-zinc-500"
+                            title="Topical authority : couvrir les entités du top 7 améliore la complétude perçue par Google et la citabilité par les LLMs."
+                          >
+                            Topical authority
+                          </span>
+                        </div>
+                        <span className="text-xs text-zinc-400 tabular-nums">
+                          <span
+                            className={
+                              entityCoverage.covered === entityCoverage.total
+                                ? "text-emerald-300"
+                                : entityCoverage.covered >= entityCoverage.total * 0.6
+                                ? "text-amber-300"
+                                : "text-red-300"
+                            }
+                          >
+                            {entityCoverage.covered}
+                          </span>
+                          {" / "}
+                          {entityCoverage.total}
                         </span>
                       </div>
                       <div className="px-4 py-3 flex flex-wrap gap-1.5">
-                        {data.entities.map((it, i) => (
-                          <span key={i} className="chip">
-                            {it}
-                          </span>
-                        ))}
+                        {entityCoverage.items.map((it) => {
+                          const covered = it.count > 0;
+                          return (
+                            <span
+                              key={it.term}
+                              className={`chip inline-flex items-center gap-1 ${
+                                covered
+                                  ? "border-emerald-700/50 text-emerald-200 bg-emerald-500/10"
+                                  : "border-zinc-700 text-zinc-400 bg-zinc-800/30"
+                              }`}
+                              title={covered ? `${it.count} occurrence(s)` : "Absente du draft"}
+                            >
+                              <Icon
+                                name={covered ? "check" : "x"}
+                                size={9}
+                                className={covered ? "text-emerald-300" : "text-zinc-500"}
+                              />
+                              {it.term}
+                              {covered && it.count > 1 && (
+                                <span className="text-[10px] text-emerald-400/80 tabular-nums">
+                                  ×{it.count}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
