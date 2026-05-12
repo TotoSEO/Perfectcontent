@@ -28,7 +28,7 @@ from app.db import SessionLocal
 from app.models import SemanticAnalysis
 from app.services import analysis as analysis_svc
 from app.services import logger as syslog
-from app.services import onpage_parser, serp, term_freq
+from app.services import onpage_parser, serp, term_freq, term_targets_claude
 
 
 MIN_COMPETITORS_OK = 3
@@ -124,13 +124,34 @@ async def run(analysis_id: UUID) -> None:
             for parsed, _ in parsed_rows
         )
 
-        # 4. Term targets — the heart of the analysis
-        targets = term_freq.compute_term_targets(
-            competitor_texts,
-            keyword=keyword,
-            headings_text=headings_text,
-            top_n=40,
-        )
+        # 4. Term targets — the heart of the analysis.
+        # Primary: Claude proposes 40 semantically-grounded terms with surface
+        # forms; Python counts each surface form across docs (cheaper and more
+        # accurate than asking the LLM to count). Cost ≈ $0.02 per analysis.
+        # Fallback: legacy BM25 if Claude fails or returns nothing usable.
+        targets: list = []
+        try:
+            targets, claude_cost = await term_targets_claude.compute_via_claude(
+                competitor_texts,
+                keyword=keyword,
+                headings_text=headings_text,
+                top_n=40,
+            )
+            cost += claude_cost
+        except Exception as exc:  # noqa: BLE001
+            await syslog.error(
+                f"term_targets_claude failed (falling back to BM25): {exc}",
+                module="semantic_analysis_svc",
+                analysis_id=str(analysis_id),
+                error=str(exc),
+            )
+        if not targets:
+            targets = term_freq.compute_term_targets(
+                competitor_texts,
+                keyword=keyword,
+                headings_text=headings_text,
+                top_n=40,
+            )
 
         # 5. Claude semantic report (entities / subthemes / gaps).
         # Best-effort: if Claude fails or times out, we still ship the BM25
