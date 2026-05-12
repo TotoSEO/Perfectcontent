@@ -790,7 +790,6 @@ async def _load_fanout_queries_for(keyword: str) -> list[str]:
     (it would silently add ~$0.005-0.01 to every generation). The user is
     expected to manually run /fan-out beforehand if they want this data fed
     into the blueprint."""
-    from sqlalchemy import select
     async with SessionLocal() as session:
         row = (
             await session.execute(
