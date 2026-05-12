@@ -1,7 +1,6 @@
 """Standalone semantic analysis pipeline.
 
-Reuses the same SERP→scrape→parse→BM25 stack as the content generator, but
-the result is exposed as an editable workspace for the user to compose
+Result is exposed as an editable workspace for the user to compose
 their own copy against the targets.
 
 Concurrency model: a single SemanticAnalysis row should never be processed by
@@ -9,15 +8,16 @@ two concurrent invocations of `run()`. We enforce this via a row-level lock
 + status guard. If a previous invocation died (Vercel timeout, OOM) and left
 the row stuck in "running", we recover it after 5 minutes of inactivity.
 
-Pipeline (one short async run, ~40-90s):
-  1. fetch_serp + fetch_related (DataForSEO, parallel)
-  2. scrape_urls top-7 (Firecrawl/Jina + 72h cache)
-  3. parser.parse_page on each (extract metrics + clean text)
-  4. term_freq.compute_term_targets → top 40 BM25-weighted terms with
-     surface forms, target/min/max counts, importance score
-  5. analysis.semantic_report → entities + subthemes + gaps (one Claude
-     call, opt-in skip if cost-sensitive)
-  6. persist everything on the SemanticAnalysis row
+Pipeline (one short async run, ~25-60s — faster than the previous Firecrawl
+stack since DataForSEO returns parsed content directly):
+  1. fetch_serp + fetch_related (DataForSEO SERP + Labs, parallel)
+  2. onpage_parser.parse_urls top-7 (DataForSEO On-Page Content Parsing —
+     returns pre-structured H1/H2/H3 + clean markdown; replaces the previous
+     Firecrawl + Jina + BS4 + markdown-cleanup stack)
+  3. term_freq.compute_term_targets → top 40 BM25-weighted terms (kept; runs
+     on the cleaner markdown DataForSEO returns, no more boilerplate noise)
+  4. analysis.semantic_report → entities + subthemes + gaps (one Claude call)
+  5. persist everything on the SemanticAnalysis row
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from app.db import SessionLocal
 from app.models import SemanticAnalysis
 from app.services import analysis as analysis_svc
 from app.services import logger as syslog
-from app.services import parser, scraper, serp, term_freq
+from app.services import onpage_parser, serp, term_freq
 
 
 MIN_COMPETITORS_OK = 3
@@ -81,23 +81,25 @@ async def run(analysis_id: UUID) -> None:
         if not urls:
             raise RuntimeError("aucune URL organique remontée par DataForSEO")
 
-        # 2. Scrape
-        batch = await scraper.scrape_urls(urls, min_success=MIN_COMPETITORS_OK)
+        # 2. Parse via DataForSEO On-Page Content Parsing.
+        # Returns structured H1/H2/H3 + clean markdown in one call per URL,
+        # no scraping fallback or quality gate needed — DataForSEO handles
+        # bot blocks, JS shells and paywalls on their end.
+        batch = await onpage_parser.parse_urls(urls, min_success=MIN_COMPETITORS_OK)
         cost += batch.cost
         if len(batch.pages) < MIN_COMPETITORS_OK:
             details = ", ".join(f"{f['url']} ({f['error']})" for f in batch.failed[:3])
             raise RuntimeError(
-                f"scrape : {len(batch.pages)}/{len(urls)} pages OK. {details}"
+                f"content-parsing : {len(batch.pages)}/{len(urls)} pages OK. {details}"
             )
 
-        # 3. Parse + collect texts/headings
-        parsed_rows: list[tuple[parser.ParsedPage, dict]] = []
-        for raw in batch.pages:
-            p = parser.parse_page(raw.url, raw.html, raw.markdown)
+        # 3. Collect texts/headings for term frequency analysis.
+        parsed_rows: list[tuple[onpage_parser.ParsedDoc, dict]] = []
+        for p in batch.pages:
             parsed_rows.append((
                 p,
                 {
-                    "url": raw.url,
+                    "url": p.url,
                     "title": p.title,
                     "h1": p.h1,
                     "h2": list(p.h2),
@@ -110,18 +112,13 @@ async def run(analysis_id: UUID) -> None:
                     "has_article_schema": p.has_article_schema,
                     "has_product_schema": p.has_product_schema,
                     "author": p.author,
-                    "source": raw.source,
+                    "source": p.source,
                 },
             ))
 
-        # BM25 ingests the CLEANED markdown — Jina headers, blob/data URLs,
-        # image refs, table separators, code fences and bare URL lines have
-        # all been stripped by parser.clean_markdown_text. Without this step
-        # the corpus inflates with menu items and JS-blob artefacts that
-        # produce noise targets like "blob http localhost".
-        competitor_texts = [
-            parser.clean_markdown_text(raw.markdown) for raw in batch.pages
-        ]
+        # DataForSEO's `page_as_markdown` is already stripped of boilerplate
+        # (nav, footer, sidebars). Feed it straight to BM25.
+        competitor_texts = [p.markdown for p in batch.pages]
         headings_text = " . ".join(
             " ".join(filter(None, [parsed.h1 or ""] + list(parsed.h2)))
             for parsed, _ in parsed_rows
