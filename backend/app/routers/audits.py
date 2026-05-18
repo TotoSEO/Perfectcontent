@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import re
 from uuid import UUID
 from urllib.parse import urlparse
