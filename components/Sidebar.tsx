@@ -15,6 +15,7 @@ const ITEMS: Item[] = [
   { href: "/rewrite", label: "Réécriture", icon: "rewrite", group: "Création" },
   { href: "/fusion", label: "Fusion", icon: "fusion", group: "Création" },
   { href: "/semantic-analysis", label: "Analyse sémantique", icon: "audit", group: "Audit" },
+  { href: "/fan-out", label: "Query Fan-Out", icon: "sparkles", group: "Audit" },
   { href: "/optimize", label: "Optimisation GSC", icon: "sparkles", group: "Audit" },
   { href: "/cannibalization", label: "Cannibalisation", icon: "fusion", group: "Audit" },
   { href: "/audits", label: "Audit technique", icon: "audit", group: "Audit" },

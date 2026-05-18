@@ -2,6 +2,7 @@ from app.models.api_cache import ApiCache
 from app.models.audit import Audit
 from app.models.content import Content
 from app.models.domain import Domain
+from app.models.fanout_report import FanoutReport
 from app.models.folder import Folder
 from app.models.indexed_page import IndexedPage
 from app.models.job import Job
@@ -15,6 +16,7 @@ __all__ = [
     "Audit",
     "Content",
     "Domain",
+    "FanoutReport",
     "Folder",
     "IndexedPage",
     "Job",

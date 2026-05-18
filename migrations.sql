@@ -175,6 +175,25 @@ ALTER TABLE contents ADD COLUMN IF NOT EXISTS slug TEXT;
 ALTER TABLE contents ADD COLUMN IF NOT EXISTS link_manifest JSONB;
 CREATE INDEX IF NOT EXISTS ix_contents_silo_id ON contents (silo_id);
 
+-- 3b. Query Fan-Out (DataForSEO AI Optimization — LLM Responses)
+
+CREATE TABLE IF NOT EXISTS fanout_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  keyword TEXT NOT NULL,
+  country_iso TEXT,
+  models TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'queued',
+  error TEXT,
+  responses JSONB,
+  unique_queries JSONB,
+  citations JSONB,
+  cost NUMERIC(10, 4) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_fanout_reports_keyword ON fanout_reports (keyword);
+CREATE INDEX IF NOT EXISTS ix_fanout_reports_created_at ON fanout_reports (created_at DESC);
+
 -- 4. Audits techniques (import Screaming Frog)
 
 CREATE TABLE IF NOT EXISTS audits (
