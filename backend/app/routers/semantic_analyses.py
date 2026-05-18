@@ -89,7 +89,10 @@ async def patch_analysis(
 @router.delete("/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_analysis(
     analysis_id: UUID, db: AsyncSession = Depends(get_db),
-) -> None:
+):
+    # `-> None` removed: with `from __future__ import annotations`, FastAPI
+    # resolves the annotation to NoneType (truthy) and fails its 204-body
+    # assertion. Implicit return keeps response_model falsy.
     row = await db.get(SemanticAnalysis, analysis_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "analysis not found")

@@ -67,7 +67,12 @@ async def get_report(report_id: UUID, db: AsyncSession = Depends(get_db)) -> Fan
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_report(report_id: UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
+    # No `-> None` annotation: combined with `from __future__ import annotations`
+    # at module top, FastAPI would resolve the annotation to NoneType (truthy)
+    # and trip its `204 must not have a response body` assertion. Leaving the
+    # return type implicit keeps response_model falsy and the route registers
+    # cleanly across FastAPI 0.100+.
     row = await db.get(FanoutReport, report_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "fan-out report not found")

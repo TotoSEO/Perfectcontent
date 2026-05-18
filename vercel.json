@@ -8,6 +8,7 @@
       "use": "@vercel/python@4.3.1",
       "config": {
         "includeFiles": "backend/app/**",
+        "excludeFiles": "**/__pycache__/**",
         "maxDuration": 300
       }
     },
