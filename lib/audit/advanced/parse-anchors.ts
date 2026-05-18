@@ -33,7 +33,12 @@ const GENERIC_ANCHORS = new Set([
   "see more", "link", "this", "this link",
 ]);
 
-const NAV_PATH_KEYWORDS = ["nav", "header", "footer", "menu"];
+// Match these only when they appear as a standalone HTML element in the
+// "Chemin du lien" selector, e.g. "html > body > nav > a", "body > header.x > a".
+// A naive substring match (path.includes("nav")) would also strip out
+// content links whose class names happen to contain "nav-" or "menu-",
+// which is what was previously emptying out the entire dataset.
+const NAV_TAG_REGEX = /(?:^|>)\s*(nav|header|footer|menu|aside)\b/i;
 
 function normalizeKey(s: string): string {
   return s
@@ -61,9 +66,8 @@ function isGeneric(anchor: string): boolean {
 }
 
 function isNavPath(path: string): boolean {
-  const norm = normalizeKey(path || "");
-  if (!norm) return false;
-  return NAV_PATH_KEYWORDS.some((k) => norm.includes(k));
+  if (!path) return false;
+  return NAV_TAG_REGEX.test(path);
 }
 
 export type AnchorsParseResult = {
@@ -103,8 +107,15 @@ function streamAndFilter(
       transform: (v) => (typeof v === "string" ? v.trim() : v),
       step: ({ data }: { data: Record<string, string> }, parser) => {
         raw++;
+        // Screaming Frog FR keeps the "Type" cell value in English: it'll be
+        // "Hyperlink", "Image", "JavaScript", "CSS"…  Some bilingual exports
+        // also use "Lien hypertexte". Accept both, but reject everything else
+        // (images, JS, CSS, canonicals).
         const type = (pick(data, TYPE_KEYS) || "").toLowerCase();
-        if (!type.includes("hyperlink") && !type.includes("ahref")) return;
+        if (type && !type.includes("hyperlink") && !type.includes("ahref") && !type.includes("lien hypertexte")) return;
+        // Origine du lien: "interne" / "externe" in FR, "Internal" / "External"
+        // in EN. We only keep internal. If the column is missing entirely
+        // (older SF), don't filter on it.
         const origin = (pick(data, ORIGIN_KEYS) || "").toLowerCase();
         if (origin && !origin.includes("interne") && !origin.includes("internal")) return;
         const path = pick(data, PATH_KEYS) || "";

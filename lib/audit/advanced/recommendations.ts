@@ -180,7 +180,7 @@ export const RECO_LINKING: RecoGroup[] = [
 
 export const RECO_IMAGES: RecoGroup[] = [
   {
-    sub_label: "Images sans alt text",
+    sub_label: "Images sans attribut alt",
     items: [
       "Ajouter un attribut `alt` descriptif à chaque image porteuse de sens : c'est obligatoire pour l'accessibilité et utile au SEO image.",
       "Pour les images purement décoratives (icônes UI), utiliser `alt=\"\"` (vide explicite) — c'est sémantiquement correct.",

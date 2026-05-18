@@ -287,9 +287,6 @@ export default function AdvancedAuditPage() {
                 footer={`Partie ${sectionIndex + 1} sur ${audit.summary!.sections.length}`}
               >
                 <SectionCoverBody slide={s} partOf={`${audit.summary!.sections.length} parties dans le rapport`} />
-                <div className="absolute right-12 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none">
-                  <VbtLogo size={180} layout="mark" />
-                </div>
               </AdvSlide>
             );
           }

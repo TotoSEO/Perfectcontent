@@ -3,6 +3,7 @@
 import { VBT } from "@/lib/audit/brand";
 import { BarChart, DonutChart, Histogram } from "../Charts";
 import { SectionPill } from "./AdvSlide";
+import { RecoIcon, iconForReco } from "./RecoIcons";
 import type { AdvKPI, AdvSlide, AnchorDestinationSummary, PriorityItem } from "@/lib/audit/advanced/types";
 
 const KPI_PALETTES = {
@@ -101,14 +102,21 @@ export function DescriptionBlock({ text, maxLines = 6 }: { text: string; maxLine
   );
 }
 
-export function ChartContainer({ children, maxWidth = 320 }: { children: React.ReactNode; maxWidth?: number }) {
+export function ChartContainer({
+  children,
+  maxWidth = 320,
+}: {
+  children: React.ReactNode;
+  maxWidth?: number | string;
+}) {
   return (
     <div
-      className="rounded-xl p-3 overflow-hidden"
+      className="rounded-xl p-3 overflow-hidden flex-1 flex items-center justify-center"
       style={{
         background: VBT.paper,
         border: `1px solid ${VBT.paperEdge}`,
         maxWidth,
+        boxShadow: "0 4px 12px -10px rgba(36,23,18,0.2)",
       }}
     >
       {children}
@@ -126,9 +134,12 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
 
   return (
     <div className="flex-1 flex flex-col gap-3 min-h-0">
-      {/* Top description + xlsx badge */}
-      <div className="flex items-start justify-between gap-4 min-w-0">
-        <div className="flex-1 min-w-0">
+      {/* Top: description (with left accent) + xlsx ref */}
+      <div className="flex items-start gap-4 min-w-0">
+        <div
+          className="flex-1 min-w-0 pl-3 rounded-r-md"
+          style={{ borderLeft: `3px solid ${VBT.terracotta500}` }}
+        >
           <DescriptionBlock text={slide.description} maxLines={4} />
         </div>
         {hasIssues && slide.xlsx_sheet && (
@@ -138,53 +149,89 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
         )}
       </div>
 
-      {/* KPIs */}
-      <div
-        className={`grid gap-2.5 ${slide.kpis.length <= 2 ? "grid-cols-2" : slide.kpis.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}
-      >
-        {slide.kpis.map((k, i) => (
-          <AdvKpiTile key={i} kpi={k} />
-        ))}
+      {/* Middle: KPIs on the left, chart on the right (when both present);
+          full-width KPIs when no chart, full-width chart when no KPIs. */}
+      <div className="flex-1 grid gap-4 min-h-0 overflow-hidden" style={{ gridTemplateColumns: hasChart ? "minmax(0, 5fr) minmax(0, 7fr)" : "1fr" }}>
+        <div className="flex flex-col gap-2 min-w-0">
+          <div
+            className={`grid gap-2 ${hasChart ? "grid-cols-2" : slide.kpis.length <= 2 ? "grid-cols-2" : slide.kpis.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}
+          >
+            {slide.kpis.map((k, i) => (
+              <AdvKpiTile key={i} kpi={k} size={hasChart ? "sm" : "md"} />
+            ))}
+          </div>
+          {/* Takeaway under KPIs, only when no chart so the slide stays balanced */}
+          {!hasChart && slide.takeaway && (
+            <div
+              className="mt-1 rounded-lg px-4 py-2 text-[12px] flex items-start gap-2"
+              style={{
+                background: VBT.terracotta50,
+                color: VBT.terracotta700,
+                border: `1px solid ${VBT.terracotta100}`,
+                fontWeight: 500,
+              }}
+            >
+              <span style={{ color: VBT.terracotta500 }}>►</span>
+              <span>{slide.takeaway}</span>
+            </div>
+          )}
+        </div>
+
+        {hasChart && (
+          <div className="flex flex-col gap-2 min-w-0">
+            <div
+              className="text-[10px] uppercase tracking-[0.16em] flex items-center gap-2"
+              style={{ color: VBT.terracotta600, fontWeight: 700 }}
+            >
+              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: VBT.terracotta500 }} />
+              {chartCaption(slide.chart!.type)}
+            </div>
+            <ChartContainer maxWidth="100%">
+              {slide.chart!.type === "donut" && (
+                <DonutChart segments={slide.chart!.segments} size={170} thickness={26} />
+              )}
+              {slide.chart!.type === "bar" && (
+                <BarChart bars={slide.chart!.bars} max={slide.chart!.max} width={420} barHeight={20} gap={4} />
+              )}
+              {slide.chart!.type === "histogram" && (
+                <Histogram bins={slide.chart!.bins} height={130} />
+              )}
+            </ChartContainer>
+            {/* When the chart is shown, takeaway goes underneath it so it has
+                the visual weight of a conclusion. */}
+            {slide.takeaway && (
+              <div
+                className="rounded-lg px-3 py-1.5 text-[11.5px] flex items-start gap-2"
+                style={{
+                  background: VBT.terracotta50,
+                  color: VBT.terracotta700,
+                  border: `1px solid ${VBT.terracotta100}`,
+                  fontWeight: 500,
+                }}
+              >
+                <span style={{ color: VBT.terracotta500 }}>►</span>
+                <span>{slide.takeaway}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Chart */}
-      {hasChart && (
-        <div className="flex-1 flex items-center justify-center min-h-0 overflow-hidden pt-1">
-          <ChartContainer maxWidth={slide.chart!.type === "donut" ? 460 : 540}>
-            {slide.chart!.type === "donut" && (
-              <DonutChart segments={slide.chart!.segments} size={180} thickness={28} />
-            )}
-            {slide.chart!.type === "bar" && (
-              <BarChart bars={slide.chart!.bars} max={slide.chart!.max} width={500} barHeight={22} gap={4} />
-            )}
-            {slide.chart!.type === "histogram" && (
-              <Histogram bins={slide.chart!.bins} height={140} />
-            )}
-          </ChartContainer>
-        </div>
-      )}
-
-      {/* No-issue ribbon when there's no chart */}
-      {!hasChart && !hasIssues && (
-        <div className="pt-1"><NoIssuesBlock /></div>
-      )}
-
-      {/* Takeaway */}
-      {slide.takeaway && (
-        <div
-          className="rounded-lg px-4 py-2 text-[12px]"
-          style={{
-            background: VBT.terracotta50,
-            color: VBT.terracotta700,
-            border: `1px solid ${VBT.terracotta100}`,
-            fontWeight: 500,
-          }}
-        >
-          {slide.takeaway}
-        </div>
+      {/* No-issue ribbon when there's neither chart nor takeaway */}
+      {!hasChart && !slide.takeaway && !hasIssues && (
+        <NoIssuesBlock />
       )}
     </div>
   );
+}
+
+function chartCaption(type: "donut" | "bar" | "histogram" | "stat-grid"): string {
+  switch (type) {
+    case "donut":     return "Répartition";
+    case "bar":       return "Volume par catégorie";
+    case "histogram": return "Distribution";
+    default:          return "Données";
+  }
 }
 
 export function InfoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "info" }> }) {
@@ -246,70 +293,245 @@ export function InfoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "inf
 
 export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, { kind: "section-cover" }>; partOf: string }) {
   return (
-    <div className="flex-1 flex flex-col justify-center min-h-0 max-w-3xl">
-      <div
-        className="text-[11px] uppercase tracking-[0.28em]"
-        style={{ color: VBT.terracotta600, fontWeight: 700 }}
-      >
-        {slide.eyebrow}
-      </div>
-      <h1
-        className="leading-[1.05] mt-3"
-        style={{
-          fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-          fontWeight: 800,
-          fontSize: 64,
-          letterSpacing: "-0.025em",
-          color: VBT.ink,
-        }}
-      >
-        {slide.title}
-      </h1>
-      <div
-        className="mt-6 text-base"
-        style={{ color: VBT.inkSoft, fontWeight: 500 }}
-      >
-        {partOf}
-      </div>
-      <ul className="mt-8 space-y-2.5">
-        {slide.bullets.map((b, i) => (
-          <li key={i} className="flex items-start gap-3 text-[15px]" style={{ color: VBT.ink }}>
-            <span
-              className="inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0 mt-0.5 text-[10px]"
-              style={{ background: VBT.terracotta500, color: VBT.paper, fontWeight: 800 }}
+    <div className="flex-1 flex items-center gap-10 min-h-0">
+      <div className="flex-1 min-w-0 max-w-2xl">
+        <div className="flex items-center gap-3 mb-3">
+          <span
+            className="inline-flex items-center justify-center rounded-xl"
+            style={{
+              width: 56,
+              height: 56,
+              background: VBT.terracotta50,
+              border: `1px solid #F5D5BA`,
+              boxShadow: "0 4px 16px -10px rgba(196, 107, 48, 0.5)",
+            }}
+          >
+            <RecoIcon name={slide.icon} size={32} />
+          </span>
+          <div>
+            <div
+              className="text-[11px] uppercase tracking-[0.28em]"
+              style={{ color: VBT.terracotta600, fontWeight: 700 }}
             >
-              {i + 1}
-            </span>
-            <span style={{ fontWeight: 500 }}>{b}</span>
-          </li>
-        ))}
-      </ul>
+              {slide.eyebrow}
+            </div>
+            <div
+              className="text-[13px]"
+              style={{ color: VBT.zinc, fontWeight: 500, fontStyle: "italic" }}
+            >
+              {partOf}
+            </div>
+          </div>
+        </div>
+        <h1
+          className="leading-[1.02] mt-2"
+          style={{
+            fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+            fontWeight: 800,
+            fontSize: 64,
+            letterSpacing: "-0.028em",
+            color: VBT.ink,
+          }}
+        >
+          {slide.title}
+        </h1>
+        <div
+          className="mt-2 h-1 rounded-full"
+          style={{
+            width: 96,
+            background: `linear-gradient(90deg, ${VBT.terracotta600}, ${VBT.amber400})`,
+          }}
+        />
+        <ul className="mt-8 space-y-3">
+          {slide.bullets.map((b, i) => (
+            <li
+              key={i}
+              className="flex items-start gap-3.5 text-[16px]"
+              style={{ color: VBT.ink }}
+            >
+              <span
+                className="inline-flex items-center justify-center shrink-0 mt-0.5 tabular-nums"
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
+                  background: VBT.terracotta500,
+                  color: VBT.paper,
+                  fontWeight: 800,
+                  fontSize: 11,
+                  fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                }}
+              >
+                {i + 1}
+              </span>
+              <span style={{ fontWeight: 500, lineHeight: 1.45 }}>{b}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Decorative side panel: large iconic shape on a tinted card */}
+      <div className="hidden md:flex shrink-0 items-center justify-center pl-6">
+        <div
+          className="relative rounded-2xl flex items-center justify-center"
+          style={{
+            width: 220,
+            height: 220,
+            background: `linear-gradient(135deg, ${VBT.terracotta50} 0%, ${VBT.amber50} 100%)`,
+            border: `1px solid #F5D5BA`,
+            boxShadow: "0 16px 32px -16px rgba(36, 23, 18, 0.25)",
+          }}
+        >
+          {/* Layered concentric rings for depth */}
+          <span
+            aria-hidden
+            className="absolute rounded-full"
+            style={{
+              width: 180,
+              height: 180,
+              border: `1px solid ${VBT.terracotta100}`,
+              opacity: 0.6,
+            }}
+          />
+          <span
+            aria-hidden
+            className="absolute rounded-full"
+            style={{
+              width: 140,
+              height: 140,
+              background: VBT.paper,
+              border: `1px solid #F5D5BA`,
+              boxShadow: "0 4px 16px -6px rgba(196, 107, 48, 0.2)",
+            }}
+          />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <RecoIcon name={slide.icon} size={64} />
+          </div>
+          {/* Brand accent dots in corners */}
+          <span
+            aria-hidden
+            className="absolute rounded-full"
+            style={{ top: 14, right: 14, width: 8, height: 8, background: VBT.terracotta500 }}
+          />
+          <span
+            aria-hidden
+            className="absolute rounded-full"
+            style={{ bottom: 14, left: 14, width: 6, height: 6, background: VBT.amber400 }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
 
 export function RecoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "reco" }> }) {
-  const cols = slide.groups.length <= 2 ? 1 : 2;
+  // Visual rule: 1-2 reco groups get one row; 3-4 go in a 2×2 grid; 5-6 go
+  // in 3×2. We cap items per card to keep cards balanced and the slide
+  // overall readable in 16:9.
+  const count = slide.groups.length;
+  const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
+  const maxItemsPerCard = count <= 2 ? 6 : count <= 4 ? 4 : 3;
+
   return (
-    <div className={`flex-1 grid gap-x-6 gap-y-4 ${cols === 1 ? "grid-cols-1" : "grid-cols-2"} min-h-0 overflow-hidden`}>
+    <div
+      className="flex-1 grid gap-3 min-h-0 overflow-hidden"
+      style={{
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        gridAutoRows: "minmax(0, 1fr)",
+      }}
+    >
       {slide.groups.map((g, i) => (
-        <div key={i} className="min-w-0">
-          <div
-            className="text-[12px] uppercase tracking-[0.16em] mb-2"
-            style={{ color: VBT.terracotta600, fontWeight: 700 }}
-          >
-            {g.sub_label}
-          </div>
-          <ul className="space-y-1.5">
-            {g.items.map((item, j) => (
-              <li key={j} className="flex items-start gap-2 text-[12.5px]" style={{ color: VBT.ink, lineHeight: 1.5 }}>
-                <span className="shrink-0 mt-1" style={{ color: VBT.terracotta500 }}>▸</span>
-                <span style={{ fontWeight: 400 }}>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <RecoCard
+          key={i}
+          subLabel={g.sub_label}
+          items={g.items.slice(0, maxItemsPerCard)}
+          accentIndex={i}
+        />
       ))}
+    </div>
+  );
+}
+
+// A reco card: header band with icon + title, soft body with bulleted
+// actions. Each card alternates between two soft tints so the slide reads
+// as a curated grid rather than a wall of text.
+function RecoCard({
+  subLabel,
+  items,
+  accentIndex,
+}: {
+  subLabel: string;
+  items: string[];
+  accentIndex: number;
+}) {
+  const tint = accentIndex % 2 === 0
+    ? { bg: VBT.terracotta50, accent: VBT.terracotta600, accentSoft: VBT.terracotta500, edge: "#F5D5BA" }
+    : { bg: VBT.amber50, accent: VBT.amber600, accentSoft: VBT.amber500, edge: "#E5CD83" };
+  const iconKey = iconForReco(subLabel);
+  return (
+    <div
+      className="rounded-xl overflow-hidden flex flex-col min-w-0"
+      style={{
+        background: tint.bg,
+        border: `1px solid ${tint.edge}`,
+        boxShadow: "0 4px 12px -8px rgba(36, 23, 18, 0.18)",
+      }}
+    >
+      {/* Header band */}
+      <div
+        className="px-3 py-2 flex items-center gap-2 min-w-0"
+        style={{
+          background: VBT.paper,
+          borderBottom: `1px solid ${tint.edge}`,
+        }}
+      >
+        <span
+          className="shrink-0 inline-flex items-center justify-center rounded-lg"
+          style={{
+            width: 32,
+            height: 32,
+            background: tint.bg,
+            border: `1px solid ${tint.edge}`,
+          }}
+        >
+          <RecoIcon name={iconKey} size={20} />
+        </span>
+        <div className="min-w-0">
+          <div
+            className="text-[12px] truncate"
+            style={{
+              fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+              color: tint.accent,
+              fontWeight: 700,
+              letterSpacing: "-0.005em",
+            }}
+            title={subLabel}
+          >
+            {subLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* Items */}
+      <ul className="flex-1 px-3 py-2 space-y-1.5 overflow-hidden min-h-0">
+        {items.map((item, j) => (
+          <li
+            key={j}
+            className="flex items-start gap-1.5 text-[11px]"
+            style={{ color: VBT.ink, lineHeight: 1.45 }}
+          >
+            <span
+              className="shrink-0 mt-1 inline-block rounded-full"
+              style={{
+                width: 5,
+                height: 5,
+                background: tint.accentSoft,
+              }}
+            />
+            <span style={{ fontWeight: 400 }}>{item}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -428,7 +650,7 @@ export function AnchorTableBody({ slide }: { slide: Extract<AdvSlide, { kind: "a
             </colgroup>
             <thead style={{ background: VBT.terracotta50 }}>
               <tr>
-                {["Page de destination", "Inlinks", "Ancres uniques", "Diversité", "Ancre dominante"].map((h) => (
+                {["Page de destination", "Liens entrants", "Ancres uniques", "Diversité", "Ancre dominante"].map((h) => (
                   <th
                     key={h}
                     className="text-left px-2.5 py-2 uppercase tracking-[0.1em] text-[10px]"
@@ -486,6 +708,13 @@ function AnchorRow({ row }: { row: AnchorDestinationSummary }) {
 // Priority slide (deterministic items + AI narrative)
 // ===========================================================================
 
+const URGENCY_LABEL: Record<PriorityItem["urgency"], string> = {
+  critical: "Critique",
+  high: "Haute",
+  medium: "Moyenne",
+  low: "Basse",
+};
+
 export function PrioritySlideBody({
   slide,
   onRequestAi,
@@ -495,67 +724,100 @@ export function PrioritySlideBody({
   onRequestAi: () => void;
   busy: boolean;
 }) {
+  // Show the top 10 — fits cleanly in the slide height without scrolling
+  // and still captures the bulk of the actionable findings.
+  const items = slide.items.slice(0, 10);
   return (
-    <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
+    <div className="flex-1 grid grid-cols-12 gap-5 min-h-0 overflow-hidden">
+      {/* Left column — priorities */}
       <div className="col-span-7 flex flex-col gap-2 min-w-0">
-        <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: VBT.terracotta600, fontWeight: 700 }}>
-          Top 12 chantiers — classés par sévérité × volume × poids SEO
+        <div
+          className="text-[10px] uppercase tracking-[0.18em] flex items-center gap-2"
+          style={{ color: VBT.terracotta600, fontWeight: 700 }}
+        >
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full"
+            style={{ background: VBT.terracotta500 }}
+          />
+          Top 10 chantiers · classés sévérité × volume × poids SEO
         </div>
-        <div className="space-y-1.5 overflow-y-auto pr-1">
-          {slide.items.slice(0, 12).map((p) => (
+        <div className="space-y-1 min-h-0 overflow-hidden">
+          {items.map((p) => (
             <PriorityRow key={p.rank} item={p} />
           ))}
         </div>
       </div>
-      <div className="col-span-5 flex flex-col gap-3 min-w-0">
+
+      {/* Right column — AI synthesis */}
+      <div className="col-span-5 flex flex-col gap-2 min-w-0 min-h-0">
         <div
-          className="text-[11px] uppercase tracking-[0.16em]"
+          className="text-[10px] uppercase tracking-[0.18em] flex items-center gap-2"
           style={{ color: VBT.terracotta600, fontWeight: 700 }}
         >
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full"
+            style={{ background: VBT.terracotta500 }}
+          />
           Synthèse consultant
         </div>
         <div
-          className="flex-1 rounded-xl p-4 text-[12.5px] leading-relaxed min-h-0 overflow-y-auto"
+          className="flex-1 rounded-xl p-3.5 text-[12px] leading-relaxed min-h-0 overflow-y-auto relative"
           style={{
             background: VBT.paper,
             border: `1px solid ${VBT.paperEdge}`,
             color: VBT.inkSoft,
+            boxShadow: "0 4px 16px -10px rgba(36, 23, 18, 0.16)",
           }}
         >
-          {slide.ai_summary ? (
-            <p style={{ whiteSpace: "pre-wrap" }}>{slide.ai_summary}</p>
-          ) : slide.ai_summary_error ? (
-            <>
-              <p style={{ color: VBT.brick500 }} className="mb-2">
-                Échec de la génération IA : {slide.ai_summary_error}
-              </p>
-              <button onClick={onRequestAi} disabled={busy} className="btn-ghost text-xs underline" style={{ color: VBT.terracotta700 }}>
-                Réessayer
-              </button>
-            </>
-          ) : busy ? (
-            <p style={{ color: VBT.inkSoft }}>Synthèse en cours…</p>
-          ) : (
-            <>
-              <p className="mb-3">
-                Une synthèse rédigée par IA (Claude Haiku) résumera ici les priorités à traiter, en s'appuyant sur les scores et compteurs du rapport. Aucune URL n'est transmise — seuls les chiffres agrégés.
-              </p>
-              <button
-                onClick={onRequestAi}
-                disabled={busy}
-                className="px-3 py-1.5 rounded-lg text-[12px]"
-                style={{
-                  background: VBT.terracotta500,
-                  color: VBT.paper,
-                  fontWeight: 600,
-                  cursor: busy ? "wait" : "pointer",
-                  opacity: busy ? 0.6 : 1,
-                }}
-              >
-                Générer la synthèse
-              </button>
-            </>
-          )}
+          {/* Decorative top-left quote mark */}
+          <span
+            aria-hidden
+            className="absolute top-1 left-2 text-3xl leading-none pointer-events-none select-none"
+            style={{
+              color: VBT.terracotta500,
+              opacity: 0.35,
+              fontFamily: "var(--font-vbt-title), serif",
+              fontWeight: 700,
+            }}
+          >
+            "
+          </span>
+          <div className="pl-4">
+            {slide.ai_summary ? (
+              <p style={{ whiteSpace: "pre-wrap" }}>{renderRichText(slide.ai_summary)}</p>
+            ) : slide.ai_summary_error ? (
+              <>
+                <p style={{ color: VBT.brick500 }} className="mb-2">
+                  Échec de la génération IA : {slide.ai_summary_error}
+                </p>
+                <button onClick={onRequestAi} disabled={busy} className="btn-ghost text-xs underline" style={{ color: VBT.terracotta700 }}>
+                  Réessayer
+                </button>
+              </>
+            ) : busy ? (
+              <p style={{ color: VBT.inkSoft }}>Synthèse en cours…</p>
+            ) : (
+              <>
+                <p className="mb-3">
+                  Une synthèse rédigée par IA (Claude Haiku) résumera ici les priorités à traiter, en s'appuyant sur les scores et compteurs du rapport. Aucune URL n'est transmise — seuls les chiffres agrégés.
+                </p>
+                <button
+                  onClick={onRequestAi}
+                  disabled={busy}
+                  className="px-3 py-1.5 rounded-lg text-[11px]"
+                  style={{
+                    background: VBT.terracotta500,
+                    color: VBT.paper,
+                    fontWeight: 600,
+                    cursor: busy ? "wait" : "pointer",
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                >
+                  Générer la synthèse
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -564,26 +826,34 @@ export function PrioritySlideBody({
 
 function PriorityRow({ item }: { item: PriorityItem }) {
   const urgencyPalette =
-    item.urgency === "critical" ? { bg: VBT.brick50, fg: VBT.brick500, border: "#E5BDB5" } :
-    item.urgency === "high" ?     { bg: "#FBE9D6", fg: VBT.terracotta700, border: "#F5D5BA" } :
-    item.urgency === "medium" ?   { bg: VBT.amber50, fg: VBT.amber600, border: "#E5CD83" } :
-    { bg: VBT.paperEdge, fg: VBT.inkSoft, border: VBT.paperEdge };
+    item.urgency === "critical" ? { bg: VBT.brick500, fg: VBT.paper, soft: VBT.brick50, softFg: VBT.brick500, border: "#E5BDB5" } :
+    item.urgency === "high" ?     { bg: VBT.terracotta600, fg: VBT.paper, soft: "#FBE9D6", softFg: VBT.terracotta700, border: "#F5D5BA" } :
+    item.urgency === "medium" ?   { bg: VBT.amber500, fg: VBT.paper, soft: VBT.amber50, softFg: VBT.amber600, border: "#E5CD83" } :
+                                  { bg: VBT.zinc, fg: VBT.paper, soft: VBT.paperEdge, softFg: VBT.inkSoft, border: VBT.paperEdge };
 
   const effortLabel =
-    item.effort === "quick-win" ? "Quick win" :
-    item.effort === "medium" ? "Modéré" : "Chantier";
-  const impactLabel = item.impact === "high" ? "Fort impact" : item.impact === "medium" ? "Impact moy." : "Faible impact";
+    item.effort === "quick-win" ? "Action rapide" :
+    item.effort === "medium" ? "Effort modéré" : "Chantier de fond";
+  const impactLabel = item.impact === "high" ? "Fort impact" : item.impact === "medium" ? "Impact moyen" : "Faible impact";
 
   return (
     <div
-      className="rounded-lg px-3 py-2 flex items-center gap-3 min-w-0"
-      style={{ background: VBT.paper, border: `1px solid ${VBT.paperEdge}` }}
+      className="rounded-lg px-2.5 py-1.5 flex items-center gap-2.5 min-w-0"
+      style={{
+        background: VBT.paper,
+        border: `1px solid ${VBT.paperEdge}`,
+        borderLeft: `3px solid ${urgencyPalette.bg}`,
+      }}
     >
       <div
-        className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-[11px] tabular-nums"
+        className="shrink-0 inline-flex items-center justify-center tabular-nums"
         style={{
-          background: VBT.terracotta500,
-          color: VBT.paper,
+          width: 26,
+          height: 26,
+          borderRadius: 6,
+          background: urgencyPalette.bg,
+          color: urgencyPalette.fg,
+          fontSize: 12,
           fontWeight: 800,
           fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
         }}
@@ -591,19 +861,27 @@ function PriorityRow({ item }: { item: PriorityItem }) {
         {item.rank}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[12.5px] truncate" style={{ color: VBT.ink, fontWeight: 600 }} title={item.title}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className="text-[12px] truncate"
+            style={{ color: VBT.ink, fontWeight: 600 }}
+            title={item.title}
+          >
             {item.title}
           </span>
           <span
             className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider"
-            style={{ background: urgencyPalette.bg, color: urgencyPalette.fg, fontWeight: 700, border: `1px solid ${urgencyPalette.border}` }}
+            style={{
+              background: urgencyPalette.soft,
+              color: urgencyPalette.softFg,
+              fontWeight: 700,
+            }}
           >
-            {item.urgency}
+            {URGENCY_LABEL[item.urgency]}
           </span>
         </div>
-        <div className="text-[10.5px] mt-0.5 truncate" style={{ color: VBT.zinc }}>
-          {item.affected} URLs · {effortLabel} · {impactLabel}
+        <div className="text-[10px] mt-0.5 truncate" style={{ color: VBT.zinc }}>
+          <strong className="tabular-nums" style={{ color: VBT.inkSoft }}>{item.affected.toLocaleString("fr-FR")}</strong>{" "}URLs · {effortLabel} · {impactLabel}
         </div>
       </div>
     </div>
@@ -613,6 +891,29 @@ function PriorityRow({ item }: { item: PriorityItem }) {
 // ===========================================================================
 // Utility
 // ===========================================================================
+
+// Render `**bold**` segments as styled <strong> spans (the Haiku prompt now
+// forbids Markdown, but older audits already in the DB still carry the
+// asterisks — rendering them properly keeps the slide legible without
+// requiring a re-generate).
+function renderRichText(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    const m = p.match(/^\*\*(.+)\*\*$/);
+    if (m) {
+      return (
+        <strong
+          key={i}
+          style={{ color: VBT.terracotta700, fontWeight: 700 }}
+        >
+          {m[1]}
+        </strong>
+      );
+    }
+    // Strip any remaining single-asterisk emphasis too.
+    return p.replace(/\*([^*]+)\*/g, "$1");
+  });
+}
 
 function shortenUrl(u: string, max = 50): string {
   try {

@@ -75,14 +75,21 @@ export function AdvSlide({
                 {subtitle || `Slide ${index + 1} / ${total}`}
               </div>
               <h2
-                className="mt-2 truncate"
+                className="mt-2"
                 style={{
                   fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
                   fontWeight: 700,
-                  fontSize: 32,
+                  fontSize: 30,
                   letterSpacing: "-0.015em",
                   color: VBT.ink,
                   lineHeight: 1.1,
+                  // Allow up to 2 lines instead of truncating — long titles
+                  // like "Pages sans / avec peu de liens entrants" need this.
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                  wordBreak: "break-word",
                 }}
               >
                 {title}

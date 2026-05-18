@@ -311,8 +311,13 @@ async def priority_summary(payload: PriorityIn) -> PriorityOut:
         "Tu es un consultant SEO senior français qui synthétise un audit technique. "
         "Tu rédiges UN paragraphe court (4-6 phrases) de synthèse pour la slide finale d'un livrable client : "
         "tu nommes le sujet principal à traiter en priorité, tu expliques pourquoi en t'appuyant sur les chiffres, "
-        "et tu termines sur une recommandation d'ordre de chantier (quick-wins puis chantiers de fond). "
-        "Style : direct, factuel, sans superlatifs, sans bullet points, sans titres."
+        "et tu termines sur une recommandation d'ordre de chantier (actions rapides puis chantiers de fond). "
+        "Style : direct, factuel, sans superlatifs, sans listes à puces, sans titres. "
+        "IMPORTANT — tu écris du texte brut destiné à être affiché tel quel sur une slide : "
+        "n'utilise AUCUNE syntaxe Markdown. Pas d'astérisques (*texte* ou **texte**) pour le gras ou l'italique, "
+        "pas de backticks pour les citations, pas de tirets pour faire des listes, pas de dièses pour des titres. "
+        "Pas de termes anglais non plus : écris « actions rapides » au lieu de « quick wins », "
+        "« liens entrants » au lieu de « inlinks », « balise title » au lieu de « title tag », etc."
     )
     user = f"""Audit technique avancé : {payload.audit_name}{f' ({payload.domain})' if payload.domain else ''}
 {payload.url_count:,} URLs analysées · score global {payload.global_score}/100.

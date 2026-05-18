@@ -174,7 +174,7 @@ function buildIndexabilityCrawl(
     issues_full: depthIssues,
     columns: [
       { key: "depth", label: "Profondeur", width: 14 },
-      { key: "inlinks", label: "Inlinks", width: 12 },
+      { key: "inlinks", label: "Liens entrants", width: 16 },
       { key: "url", label: "URL", width: 60 },
     ],
     xlsx_sheet: "Profondeur",
@@ -360,7 +360,7 @@ function buildIndexabilityCrawl(
     issues_full: noindexRows,
     columns: [
       { key: "indexability_status", label: "Raison", width: 35 },
-      { key: "inlinks", label: "Inlinks", width: 12 },
+      { key: "inlinks", label: "Liens entrants", width: 16 },
       { key: "url", label: "URL", width: 60 },
     ],
     xlsx_sheet: "Pages noindex",
@@ -917,15 +917,15 @@ function buildLinking(
     title: "Maillage interne",
     description: DESC.internal_linking,
     kpis: [
-      { label: "Orphelines (0 inlinks)", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
-      { label: "1-2 inlinks", value: low, tone: low > 0 ? "warn" : "ok" },
-      { label: "3-9 inlinks", value: mid, tone: "ok" },
-      { label: "10+ inlinks", value: high, tone: "ok" },
+      { label: "Orphelines (0 lien)", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
+      { label: "1-2 liens entrants", value: low, tone: low > 0 ? "warn" : "ok" },
+      { label: "3-9 liens entrants", value: mid, tone: "ok" },
+      { label: "10+ liens entrants", value: high, tone: "ok" },
     ],
     chart: {
       type: "bar",
       bars: [
-        { label: "0 inlinks", value: orphans, color: COLORS.bad },
+        { label: "0 lien entrant", value: orphans, color: COLORS.bad },
         { label: "1-2", value: low, color: COLORS.warn },
         { label: "3-9", value: mid, color: COLORS.info },
         { label: "10+", value: high, color: COLORS.ok },
@@ -979,8 +979,8 @@ function buildLinking(
     issues_full: orphanRows,
     columns: [
       { key: "problem", label: "Problème", width: 40 },
-      { key: "inlinks", label: "Inlinks", width: 12 },
-      { key: "outlinks", label: "Outlinks", width: 12 },
+      { key: "inlinks", label: "Liens entrants", width: 16 },
+      { key: "outlinks", label: "Liens sortants", width: 16 },
       { key: "url", label: "URL", width: 60 },
     ],
     xlsx_sheet: "Pages orphelines",
@@ -994,7 +994,7 @@ function buildLinking(
     kpis: [
       { label: "Orphelines", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
       { label: "Sous-maillées (1-2)", value: low, tone: low > 0 ? "warn" : "ok" },
-      { label: "Sans outlinks", value: noOutlinks, tone: noOutlinks > 0 ? "warn" : "ok" },
+      { label: "Sans lien sortant", value: noOutlinks, tone: noOutlinks > 0 ? "warn" : "ok" },
     ],
     xlsx_sheet: orphanRows.length > 0 ? subOrphans.xlsx_sheet : undefined,
     issues_count: orphanRows.length,
@@ -1054,7 +1054,7 @@ function buildLinking(
       } as AdvIssueRow)),
       columns: [
         { key: "url", label: "Page de destination", width: 60 },
-        { key: "inlinks_count", label: "Inlinks", width: 12 },
+        { key: "inlinks_count", label: "Liens entrants", width: 16 },
         { key: "unique_anchors", label: "Ancres uniques", width: 14 },
         { key: "diversity_ratio", label: "Diversité", width: 12 },
         { key: "dominant_anchor", label: "Ancre dominante", width: 40 },
@@ -1163,10 +1163,26 @@ function buildImages(
   const altMissing = findIssue(issues, "image_alt_missing");
   const sizeMissing = findIssue(issues, "image_size_missing");
 
+  // Some Screaming Frog Issues exports emit one row per (image URL × page
+  // that uses the image) pair instead of one row per unique image — so a
+  // crawl with 36 unique images can yield 3 000+ rows for "missing alt"
+  // or "missing width/height". Dedupe by URL so the slide counts match
+  // the actual number of images to fix.
+  function dedupByUrl(rows: AdvIssueRow[]): AdvIssueRow[] {
+    const seen = new Set<string>();
+    const out: AdvIssueRow[] = [];
+    for (const r of rows) {
+      if (seen.has(r.url)) continue;
+      seen.add(r.url);
+      out.push(r);
+    }
+    return out;
+  }
+
   // Alt
-  const altRows = issueAsRows(altMissing, "medium", (l) => ({
+  const altRows = dedupByUrl(issueAsRows(altMissing, "medium", (l) => ({
     ref_pages: l.extras["nombre de liens entrants"] || l.extras["liens entrants img"] || l.extras["inlinks"] || "",
-  }));
+  })));
   const subAlt: AdvSubcategory = {
     id: "image_alt",
     label: "Images sans alt",
@@ -1186,15 +1202,16 @@ function buildImages(
     description: DESC.images_alt,
     kpis: [
       { label: "Images crawlées", value: imagesList.length, tone: "ok" },
-      { label: "Sans alt text", value: altRows.length, tone: altRows.length > 0 ? "bad" : "ok" },
+      { label: "Sans attribut alt", value: altRows.length, tone: altRows.length > 0 ? "bad" : "ok" },
       { label: "% sans alt", value: imagesList.length > 0 ? `${Math.round((altRows.length / imagesList.length) * 100)} %` : "0 %", tone: altRows.length > 0 ? "warn" : "ok" },
     ],
     xlsx_sheet: altRows.length > 0 ? subAlt.xlsx_sheet : undefined,
     issues_count: altRows.length,
   };
 
-  // Size attrs (width/height missing)
-  const sizeAttrRows = issueAsRows(sizeMissing, "medium", () => ({ problem: "Attributs width/height manquants (impact CLS)" }));
+  // Size attrs (width/height missing) — dedupe per unique image URL,
+  // see comment on altRows above.
+  const sizeAttrRows = dedupByUrl(issueAsRows(sizeMissing, "medium", () => ({ problem: "Attributs largeur/hauteur manquants (impact CLS)" })));
   const subSize: AdvSubcategory = {
     id: "image_size_attr",
     label: "Images sans width/height",
