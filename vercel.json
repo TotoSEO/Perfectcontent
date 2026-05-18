@@ -8,14 +8,12 @@
       "use": "@vercel/python@4.3.1",
       "config": {
         "includeFiles": "backend/app/**",
-        "excludeFiles": "**/__pycache__/**",
+        "excludeFiles": "{node_modules,.next,.vercel,.git,public,.claude,scrapers,components,lib,app,backend/tests,backend/alembic,**/__pycache__,**/.mypy_cache,**/.ruff_cache,**/.pytest_cache}/**",
         "maxDuration": 300
       }
-    },
-    { "src": "api/diag.py", "use": "@vercel/python@4.3.1" }
+    }
   ],
   "routes": [
-    { "src": "/diag/(.*)", "dest": "/api/diag.py" },
     { "src": "/srv/(.*)", "dest": "/api/index.py" },
     { "src": "/healthz/(.*)", "dest": "/api/index.py" }
   ]
