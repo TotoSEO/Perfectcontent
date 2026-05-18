@@ -19,6 +19,7 @@ const ITEMS: Item[] = [
   { href: "/optimize", label: "Optimisation GSC", icon: "sparkles", group: "Audit" },
   { href: "/cannibalization", label: "Cannibalisation", icon: "fusion", group: "Audit" },
   { href: "/audits", label: "Audit technique", icon: "audit", group: "Audit" },
+  { href: "/audits/advanced", label: "Audit technique avancé", icon: "audit", group: "Audit" },
   { href: "/domains", label: "Domaines", icon: "globe", group: "Système" },
   { href: "/console", label: "Console", icon: "terminal", group: "Système" },
 ];
@@ -28,6 +29,19 @@ const GROUPS = ["Bibliothèque", "Création", "Audit", "Système"];
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Pick the longest-matching item so that `/audits/advanced` highlights only
+  // the "Audit technique avancé" row, not also the "/audits" parent row.
+  const activeHref = (() => {
+    if (!pathname) return null;
+    let best: string | null = null;
+    for (const it of ITEMS) {
+      if (pathname === it.href || pathname.startsWith(it.href + "/")) {
+        if (best === null || it.href.length > best.length) best = it.href;
+      }
+    }
+    return best;
+  })();
 
   async function logout() {
     try { await api("/srv/auth/logout", { method: "POST" }); } catch { /* noop */ }
@@ -62,7 +76,7 @@ export function Sidebar() {
               {g}
             </div>
             {ITEMS.filter((it) => it.group === g).map((it) => {
-              const active = pathname === it.href || pathname?.startsWith(it.href + "/");
+              const active = activeHref === it.href;
               return (
                 <Link
                   key={it.href}

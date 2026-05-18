@@ -40,6 +40,10 @@ class AuditListItem(BaseModel):
     name: str
     url_count: int
     score: float | None
+    # "classic" (interne_html.csv only) or "advanced" (interne_html.csv + Issues ZIP).
+    # Set from `summary.audit_type` if present, otherwise defaults to "classic"
+    # so older rows keep working without a migration.
+    audit_type: str = "classic"
     created_at: datetime
 
     class Config:
