@@ -1,0 +1,8 @@
+.env
+ffme_sne.json
+ffme_sne.csv
+ffme_sne.log
+__pycache__/
+*.pyc
+.venv/
+venv/
