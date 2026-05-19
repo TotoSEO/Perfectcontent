@@ -881,17 +881,34 @@ function buildLinking(
 ): { section: AdvSection; slides: AdvSlide[] } {
   const html = rows.filter(isHtml).filter(isIndexable);
 
-  // Internal linking overview: compute distributions on inlinks.
+  // Internal linking overview.
+  // When the inlinks file (liens_entrants_tous.csv) is available, we use
+  // it to count CONTEXTUAL inlinks only (it's already filtered to body
+  // links — no nav, header, footer, menu). Otherwise we fall back to
+  // interne_html.csv's raw inlinks column, which is the nav-polluted
+  // version SF emits by default and is what was previously producing
+  // "908 pages avec 10+ liens entrants" on sites with a fat footer.
+  const contextualInlinks = anchors
+    ? anchors.by_destination
+    : null;
+  const inlinksFor = (url: string): number => {
+    if (contextualInlinks) {
+      return contextualInlinks.get(url)?.inlinks_count ?? 0;
+    }
+    return 0;
+  };
+
   let orphans = 0, low = 0, mid = 0, high = 0;
   const orphanRows: AdvIssueRow[] = [];
   for (const r of html) {
-    const i = r.inlinks ?? 0;
+    // Use the anchors-derived count when available, fall back to internal_html.
+    const i = contextualInlinks ? inlinksFor(r.url) : (r.inlinks ?? 0);
     if (i === 0) {
       orphans++;
-      orphanRows.push(toRow(r.url, "high", { inlinks: 0, outlinks: r.outlinks ?? 0, problem: "Page orpheline (0 lien entrant)" }));
+      orphanRows.push(toRow(r.url, "high", { inlinks: 0, outlinks: r.outlinks ?? 0, problem: "Page orpheline (0 lien entrant contextuel)" }));
     } else if (i < 3) {
       low++;
-      orphanRows.push(toRow(r.url, "medium", { inlinks: i, outlinks: r.outlinks ?? 0, problem: "Sous-maillée (< 3 liens entrants)" }));
+      orphanRows.push(toRow(r.url, "medium", { inlinks: i, outlinks: r.outlinks ?? 0, problem: "Sous-maillée (< 3 liens entrants contextuels)" }));
     } else if (i < 10) mid++;
     else high++;
   }
@@ -899,7 +916,7 @@ function buildLinking(
   for (const r of html) {
     if ((r.outlinks ?? 0) === 0) {
       noOutlinks++;
-      orphanRows.push(toRow(r.url, "low", { inlinks: r.inlinks ?? 0, outlinks: 0, problem: "Cul-de-sac (0 lien sortant)" }));
+      orphanRows.push(toRow(r.url, "low", { inlinks: contextualInlinks ? inlinksFor(r.url) : (r.inlinks ?? 0), outlinks: 0, problem: "Cul-de-sac (0 lien sortant)" }));
     }
   }
   const subOverview: AdvSubcategory = {
@@ -915,7 +932,9 @@ function buildLinking(
     section_id: "linking",
     sub_id: "internal_linking_overview",
     title: "Maillage interne",
-    description: DESC.internal_linking,
+    description: DESC.internal_linking + (contextualInlinks
+      ? "\n\nLes comptes ci-dessous excluent le menu, l'en-tête et le pied de page : seuls les liens internes contextuels (dans le contenu) sont pris en compte."
+      : "\n\n⚠️ Sans le fichier liens_entrants_tous.csv, les comptes incluent les liens de navigation (menu/en-tête/pied de page) et surestiment le maillage réel."),
     kpis: [
       { label: "Orphelines (0 lien)", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
       { label: "1-2 liens entrants", value: low, tone: low > 0 ? "warn" : "ok" },
@@ -926,9 +945,9 @@ function buildLinking(
       type: "bar",
       bars: [
         { label: "0 lien entrant", value: orphans, color: COLORS.bad },
-        { label: "1-2", value: low, color: COLORS.warn },
-        { label: "3-9", value: mid, color: COLORS.info },
-        { label: "10+", value: high, color: COLORS.ok },
+        { label: "1-2 liens", value: low, color: COLORS.warn },
+        { label: "3-9 liens", value: mid, color: COLORS.info },
+        { label: "10+ liens", value: high, color: COLORS.ok },
       ],
     },
     issues_count: 0,
