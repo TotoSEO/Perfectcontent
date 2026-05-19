@@ -48,7 +48,6 @@ export default function AdvancedAuditPage() {
   // Separate state for PDF so the two buttons can run independently
   // (XLSX is fast, PDF can take 30-60 s for a 49-slide deck).
   const [exportingPdf, setExportingPdf] = useState(false);
-  const [pdfProgress, setPdfProgress] = useState({ current: 0, total: 0 });
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiErr, setAiErr] = useState<string | null>(null);
@@ -133,12 +132,11 @@ export default function AdvancedAuditPage() {
     if (!audit) return;
     setExportingPdf(true);
     setExportErr(null);
-    setPdfProgress({ current: 0, total: slides.length });
     try {
       const { exportDeckToPdf } = await import("@/lib/audit/advanced/export-pdf");
-      await exportDeckToPdf(audit.name, "[data-deck-root]", (current, total) => {
-        setPdfProgress({ current, total });
-      });
+      // The browser print dialog handles the rest. The user picks
+      // "Save as PDF" from the destination dropdown.
+      await exportDeckToPdf(audit.name, "[data-deck-root]");
     } catch (e) {
       setExportErr(`Échec export PDF : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -202,11 +200,9 @@ export default function AdvancedAuditPage() {
             onClick={exportPdf}
             disabled={exportingPdf}
             className="btn-primary text-sm"
-            title="Exporte la présentation en PDF (1 slide = 1 page, dimensions identiques à l'affichage)."
+            title="Ouvre la boîte de dialogue d'impression. Choisissez « Enregistrer au format PDF » comme destination pour télécharger le fichier."
           >
-            {exportingPdf
-              ? `PDF ${pdfProgress.current}/${pdfProgress.total}…`
-              : "🖨 Exporter en PDF"}
+            {exportingPdf ? "Ouverture du dialogue…" : "🖨 Exporter en PDF"}
           </button>
           <button
             onClick={exportXlsx}
