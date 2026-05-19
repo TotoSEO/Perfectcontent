@@ -1,14 +1,13 @@
 "use client";
 
 import { ReactNode } from "react";
-import { VbtLogo } from "../Logo";
-import { VBT } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO } from "@/lib/audit/brand";
 
 /**
- * 16:9 slide for the Advanced audit deck. Same brand DNA as the classic
- * audit's Slide but with a richer header band (eyebrow + title + section
- * crumb) and tighter footer spacing. Designed for screenshot → Google Slides
- * paste at 1600×900.
+ * 16:9 slide for the Advanced audit deck. Authored against a 1600×900
+ * canvas, with the brand DNA from the classic audit. Header uses a single
+ * lockup with eyebrow + title; logo + branding only appear once per
+ * slide (in the footer), per the design refactor.
  */
 export function AdvSlide({
   index,
@@ -33,8 +32,6 @@ export function AdvSlide({
 }) {
   const isCover = variant === "cover";
   const isSectionCover = variant === "section-cover";
-  // Section covers get a warmer gradient and no title chrome in the header
-  // (the title lives in the body for maximum impact).
   const bg = isCover
     ? `linear-gradient(135deg, ${VBT.paper} 0%, ${VBT.paper} 55%, ${VBT.terracotta50} 100%)`
     : isSectionCover
@@ -43,9 +40,14 @@ export function AdvSlide({
         ? `linear-gradient(135deg, ${VBT.paper} 0%, ${VBT.paper} 65%, ${VBT.amber50} 100%)`
         : VBT.paper;
 
+  // Generous horizontal padding for breathing room (4.14). Cover and
+  // section-cover get the full 80 px; data slides get 64 px so charts
+  // can be wider without feeling cramped.
+  const padX = isCover || isSectionCover ? 80 : 64;
+  const headerPadTop = 36;
+  const headerPadBottom = 18;
+
   return (
-    // data-pdf-slide marks this node for the PDF exporter so every slide
-    // is captured in DOM order at its rendered size.
     <div className="w-full" style={{ aspectRatio: "16 / 9" }} data-pdf-slide>
       <div
         className="w-full h-full rounded-2xl overflow-hidden flex flex-col relative"
@@ -68,25 +70,33 @@ export function AdvSlide({
         )}
 
         {!isCover && !isSectionCover && title && (
-          <header className="px-12 pt-8 pb-3 flex items-start justify-between gap-6">
-            <div className="min-w-0">
+          <header
+            className="flex items-start justify-between gap-8"
+            style={{
+              padding: `${headerPadTop}px ${padX}px ${headerPadBottom}px`,
+            }}
+          >
+            <div className="min-w-0 flex-1">
               <div
-                className="text-[11px] uppercase tracking-[0.22em]"
-                style={{ color: VBT.terracotta600, fontWeight: 600 }}
+                className="uppercase"
+                style={{
+                  color: VBT.terracotta600,
+                  fontWeight: 700,
+                  fontSize: VBT_TYPO.micro,
+                  letterSpacing: "0.24em",
+                }}
               >
                 {subtitle || `Slide ${index + 1} / ${total}`}
               </div>
               <h2
-                className="mt-2"
+                className="mt-2.5"
                 style={{
                   fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
                   fontWeight: 700,
-                  fontSize: 30,
-                  letterSpacing: "-0.015em",
+                  fontSize: VBT_TYPO.pageTitle,
+                  letterSpacing: "-0.02em",
                   color: VBT.ink,
                   lineHeight: 1.1,
-                  // Allow up to 2 lines instead of truncating : long titles
-                  // like "Pages sans / avec peu de liens entrants" need this.
                   display: "-webkit-box",
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: "vertical",
@@ -97,39 +107,69 @@ export function AdvSlide({
                 {title}
               </h2>
             </div>
-            <div className="shrink-0 flex items-center gap-3">
-              {rightHeader}
-              <VbtLogo size={32} />
-            </div>
+            {rightHeader && (
+              <div className="shrink-0 flex items-center gap-3 pt-1">
+                {rightHeader}
+              </div>
+            )}
           </header>
         )}
 
-        {/* Body */}
         <main
-          className={`flex-1 ${isCover ? "px-14 py-10" : isSectionCover ? "px-14 py-12" : "px-12 pb-4"} min-h-0 flex flex-col`}
+          className="flex-1 min-h-0 flex flex-col"
+          style={{
+            paddingLeft: padX,
+            paddingRight: padX,
+            paddingTop: isCover ? 64 : isSectionCover ? 56 : 8,
+            paddingBottom: isCover ? 40 : isSectionCover ? 56 : 20,
+          }}
         >
           {children}
         </main>
 
+        {/* Single brand lockup (4.5) — Visibili'tea + slide N/M in the
+            footer only. No duplicate logo in headers. */}
         <footer
-          className="px-12 py-3 flex items-center justify-between text-[11px]"
-          style={{ color: VBT.zinc, borderTop: `1px solid ${VBT.paperEdge}` }}
+          className="flex items-center justify-between"
+          style={{
+            padding: `12px ${padX}px`,
+            fontSize: VBT_TYPO.caption,
+            color: VBT.zinc,
+            borderTop: `1px solid ${VBT.paperEdge}`,
+          }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <span
+              aria-hidden
+              className="inline-block rounded-full"
+              style={{
+                width: 6,
+                height: 6,
+                background: VBT.terracotta500,
+              }}
+            />
             <span
               className="font-semibold"
               style={{
                 fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
                 color: VBT.terracotta600,
-                letterSpacing: "0.02em",
+                letterSpacing: "0.04em",
+                fontSize: VBT_TYPO.caption,
               }}
             >
-              Visibili'tea
+              Visibili&apos;tea
             </span>
             <span style={{ color: VBT.paperEdge }}>·</span>
             <span>{footer || "Audit technique avancé SEO"}</span>
           </div>
-          <div className="tabular-nums">
+          <div
+            className="tabular-nums"
+            style={{
+              fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+              fontWeight: 600,
+              color: VBT.inkSoft,
+            }}
+          >
             {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
           </div>
         </footer>
@@ -141,14 +181,22 @@ export function AdvSlide({
 /** Coloured pill used to badge a sub-id / section etc. */
 export function SectionPill({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "warn" | "ok" | "bad" }) {
   const palette =
-    tone === "ok" ? { bg: "#EAF2E0", text: VBT.good, border: "#C6D9B0" } :
-    tone === "warn" ? { bg: VBT.amber50, text: VBT.amber600, border: "#E5CD83" } :
-    tone === "bad" ? { bg: VBT.brick50, text: VBT.brick500, border: "#E5BDB5" } :
-    { bg: VBT.terracotta50, text: VBT.terracotta700, border: "#F5D5BA" };
+    tone === "ok" ? { bg: "#E6F4EA", text: VBT.sigGreen, border: "#B3DDC2" } :
+    tone === "warn" ? { bg: "#FFEDD5", text: VBT.sigOrange, border: "#FDBA74" } :
+    tone === "bad" ? { bg: "#FEE2E2", text: VBT.sigRed, border: "#FCA5A5" } :
+    { bg: "#DBEAFE", text: VBT.sigBlue, border: "#93C5FD" };
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
-      style={{ background: palette.bg, color: palette.text, border: `1px solid ${palette.border}` }}
+      className="inline-flex items-center gap-1.5 rounded-full whitespace-nowrap"
+      style={{
+        background: palette.bg,
+        color: palette.text,
+        border: `1px solid ${palette.border}`,
+        padding: "5px 12px",
+        fontSize: VBT_TYPO.caption,
+        fontWeight: 700,
+        letterSpacing: "0.01em",
+      }}
     >
       {children}
     </span>

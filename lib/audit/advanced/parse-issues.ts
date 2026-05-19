@@ -603,7 +603,20 @@ export type IssuesParseResult = {
 
 export async function parseIssuesZip(file: File): Promise<IssuesParseResult> {
   const JSZip = (await import("jszip")).default;
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  // Force UTF-8 decoding of filenames. ZIPs produced by older
+  // Screaming Frog builds on Windows use CP-437 / IBM-850 for
+  // accented filenames, which makes 'codes_de_réponse...' look like
+  // 'codes_de_r#U00e9ponse...' downstream. The `decodeFileName`
+  // option tells JSZip to treat the raw filename bytes as UTF-8.
+  const zip = await JSZip.loadAsync(await file.arrayBuffer(), {
+    decodeFileName: (bytes: string[] | Uint8Array | Buffer) => {
+      if (bytes instanceof Uint8Array) {
+        return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+      }
+      // Fallback for the typing — should never hit in browser.
+      return String(bytes);
+    },
+  });
 
   const matched: ParsedIssue[] = [];
   const matchedNames: string[] = [];

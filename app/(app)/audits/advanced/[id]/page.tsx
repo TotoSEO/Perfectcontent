@@ -14,9 +14,9 @@ import {
   AnchorTableBody,
   PrioritySlideBody,
 } from "@/components/audit/advanced/SlideContent";
-import { VbtLogo } from "@/components/audit/Logo";
-import { ScoreBadge } from "@/components/audit/Slide";
-import { VBT } from "@/lib/audit/brand";
+import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
+import { DownloadIcon, PrinterIcon } from "@/components/audit/advanced/Icons";
+import { VBT, VBT_TYPO } from "@/lib/audit/brand";
 import type { AdvReport, AdvSlide as AdvSlideType, AdvSubcategory } from "@/lib/audit/advanced/types";
 
 type AuditOut = {
@@ -48,7 +48,6 @@ export default function AdvancedAuditPage() {
   // Separate state for PDF so the two buttons can run independently
   // (XLSX is fast, PDF can take 30-60 s for a 49-slide deck).
   const [exportingPdf, setExportingPdf] = useState(false);
-  const [pdfProgress, setPdfProgress] = useState({ current: 0, total: 0 });
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiErr, setAiErr] = useState<string | null>(null);
@@ -119,6 +118,17 @@ export default function AdvancedAuditPage() {
         ...audit.summary,
         sections: fullSections,
         slides: audit.summary.slides,
+        // Legacy audits saved before the diagnostics field was added —
+        // give the exporter a safe default so the Exclusions sheet
+        // still renders with zeros instead of crashing.
+        diagnostics: audit.summary.diagnostics || {
+          pagination_excluded_count: 0,
+          html_pages_count: audit.summary.html_count || 0,
+          indexable_html_count: 0,
+          contextual_links_count: 0,
+          editorial_links_count: 0,
+          empty_editorial_anchor_count: 0,
+        },
       };
       const { exportAdvancedToXlsx } = await import("@/lib/audit/advanced/export");
       await exportAdvancedToXlsx(fullReport, audit.name);
@@ -133,12 +143,11 @@ export default function AdvancedAuditPage() {
     if (!audit) return;
     setExportingPdf(true);
     setExportErr(null);
-    setPdfProgress({ current: 0, total: slides.length });
     try {
       const { exportDeckToPdf } = await import("@/lib/audit/advanced/export-pdf");
-      await exportDeckToPdf(audit.name, "[data-deck-root]", (current, total) => {
-        setPdfProgress({ current, total });
-      });
+      // The browser print dialog handles the rest. The user picks
+      // "Save as PDF" from the destination dropdown.
+      await exportDeckToPdf(audit.name, "[data-deck-root]");
     } catch (e) {
       setExportErr(`Échec export PDF : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -201,20 +210,20 @@ export default function AdvancedAuditPage() {
           <button
             onClick={exportPdf}
             disabled={exportingPdf}
-            className="btn-primary text-sm"
-            title="Exporte la présentation en PDF (1 slide = 1 page, dimensions identiques à l'affichage)."
+            className="btn-primary text-sm inline-flex items-center gap-2"
+            title="Ouvre la boîte de dialogue d'impression. Choisissez « Enregistrer au format PDF » comme destination pour télécharger le fichier."
           >
-            {exportingPdf
-              ? `PDF ${pdfProgress.current}/${pdfProgress.total}…`
-              : "🖨 Exporter en PDF"}
+            <PrinterIcon size={15} color="currentColor" />
+            {exportingPdf ? "Ouverture du dialogue…" : "Exporter en PDF"}
           </button>
           <button
             onClick={exportXlsx}
             disabled={exporting || !audit.issues}
-            className="btn-secondary text-sm"
+            className="btn-secondary text-sm inline-flex items-center gap-2"
             title="Exporte le fichier .xlsx complet avec un onglet par sous-catégorie de problème et un onglet de priorisation."
           >
-            {exporting ? "Export en cours…" : "📊 Exporter le fichier XLSX"}
+            <DownloadIcon size={15} color="currentColor" />
+            {exporting ? "Export en cours…" : "Exporter le fichier XLSX"}
           </button>
           <button onClick={deleteAudit} className="btn-ghost text-xs">Supprimer</button>
         </div>
@@ -236,6 +245,10 @@ export default function AdvancedAuditPage() {
       <div className="space-y-6" data-deck-root>
         {slides.map((s, i) => {
           if (s.kind === "cover") {
+            // Use the live counts so the cover stays in sync with the
+            // actual deck (4.4) : the slide count is the number of
+            // slides currently rendered, and the issues count comes
+            // from the audit's stored issues table.
             return (
               <AdvSlide
                 key={i}
@@ -244,21 +257,26 @@ export default function AdvancedAuditPage() {
                 variant="cover"
                 footer={audit.source_filename ? `Source : ${audit.source_filename}` : "Audit technique avancé SEO"}
               >
-                <div className="flex-1 flex items-center justify-between gap-12 min-h-0">
-                  <div className="flex-1 min-w-0 space-y-7">
+                <div className="flex-1 grid grid-cols-12 gap-10 min-h-0 items-center">
+                  <div className="col-span-7 min-w-0 space-y-7">
                     <div
-                      className="text-[12px] uppercase tracking-[0.28em]"
-                      style={{ color: VBT.terracotta600, fontWeight: 700 }}
+                      className="uppercase"
+                      style={{
+                        color: VBT.terracotta600,
+                        fontWeight: 700,
+                        fontSize: VBT_TYPO.caption,
+                        letterSpacing: "0.32em",
+                      }}
                     >
-                      Audit technique SEO — Édition avancée
+                      Audit technique SEO · Édition avancée
                     </div>
                     <h1
-                      className="leading-[1.05]"
+                      className="leading-[1.02]"
                       style={{
                         fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
                         fontWeight: 800,
-                        fontSize: 60,
-                        letterSpacing: "-0.025em",
+                        fontSize: 64,
+                        letterSpacing: "-0.03em",
                         color: VBT.ink,
                         wordBreak: "break-word",
                       }}
@@ -266,43 +284,60 @@ export default function AdvancedAuditPage() {
                       {audit.name}
                     </h1>
                     <div
-                      className="text-base"
-                      style={{ color: VBT.inkSoft, fontWeight: 500 }}
+                      className="h-1.5 rounded-full"
+                      style={{
+                        width: 140,
+                        background: `linear-gradient(90deg, ${VBT.terracotta600}, ${VBT.amber400})`,
+                      }}
+                    />
+                    <div
+                      style={{
+                        color: VBT.inkSoft,
+                        fontWeight: 500,
+                        fontSize: VBT_TYPO.body + 1,
+                      }}
                     >
                       Préparé le {generatedDate}
                       {audit.summary?.domain && (
-                        <span style={{ color: VBT.terracotta600 }}>
+                        <span style={{ color: VBT.terracotta600, fontWeight: 600 }}>
                           {" · "}
                           {(() => { try { return new URL(audit.summary.domain).hostname; } catch { return audit.summary.domain; } })()}
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-x-10 gap-y-3 pt-2">
+                    <div className="grid grid-cols-4 gap-6 pt-3">
                       <BigStat label="URLs analysées" value={s.url_count.toLocaleString("fr-FR")} />
                       <BigStat label="Catégories" value={s.sections_count} />
-                      <BigStat label="Problèmes" value={s.issues_count.toLocaleString("fr-FR")} />
+                      <BigStat label="Problèmes" value={totalIssues.toLocaleString("fr-FR")} />
                       <BigStat label="Slides" value={total} />
                     </div>
                   </div>
-                  <div className="shrink-0 flex flex-col items-center gap-6">
-                    <VbtLogo size={120} layout="stack" />
-                    <ScoreBadge score={audit.summary!.global_score} />
+                  {/* Right column : hero circular gauge (4.12) */}
+                  <div className="col-span-5 flex items-center justify-center min-w-0">
+                    <CircularGauge score={audit.summary!.global_score} size={340} thickness={20} />
                   </div>
                 </div>
               </AdvSlide>
             );
           }
           if (s.kind === "summary") {
+            const pillTone: "ok" | "warn" | "bad" =
+              s.global_score >= 80 ? "ok" :
+              s.global_score >= 50 ? "warn" : "bad";
             return (
               <AdvSlide
                 key={i}
                 index={i}
                 total={total}
                 title="Synthèse — score par catégorie"
-                rightHeader={<ScoreBadge score={s.global_score} />}
-                footer={`${audit.url_count.toLocaleString("fr-FR")} URLs · ${totalIssues} problèmes`}
+                rightHeader={
+                  <SectionPill tone={pillTone}>
+                    Score global {s.global_score}/100
+                  </SectionPill>
+                }
+                footer={`${audit.url_count.toLocaleString("fr-FR")} URLs · ${totalIssues.toLocaleString("fr-FR")} problèmes`}
               >
-                <div className="flex-1 grid grid-cols-2 gap-x-10 gap-y-3 content-center pb-2 min-h-0">
+                <div className="flex-1 grid grid-cols-2 gap-x-12 gap-y-5 content-center pb-2 min-h-0">
                   {s.sections.map((c) => (
                     <SummaryBar key={c.id} c={c} />
                   ))}
@@ -312,20 +347,28 @@ export default function AdvancedAuditPage() {
           }
           if (s.kind === "section-cover") {
             const sectionIndex = audit.summary!.sections.findIndex((x) => x.id === s.section_id);
+            const part = `Partie ${sectionIndex + 1} sur ${audit.summary!.sections.length}`;
             return (
               <AdvSlide
                 key={i}
                 index={i}
                 total={total}
                 variant="section-cover"
-                footer={`Partie ${sectionIndex + 1} sur ${audit.summary!.sections.length}`}
+                footer="Couverture de partie"
               >
-                <SectionCoverBody slide={s} partOf={`${audit.summary!.sections.length} parties dans le rapport`} />
+                {/* The "Partie X sur N" line appears once on the section
+                    cover (4.3) — the body renders it inside the eyebrow
+                    lockup, the footer carries only the generic label. */}
+                <SectionCoverBody slide={s} partOf={part} />
               </AdvSlide>
             );
           }
           if (s.kind === "data") {
             const sec = audit.summary!.sections.find((x) => x.id === s.section_id);
+            const tone =
+              s.issues_count === 0 ? "ok" :
+              s.issues_count > 500 ? "bad" :
+              "warn";
             return (
               <AdvSlide
                 key={i}
@@ -333,7 +376,11 @@ export default function AdvancedAuditPage() {
                 total={total}
                 title={s.title}
                 subtitle={sec?.label}
-                rightHeader={s.issues_count > 0 ? <SectionPill tone="warn">{s.issues_count} problème{s.issues_count > 1 ? "s" : ""}</SectionPill> : <SectionPill tone="ok">OK</SectionPill>}
+                rightHeader={
+                  s.issues_count > 0
+                    ? <SectionPill tone={tone}>{s.issues_count.toLocaleString("fr-FR")} problème{s.issues_count > 1 ? "s" : ""}</SectionPill>
+                    : <SectionPill tone="ok">Aucun problème</SectionPill>
+                }
                 footer={sec?.label}
               >
                 <DataSlideBody slide={s} />
@@ -430,21 +477,28 @@ export default function AdvancedAuditPage() {
 
 function BigStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div
-        className="text-[10px] uppercase tracking-[0.18em]"
-        style={{ color: VBT.zinc, fontWeight: 700 }}
+        className="uppercase truncate"
+        style={{
+          color: VBT.zinc,
+          fontWeight: 700,
+          fontSize: VBT_TYPO.micro,
+          letterSpacing: "0.2em",
+        }}
+        title={label}
       >
         {label}
       </div>
       <div
-        className="tabular-nums mt-1.5"
+        className="tabular-nums mt-2"
         style={{
           color: VBT.terracotta700,
           fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-          fontSize: 36,
-          fontWeight: 700,
-          letterSpacing: "-0.02em",
+          fontSize: 44,
+          fontWeight: 800,
+          letterSpacing: "-0.03em",
+          lineHeight: 1,
         }}
       >
         {value}
@@ -454,33 +508,36 @@ function BigStat({ label, value }: { label: string; value: string | number }) {
 }
 
 function SummaryBar({ c }: { c: { id: string; label: string; score: number; weight: number; summary: string } }) {
+  // Semantic palette (4.6) for at-a-glance status reading on the synthesis slide.
   const fill =
-    c.score >= 80 ? VBT.good :
-    c.score >= 50 ? VBT.amber500 : VBT.brick500;
-  const textColor =
-    c.score >= 80 ? VBT.good :
-    c.score >= 50 ? VBT.amber600 : VBT.brick500;
+    c.score >= 80 ? VBT.sigGreen :
+    c.score >= 50 ? VBT.sigOrange : VBT.sigRed;
   return (
-    <div className="space-y-1.5 min-w-0">
-      <div className="flex items-baseline justify-between text-sm gap-2 min-w-0">
+    <div className="space-y-2 min-w-0">
+      <div className="flex items-baseline justify-between gap-2 min-w-0">
         <span
           className="font-semibold truncate"
           style={{
             color: VBT.ink,
             fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+            fontSize: VBT_TYPO.body,
+            letterSpacing: "-0.01em",
           }}
           title={c.label}
         >
           {c.label}
         </span>
-        <span className="tabular-nums shrink-0" style={{ color: VBT.zinc }}>
-          <strong style={{ color: textColor, fontWeight: 700 }}>{c.score}</strong>/100
-          <span className="ml-2 text-[10px]" style={{ color: VBT.zinc }}>poids {c.weight}</span>
+        <span className="tabular-nums shrink-0" style={{ color: VBT.zinc, fontSize: VBT_TYPO.bodySm }}>
+          <strong style={{ color: fill, fontWeight: 800, fontSize: VBT_TYPO.body + 2 }}>{c.score}</strong>
+          <span className="ml-0.5" style={{ color: VBT.zinc }}>/100</span>
+          <span className="ml-3 uppercase" style={{ color: VBT.zinc, fontSize: VBT_TYPO.micro, letterSpacing: "0.14em", fontWeight: 600 }}>
+            poids {c.weight}
+          </span>
         </span>
       </div>
-      <div className="h-2.5 rounded-full overflow-hidden" style={{ background: VBT.paperEdge }}>
+      <div className="h-3 rounded-full overflow-hidden" style={{ background: VBT.paperEdge }}>
         <div
-          className="h-full transition-all"
+          className="h-full"
           style={{
             width: `${c.score}%`,
             background: `linear-gradient(90deg, ${fill}DD, ${fill})`,
@@ -488,16 +545,18 @@ function SummaryBar({ c }: { c: { id: string; label: string; score: number; weig
         />
       </div>
       <div
-        className="text-xs"
         style={{
           color: VBT.inkSoft,
-          // Avoid overflow if the summary is long.
+          fontSize: VBT_TYPO.bodySm,
+          lineHeight: 1.5,
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
           overflow: "hidden",
         }}
-      >{c.summary}</div>
+      >
+        {c.summary}
+      </div>
     </div>
   );
 }

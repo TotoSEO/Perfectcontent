@@ -237,11 +237,15 @@ export function parseInterneHtmlCsvText(textRaw: string, filename: string | null
   };
 }
 
-// Pagination URLs (e.g. ?pagination=2, ?page=3, /page/4/) inflate the URL
-// count and pollute every distribution downstream : same template, same
-// content, same internal links. The reference page (page 1, no parameter)
-// is always kept; only the deeper paginated copies are filtered out at
-// parse time.
+// Pagination URLs (?page=2, ?p=3, /page/4/, /p/4, ?paged=N…) inflate the
+// URL count and pollute every distribution downstream — same template,
+// same content, same internal links. Reference page (page 1, no
+// parameter) is always kept; only the deeper paginated copies are
+// filtered out at parse time.
+//
+// Spec regex from the client : /(page|p)/\d+/?$|[?&](page|p)=\d+
+// We extend it with `pagination`, `paged`, `start`, `offset` since
+// some templates use those variants.
 export function isPaginationUrl(url: string): boolean {
   try {
     const u = new URL(url);
@@ -250,7 +254,8 @@ export function isPaginationUrl(url: string): boolean {
       const v = params.get(key);
       if (v && /^\d+$/.test(v)) return true;
     }
-    if (/\/page\/\d+\/?$/i.test(u.pathname)) return true;
+    // Match both /page/N(/) and /p/N(/) as path-based pagination.
+    if (/\/(page|p)\/\d+\/?$/i.test(u.pathname)) return true;
     return false;
   } catch {
     return false;

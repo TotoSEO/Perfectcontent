@@ -119,6 +119,70 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
   totalRow.font = { bold: true };
   synth.autoFilter = { from: "A1", to: `F${synth.rowCount}` };
 
+  // ===== Exclusions sheet =====
+  // Transparency : exactly what was filtered out at parse time and why.
+  // Lets the consultant defend numbers to the client and surfaces any
+  // detection that might have been overly aggressive.
+  {
+    const exc = wb.addWorksheet("Exclusions", { views: [{ state: "frozen", ySplit: 1 }] });
+    exc.columns = [
+      { header: "Élément filtré",      key: "label",  width: 56 },
+      { header: "Volume",              key: "count",  width: 14 },
+      { header: "Pourquoi ce filtre",  key: "why",    width: 80 },
+    ];
+    styleHeader(exc.getRow(1));
+    const d = report.diagnostics;
+    const lines: Array<{ label: string; count: number; why: string }> = [
+      {
+        label: "URLs de pagination exclues d'interne_html.csv",
+        count: d.pagination_excluded_count,
+        why: "Pages identifiées via les motifs /page/N(/) ou /p/N(/) ou ?page=N etc. Exclues de tous les compteurs (URLs analysées, codes HTTP, profondeur, balises, maillage).",
+      },
+      {
+        label: "Pages HTML analysées (post-pagination)",
+        count: d.html_pages_count,
+        why: "Total des pages text/html crawlées, après exclusion des URLs de pagination.",
+      },
+      {
+        label: "dont indexables",
+        count: d.indexable_html_count,
+        why: "Sous-ensemble Indexable parmi les pages HTML. Utilisé pour les analyses de doublons (title, meta, H1).",
+      },
+      {
+        label: "Liens contextuels (Position du lien = Contenu)",
+        count: d.contextual_links_count,
+        why: "Lignes d'liens_entrants_tous.csv où Type = Hyperlien, Position du lien = Contenu, destination interne, statut 200.",
+      },
+      {
+        label: "dont éditoriaux (filtre fin)",
+        count: d.editorial_links_count,
+        why: "Liens contextuels après exclusion des CTAs templatés, blocs articles (Chemin = card/article/post), liens-images (Texte Alt rempli, Ancrage vide), liens-boutons (Chemin = btn/cta).",
+      },
+      {
+        label: "Ancres vides éditoriales",
+        count: d.empty_editorial_anchor_count,
+        why: "Liens éditoriaux dont Ancrage ET Texte Alt sont tous deux vides. Vrai problème d'accessibilité et de SEO.",
+      },
+    ];
+    if (d.anchor_filter_breakdown) {
+      const b = d.anchor_filter_breakdown;
+      lines.push(
+        { label: "  · CTAs templatés exclus du calcul de diversité", count: b.template_cta, why: 'Ancres dans la liste noire ("Nous contacter", "Demander une démo", "S\'inscrire", etc.) — ce sont des boutons de template, pas des ancres éditoriales.' },
+        { label: "  · Liens-images exclus", count: b.image_wrapping, why: "Liens dont Ancrage est vide mais Texte Alt est renseigné — ce sont des images cliquables, pas des ancres rédactionnelles." },
+        { label: "  · Blocs articles / cards exclus", count: b.card_path, why: "Chemin du lien contenant article, card, post, blog-item, etc. : des cartes de listing cliquables, pas des ancres dans le corps de texte." },
+        { label: "  · Boutons / CTAs templatés (par chemin) exclus", count: b.button_path, why: "Chemin du lien contenant button, btn, cta, call-to-action : éléments de design, pas des ancres rédactionnelles." },
+        { label: "  · Destinations vers une page de pagination exclues", count: b.pagination_dest, why: "Liens internes pointant vers /page/N, ?page=N etc. — doublons de canonique, ne polluent plus le calcul de diversité." },
+      );
+    }
+    for (const row of lines) {
+      const wsRow = exc.addRow(row);
+      wsRow.getCell("count").alignment = { horizontal: "right" };
+      wsRow.getCell("why").alignment = { wrapText: true, vertical: "top" };
+      wsRow.height = 36;
+    }
+    exc.autoFilter = { from: "A1", to: `C${exc.rowCount}` };
+  }
+
   // ===== Priorities sheet =====
   if (report.priorities.length > 0) {
     const prio = wb.addWorksheet("Priorisation", { views: [{ state: "frozen", ySplit: 1 }] });

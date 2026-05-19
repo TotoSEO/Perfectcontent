@@ -51,14 +51,73 @@ const BODY_POSITIONS = [
   "corps", "principal",
 ];
 // Generic anchors that signal a low-quality link no matter the rest.
+// Used to flag low-quality contextual anchors AND to filter them out of
+// the over-optimisation ranking (templated CTAs would otherwise show up
+// as fake over-optimisation patterns on every site).
 const GENERIC_ANCHORS = new Set([
-  "ici", "cliquez", "cliquez ici", "cliquer ici", "en savoir plus",
-  "lire la suite", "voir", "decouvrir", "decouvrir plus",
-  "plus d informations", "plus d'informations", "voir plus", "plus", "lire",
-  "lien", "site",
-  "here", "click", "click here", "read more", "learn more", "more",
-  "see more", "link", "this", "this link",
+  // 'In place of an anchor' generics
+  "ici", "cliquez", "cliquez ici", "cliquer ici",
+  "here", "click", "click here", "this", "this link", "link", "lien", "site",
+  // Read-more variants
+  "en savoir plus", "lire la suite", "voir plus", "plus", "lire",
+  "decouvrir", "decouvrir plus", "voir",
+  "plus d informations", "plus d'informations",
+  "read more", "learn more", "more", "see more",
+  // Returning / back
+  "retour", "revenir sur la page d accueil", "revenir sur la page d'accueil",
+  "retour a l accueil", "retour a l'accueil",
 ]);
+
+// Templated CTA labels — these repeat across the site as part of layout
+// templates (footer CTAs, blog/article boxes, lead magnets). They're
+// emitted as a true <a> hyperlink in body content but they're NOT
+// editorial anchors. We exclude them from the diversity score so a
+// /contact/ page with 200 'Nous contacter' CTAs doesn't get flagged as
+// over-optimised when it's actually just the template behaving normally.
+const TEMPLATE_CTA_ANCHORS = new Set([
+  // Contact CTAs
+  "nous contacter", "contactez-nous", "contactez nous", "contact", "prendre contact",
+  "contacter un expert", "contacter notre equipe", "demande de contact",
+  // Demo / sales CTAs
+  "demander une demo", "obtenir une demo", "reserver une demo", "demande de demo",
+  "demander un devis", "obtenir un devis", "demande de devis",
+  "demander une demonstration", "reserver une demonstration",
+  "request a demo", "book a demo",
+  // Resource downloads
+  "recevoir la plaquette", "telecharger la plaquette", "telecharger le pdf",
+  "recevoir le livre blanc", "telecharger le livre blanc",
+  "recevoir le guide", "telecharger le guide",
+  "recevoir le modele", "telecharger le modele", "telecharger le template",
+  "telecharger l etude de cas", "telecharger l'etude de cas",
+  "recevoir l etude de cas", "recevoir l'etude de cas",
+  // Newsletter
+  "s abonner a la newsletter", "s'abonner a la newsletter",
+  "s inscrire a la newsletter", "s'inscrire a la newsletter",
+  "s abonner", "s'abonner", "s inscrire", "s'inscrire",
+  "abonnez-vous", "inscription",
+  // Video / media
+  "visionner la video", "voir la video", "regarder la video", "lancer la video",
+  // Generic CTAs that templates use
+  "decouvrir l offre", "decouvrir l'offre", "decouvrir nos solutions",
+  "essayer gratuitement", "commencer", "commencer maintenant", "demarrer",
+  "see all", "voir tout", "voir tous", "tout voir",
+]);
+
+// CSS-path / link-path fragments that indicate the link is part of a
+// listing card (article preview, blog card, product card…) rather than
+// a real anchor in body text. We exclude these from the contextual
+// anchor analysis because they wrap a whole card visually.
+const CARD_PATH_FRAGMENTS = [
+  "article", "card", "post", "blog-item", "blog__item", "blog_card",
+  "post-card", "post__card", "product-card", "product__card",
+  "tile", "thumbnail", "preview", "listing", "list__item",
+];
+
+// CSS-path / link-path fragments that indicate the link is styled as a
+// button (templated CTA) rather than a contextual anchor.
+const BUTTON_PATH_FRAGMENTS = [
+  "button", "btn", "cta", "call-to-action", "calltoaction",
+];
 
 // Local copy of parse-internal.ts's isPaginationUrl to avoid a circular
 // dependency between the two parsers.
@@ -70,7 +129,7 @@ function isPaginationUrlInline(url: string): boolean {
       const v = params.get(key);
       if (v && /^\d+$/.test(v)) return true;
     }
-    if (/\/page\/\d+\/?$/i.test(u.pathname)) return true;
+    if (/\/(page|p)\/\d+\/?$/i.test(u.pathname)) return true;
     return false;
   } catch {
     return false;
@@ -100,6 +159,37 @@ function isGeneric(anchor: string): boolean {
   const norm = normalizeKey(anchor || "");
   if (!norm) return false;
   return GENERIC_ANCHORS.has(norm);
+}
+
+function isTemplateCta(anchor: string): boolean {
+  const norm = normalizeKey(anchor || "");
+  if (!norm) return false;
+  return TEMPLATE_CTA_ANCHORS.has(norm);
+}
+
+// True when the link wraps an image and has no own text content.
+// Detected via Texte Alt being present while Ancrage is empty — that's
+// how SF FR represents <a><img alt="…"></a>. Such links are NOT
+// editorial anchors so we exclude them from the diversity calc and from
+// the 'empty anchors are bad' signal.
+function isImageWrappingLink(rawAnchor: string, altText: string): boolean {
+  return !rawAnchor.trim() && !!altText.trim();
+}
+
+// True when the Chemin du lien (XPath selector) points to a templated
+// card / button — listing tiles, CTA buttons, etc. — rather than to a
+// genuine in-body anchor. We use this to keep only editorial links in
+// the diversity ranking.
+function isCardLikePath(path: string): boolean {
+  if (!path) return false;
+  const norm = path.toLowerCase();
+  return CARD_PATH_FRAGMENTS.some((f) => norm.includes(f));
+}
+
+function isButtonLikePath(path: string): boolean {
+  if (!path) return false;
+  const norm = path.toLowerCase();
+  return BUTTON_PATH_FRAGMENTS.some((f) => norm.includes(f));
 }
 
 function hostname(url: string): string {
@@ -152,7 +242,9 @@ export type AnchorsParseResult = {
   by_destination: Map<string, AnchorDestinationSummary>;
   // Diagnostics: raw lines vs. rows that passed every filter.
   total_links_raw: number;
-  total_links_filtered: number;
+  total_links_filtered: number;     // every Position=Contenu HTML hyperlink
+  total_editorial_links: number;    // editorial subset (excl. CTAs / cards / buttons / image links)
+  empty_editorial_anchors: number;  // editorial links with neither Ancrage nor Texte Alt
   // Per-rejection counters so the import UI can explain WHY rows were
   // dropped. Helps catch future SF locale / format drift early.
   filtered_breakdown: {
@@ -161,6 +253,12 @@ export type AnchorsParseResult = {
     no_destination: number;
     non_200: number;
     external: number;
+    // New : detailed contextual-anchor filtering buckets
+    template_cta: number;        // CTA wording from the templated list
+    image_wrapping: number;      // <a><img alt="…"></a>
+    card_path: number;           // /article/, /post-card/, …
+    button_path: number;         // /button/, /btn-/, /cta/, …
+    pagination_dest: number;     // destination is a /page/N URL
   };
   broken_links: BrokenLink[];
   redirected_links: RedirectedLink[];
@@ -198,6 +296,11 @@ function streamAndFilter(
       no_destination: 0,
       non_200: 0,
       external: 0,
+      template_cta: 0,
+      image_wrapping: 0,
+      card_path: 0,
+      button_path: 0,
+      pagination_dest: 0,
     };
     let aborted = false;
     Papa.parse<Record<string, string>>(text, {
@@ -228,10 +331,17 @@ function streamAndFilter(
           return;
         }
         const src = pick(data, SOURCE_KEYS) || "";
-        // Use Ancrage when present, else fall back to Texte Alt (the link
-        // is an image wrapper). Stays "" only when both are empty : that's
-        // a true accessibility/SEO issue and shows as "(vide)" on the slide.
-        const anchor = pick(data, ANCHOR_KEYS) || pick(data, ALT_KEYS) || "";
+        // We keep the raw Ancrage and the Texte Alt separately so we can
+        // distinguish three cases on the destination-anchor slide :
+        //   • rawAnchor present : real editorial anchor
+        //   • rawAnchor empty AND altText present : image-wrapping link
+        //     (NOT counted as 'empty contextual anchor')
+        //   • rawAnchor empty AND altText empty : truly empty link — a
+        //     genuine accessibility/SEO problem
+        const rawAnchor = pick(data, ANCHOR_KEYS) || "";
+        const altText = pick(data, ALT_KEYS) || "";
+        const anchor = rawAnchor || altText;
+        const pathStr = pick(data, PATH_KEYS) || "";
         const statusStr = pick(data, STATUS_KEYS);
         const statusCode = statusStr ? parseInt(statusStr, 10) : 200;
         const internal = src ? isSameDomain(src, dest) : true;
@@ -289,6 +399,21 @@ function streamAndFilter(
           breakdown.non_200++;
           return;
         }
+        // Templated CTA labels — keep them in the parser output but flag
+        // them so the diversity calc can exclude them. We don't drop the
+        // row outright because the empty-anchor signal in the rest of
+        // the analyzer still needs visibility into them.
+        const isCta = isTemplateCta(anchor);
+        if (isCta) breakdown.template_cta++;
+        // Image-wrapping link (a wrapping img with alt). Not an editorial
+        // anchor.
+        const isImageLink = isImageWrappingLink(rawAnchor, altText);
+        if (isImageLink) breakdown.image_wrapping++;
+        // Card / button paths (Chemin du lien contains article|card|button|btn|cta…)
+        const cardLike = isCardLikePath(pathStr);
+        const buttonLike = isButtonLikePath(pathStr);
+        if (cardLike) breakdown.card_path++;
+        if (buttonLike) breakdown.button_path++;
 
         filtered++;
         onAnchorRow({
@@ -296,8 +421,15 @@ function streamAndFilter(
           destination: dest,
           anchor,
           position: position || "",
+          // Now richer flags so the analyzer can decide what to keep in
+          // the diversity calc.
           is_generic: isGeneric(anchor),
-          is_empty: !anchor.trim(),
+          is_empty: !rawAnchor.trim() && !altText.trim(),
+          is_template_cta: isCta,
+          is_image_link: isImageLink,
+          is_card_like: cardLike,
+          is_button_like: buttonLike,
+          link_path: pathStr,
         });
 
         if (filtered >= MAX_FILTERED_ROWS && !aborted) {
@@ -330,12 +462,20 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
   let stats: AnchorsParseResult["filtered_breakdown"] & { raw: number; filtered: number } = {
     raw: 0, filtered: 0,
     not_hyperlink: 0, not_body_position: 0, no_destination: 0, non_200: 0, external: 0,
+    template_cta: 0, image_wrapping: 0, card_path: 0, button_path: 0, pagination_dest: 0,
   };
 
   await streamAndFilter(
     text,
     (row) => {
       keptRows.push(row);
+      // Aggregate by destination, but ONLY for rows that count as
+      // editorial anchors. Templated CTAs, image-wrapping links, card
+      // wrappers and button-styled links all skew the diversity score
+      // without representing genuine editorial decisions.
+      const isEditorial = !row.is_template_cta && !row.is_image_link
+        && !row.is_card_like && !row.is_button_like;
+      if (!isEditorial) return;
       let entry = aggregator.get(row.destination);
       if (!entry) {
         entry = { count: 0, anchors: new Map() };
@@ -371,17 +511,37 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
     });
   }
 
+  // True editorial links count = sum of inlinks across aggregator entries
+  // (those that passed the editorial filter inside the streaming step).
+  const totalEditorialLinks = [...aggregator.values()].reduce(
+    (s, e) => s + e.count, 0,
+  );
+  // Empty editorial anchors = links with no Ancrage AND no Texte Alt,
+  // not in a card/button context, not a template CTA. Surfaced as a
+  // dedicated metric for the synthesis ("X% of editorial anchors are
+  // empty").
+  const emptyEditorialAnchors = keptRows.filter((r) =>
+    r.is_empty && !r.is_template_cta && !r.is_image_link && !r.is_card_like && !r.is_button_like,
+  ).length;
+
   return {
     rows: keptRows,
     by_destination: summary,
     total_links_raw: stats.raw,
     total_links_filtered: stats.filtered,
+    total_editorial_links: totalEditorialLinks,
+    empty_editorial_anchors: emptyEditorialAnchors,
     filtered_breakdown: {
       not_hyperlink: stats.not_hyperlink,
       not_body_position: stats.not_body_position,
       no_destination: stats.no_destination,
       non_200: stats.non_200,
       external: stats.external,
+      template_cta: stats.template_cta,
+      image_wrapping: stats.image_wrapping,
+      card_path: stats.card_path,
+      button_path: stats.button_path,
+      pagination_dest: stats.pagination_dest,
     },
     broken_links: brokenLinks,
     redirected_links: redirectedLinks,
