@@ -970,16 +970,20 @@ function buildLinking(
 
   // Augment with broken links picked out of the inlinks file. Dedupe by
   // destination URL so we don't double-count the same broken target when
-  // both sources report it.
+  // both sources report it. We also dedupe the per-category counters
+  // separately so the KPIs ('Internes 4xx', 'Externes 4xx', 'Total')
+  // stay arithmetically consistent — the previous code counted raw
+  // occurrences in the per-category KPIs while only the Total was
+  // dedupped, which surfaced as 'Externes 4xx: 3, Total: 1' in tests.
   const seenDest = new Set(brokenIssues.map((r) => r.url));
-  let internalCountFromInlinks = 0;
-  let external4xxFromInlinks = 0;
-  let external5xxFromInlinks = 0;
+  const uniqueInternalFromInlinks = new Set<string>();
+  const uniqueExternal4xxFromInlinks = new Set<string>();
+  const uniqueExternal5xxFromInlinks = new Set<string>();
   if (anchors?.broken_links?.length) {
     for (const bl of anchors.broken_links) {
-      if (bl.origin === "internal") internalCountFromInlinks++;
-      else if (bl.status >= 500) external5xxFromInlinks++;
-      else external4xxFromInlinks++;
+      if (bl.origin === "internal") uniqueInternalFromInlinks.add(bl.destination);
+      else if (bl.status >= 500) uniqueExternal5xxFromInlinks.add(bl.destination);
+      else uniqueExternal4xxFromInlinks.add(bl.destination);
       if (seenDest.has(bl.destination)) continue;
       seenDest.add(bl.destination);
       const isInternal = bl.origin === "internal";
@@ -997,9 +1001,22 @@ function buildLinking(
     }
   }
 
-  const internalTotal = (brokenInternal?.rows.length || 0) + internalCountFromInlinks;
-  const external4xxTotal = (brokenExternal4xx?.rows.length || 0) + external4xxFromInlinks;
-  const external5xxTotal = (brokenExternal5xx?.rows.length || 0) + external5xxFromInlinks;
+  // Dedup ZIP-side rows too (some SF exports duplicate when a URL
+  // matches multiple sub-issues), then merge with the anchor-derived
+  // unique sets. End result: every KPI is a count of UNIQUE destination
+  // URLs, never of occurrences.
+  const internalTotal = new Set([
+    ...((brokenInternal?.rows || []).map((r) => r.url)),
+    ...uniqueInternalFromInlinks,
+  ]).size;
+  const external4xxTotal = new Set([
+    ...((brokenExternal4xx?.rows || []).map((r) => r.url)),
+    ...uniqueExternal4xxFromInlinks,
+  ]).size;
+  const external5xxTotal = new Set([
+    ...((brokenExternal5xx?.rows || []).map((r) => r.url)),
+    ...uniqueExternal5xxFromInlinks,
+  ]).size;
 
   const subBroken: AdvSubcategory = {
     id: "broken_links",
