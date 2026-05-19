@@ -550,6 +550,28 @@ function parseCsvText(text: string): IssueLine[] {
   return out;
 }
 
+// Match a normalized filename against one of our patterns.
+// Screaming Frog frequently appends a response-code suffix to issue
+// filenames — e.g. "codes_de_reponse_internes_erreur_du_client_(4xx).csv"
+// or "codes_de_reponse_internes_redirection_(3xx).csv". The previous strict
+// equality check missed every one of those, which is why "Liens rompus"
+// was always reporting 0 even on sites with hundreds of broken links.
+//
+// New rule: the file matches if its name equals the pattern OR starts with
+// the same stem (pattern minus ".csv") followed by a separator (typically
+// "_" or " ") and still ends with ".csv".
+function matchesPattern(normName: string, pattern: string): boolean {
+  if (normName === pattern) return true;
+  if (normName.endsWith("/" + pattern)) return true;
+  const stem = pattern.replace(/\.csv$/, "");
+  // Tolerate "<stem>_(3xx).csv", "<stem> (3xx).csv", "<stem>-3xx.csv", etc.
+  const re = new RegExp("(^|/)" + escapeReg(stem) + "[ _\\-(].*\\.csv$");
+  return re.test(normName);
+}
+function escapeReg(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export type IssuesParseResult = {
   parsed: ParsedIssue[];
   matched_files: string[];
@@ -574,7 +596,7 @@ export async function parseIssuesZip(file: File): Promise<IssuesParseResult> {
 
   for (const [name, entry] of entries) {
     const normName = normalizeFilename(name);
-    const def = ISSUE_MAP.find((d) => d.filename_patterns.some((p) => normName === p || normName.endsWith("/" + p)));
+    const def = ISSUE_MAP.find((d) => d.filename_patterns.some((p) => matchesPattern(normName, p)));
     if (!def) {
       unknownNames.push(name);
       continue;

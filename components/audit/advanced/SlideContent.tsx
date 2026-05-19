@@ -111,7 +111,7 @@ export function ChartContainer({
 }) {
   return (
     <div
-      className="rounded-xl p-3 overflow-hidden flex-1 flex items-center justify-center"
+      className="rounded-xl p-3 overflow-hidden w-full"
       style={{
         background: VBT.paper,
         border: `1px solid ${VBT.paperEdge}`,
@@ -131,6 +131,15 @@ export function ChartContainer({
 export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }> }) {
   const hasIssues = slide.issues_count > 0;
   const hasChart = !!slide.chart;
+  // "Sparse" = no chart AND at most 2 KPIs. Pages like "H1 en double",
+  // "Meta descriptions en double" only have a single count to report and
+  // were leaving the whole bottom half empty. We render them with a
+  // centered hero layout that gives the figure proper visual weight.
+  const isSparse = !hasChart && slide.kpis.length <= 2;
+
+  if (isSparse) {
+    return <SparseSlideBody slide={slide} />;
+  }
 
   return (
     <div className="flex-1 flex flex-col gap-3 min-h-0">
@@ -178,7 +187,7 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
         </div>
 
         {hasChart && (
-          <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex flex-col gap-2 min-w-0 min-h-0">
             <div
               className="text-[10px] uppercase tracking-[0.16em] flex items-center gap-2"
               style={{ color: VBT.terracotta600, fontWeight: 700 }}
@@ -191,7 +200,7 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
                 <DonutChart segments={slide.chart!.segments} size={170} thickness={26} />
               )}
               {slide.chart!.type === "bar" && (
-                <BarChart bars={slide.chart!.bars} max={slide.chart!.max} width={420} barHeight={20} gap={4} />
+                <BarChart bars={slide.chart!.bars} max={slide.chart!.max} width={460} barHeight={20} gap={4} />
               )}
               {slide.chart!.type === "histogram" && (
                 <Histogram bins={slide.chart!.bins} height={130} />
@@ -221,6 +230,136 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
       {!hasChart && !slide.takeaway && !hasIssues && (
         <NoIssuesBlock />
       )}
+    </div>
+  );
+}
+
+// Layout used for slides with a single takeaway figure ("Title dupliqués",
+// "Meta dupliquées", "H1 en double"…). Splits the slide vertically: text
+// on the left, hero KPI on the right with a decorative ring around it.
+function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }> }) {
+  const hasIssues = slide.issues_count > 0;
+  const heroKpi = slide.kpis[0];
+  const secondaryKpi = slide.kpis[1];
+  // Pick a tone for the hero ring based on the headline KPI's status.
+  const ring =
+    heroKpi?.tone === "bad" ? { fill: VBT.brick500, soft: VBT.brick50, ringEdge: "#E5BDB5" } :
+    heroKpi?.tone === "warn" ? { fill: VBT.amber500, soft: VBT.amber50, ringEdge: "#E5CD83" } :
+    heroKpi?.tone === "info" ? { fill: VBT.terracotta500, soft: VBT.terracotta50, ringEdge: "#F5D5BA" } :
+    { fill: VBT.good, soft: "#EAF2E0", ringEdge: "#C6D9B0" };
+
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 items-center pb-2">
+      {/* Left: description + xlsx + takeaway, stacked and vertically centered */}
+      <div className="col-span-7 flex flex-col gap-4 min-w-0">
+        <div
+          className="pl-4 rounded-r-md"
+          style={{ borderLeft: `3px solid ${VBT.terracotta500}` }}
+        >
+          <DescriptionBlock text={slide.description} maxLines={8} />
+        </div>
+
+        {hasIssues && slide.xlsx_sheet && (
+          <div>
+            <XlsxRefBadge sheet={slide.xlsx_sheet} />
+          </div>
+        )}
+
+        {slide.takeaway && (
+          <div
+            className="rounded-lg px-4 py-2.5 text-[13px] flex items-start gap-2"
+            style={{
+              background: VBT.terracotta50,
+              color: VBT.terracotta700,
+              border: `1px solid ${VBT.terracotta100}`,
+              fontWeight: 500,
+            }}
+          >
+            <span style={{ color: VBT.terracotta500 }}>►</span>
+            <span>{slide.takeaway}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Right: hero figure */}
+      <div className="col-span-5 flex items-center justify-center min-w-0">
+        {heroKpi ? (
+          <div className="flex flex-col items-center gap-3">
+            <div
+              className="relative flex items-center justify-center rounded-full"
+              style={{
+                width: 220,
+                height: 220,
+                background: ring.soft,
+                border: `1px solid ${ring.ringEdge}`,
+                boxShadow: "0 16px 40px -20px rgba(36, 23, 18, 0.3)",
+              }}
+            >
+              <span
+                aria-hidden
+                className="absolute rounded-full"
+                style={{
+                  width: 180,
+                  height: 180,
+                  background: VBT.paper,
+                  border: `1px solid ${ring.ringEdge}`,
+                }}
+              />
+              <div className="relative flex flex-col items-center justify-center" style={{ width: 180, height: 180 }}>
+                <div
+                  className="tabular-nums"
+                  style={{
+                    color: ring.fill,
+                    fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                    fontWeight: 800,
+                    fontSize: 56,
+                    letterSpacing: "-0.04em",
+                    lineHeight: 1,
+                  }}
+                >
+                  {heroKpi.value}
+                </div>
+                <div
+                  className="mt-2 px-3 text-center text-[11px] uppercase tracking-[0.16em]"
+                  style={{ color: VBT.inkSoft, fontWeight: 600 }}
+                >
+                  {heroKpi.label}
+                </div>
+              </div>
+            </div>
+            {secondaryKpi && (
+              <div
+                className="rounded-lg px-3 py-1.5 text-center"
+                style={{
+                  background: VBT.paper,
+                  border: `1px solid ${VBT.paperEdge}`,
+                  minWidth: 180,
+                }}
+              >
+                <div
+                  className="text-[10px] uppercase tracking-[0.14em]"
+                  style={{ color: VBT.zinc, fontWeight: 600 }}
+                >
+                  {secondaryKpi.label}
+                </div>
+                <div
+                  className="tabular-nums"
+                  style={{
+                    color: VBT.ink,
+                    fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                    fontWeight: 700,
+                    fontSize: 18,
+                  }}
+                >
+                  {secondaryKpi.value}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <NoIssuesBlock />
+        )}
+      </div>
     </div>
   );
 }

@@ -1,44 +1,60 @@
 // Parse Screaming Frog FR "Exporter en bloc > Liens > Liens entrants Tous"
-// (liens_entrants_tous.csv). This file is potentially huge (80+ MB on
-// medium sites), so we use Papaparse in `step` mode: rows are streamed,
-// filtered in-flight against the user's rules, and only kept in memory if
-// they pass all three filters:
+// (liens_entrants_tous.csv).
 //
-//   1. Type = "Hyperlink"          (excludes images / JS / CSS / canonicals)
-//   2. Origine du lien = "interne" (only internal maillage)
-//   3. Chemin du lien does NOT contain "nav", "header", "footer", "menu"
-//      (excludes boilerplate links — we only want contextual anchors)
+// COLUMN VALUES OBSERVED IN REAL FR EXPORTS (don't trust the user-facing
+// spec — the values are localised):
 //
-// After streaming, we aggregate by destination URL to compute the diversity
-// ratio + dominant anchor needed by the "Texte des ancres" slides.
+//   • Type             "Hyperlien" (FR) / "Hyperlink" (EN) / "Lien hypertexte"
+//                      Also: "CSS", "Canonique HTML", "Hreflang HTML",
+//                      "Hreflang HTTP", "Iframe", "Image", "JavaScript",
+//                      "Redirection HTTP" — all to be excluded.
+//   • Position du lien (←dedicated column, not "Chemin du lien")
+//                      "Contenu" (the only one we keep),
+//                      "Navigation", "En-tête", "Tête", "Pied de page".
+//   • Code de statut   the HTTP status of the *destination* of the link.
+//                      We use this to surface broken links straight out
+//                      of this file — Screaming Frog's Bulk Issues export
+//                      doesn't always carry "broken internal links" as a
+//                      named file, but every <a href> with a non-2xx
+//                      destination shows up here.
+//   • Origine du lien  "HTML" / "HTTP" — this is the link delivery
+//                      format, NOT internal/external. To tell internal
+//                      apart from external, compare hostnames between
+//                      Source and Destination.
+//
+// The file can easily reach 80+ MB (this user shipped 27 MB / 89 k rows
+// at 1 000 pages crawled), so we stream with Papaparse `step`.
 
 import Papa from "papaparse";
 import type { AnchorDestinationSummary, AnchorRow } from "./types";
 
-const SOURCE_KEYS = ["source", "url source", "page source"];
-const DESTINATION_KEYS = ["destination", "url de destination"];
-const ANCHOR_KEYS = ["ancrage", "anchor", "anchor text", "texte d'ancre", "texte de l'ancre"];
+const SOURCE_KEYS = ["source", "url source", "page source", "from"];
+const DESTINATION_KEYS = ["destination", "url de destination", "to"];
+const ANCHOR_KEYS = ["ancrage", "anchor", "anchor text", "texte d'ancre", "texte de l'ancre", "texte de l ancre"];
 const TYPE_KEYS = ["type", "type de lien", "link type"];
-const PATH_KEYS = ["chemin du lien", "link path"];
-const ORIGIN_KEYS = ["origine du lien", "origine", "link origin"];
+const POSITION_KEYS = ["position du lien", "link position", "emplacement du lien", "position"];
+const PATH_KEYS = ["chemin du lien", "link path", "type de chemin"];
+const STATUS_KEYS = ["code de statut", "status code", "code http", "code de statut http"];
+const STATUS_TEXT_KEYS = ["statut", "status"];
 
+// FR + EN values for "this row is an <a href>" Type column.
+const HYPERLINK_TYPES = ["hyperlien", "hyperlink", "lien hypertexte", "ahref"];
+// FR + EN values that count as "body content" Position (everything else —
+// Navigation, En-tête, Tête, Pied de page, Sidebar, Aside — is dropped).
+const BODY_POSITIONS = [
+  "contenu", "content",
+  "body", "main", "article", "section",
+  "corps", "principal",
+];
+// Generic anchors that signal a low-quality link no matter the rest.
 const GENERIC_ANCHORS = new Set([
-  // FR
   "ici", "cliquez", "cliquez ici", "cliquer ici", "en savoir plus",
   "lire la suite", "voir", "decouvrir", "decouvrir plus",
   "plus d informations", "plus d'informations", "voir plus", "plus", "lire",
   "lien", "site",
-  // EN
   "here", "click", "click here", "read more", "learn more", "more",
   "see more", "link", "this", "this link",
 ]);
-
-// Match these only when they appear as a standalone HTML element in the
-// "Chemin du lien" selector, e.g. "html > body > nav > a", "body > header.x > a".
-// A naive substring match (path.includes("nav")) would also strip out
-// content links whose class names happen to contain "nav-" or "menu-",
-// which is what was previously emptying out the entire dataset.
-const NAV_TAG_REGEX = /(?:^|>)\s*(nav|header|footer|menu|aside)\b/i;
 
 function normalizeKey(s: string): string {
   return s
@@ -65,39 +81,76 @@ function isGeneric(anchor: string): boolean {
   return GENERIC_ANCHORS.has(norm);
 }
 
-function isNavPath(path: string): boolean {
-  if (!path) return false;
-  return NAV_TAG_REGEX.test(path);
+function hostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return "";
+  }
 }
+
+function isSameDomain(source: string, destination: string): boolean {
+  const a = hostname(source);
+  const b = hostname(destination);
+  if (!a || !b) return false;
+  return a === b;
+}
+
+// A broken or redirected link discovered in the same stream that powers
+// the anchor analysis. We surface these so the "Liens rompus" slide works
+// even when the Issues ZIP is missing the codes_de_reponse_* files.
+export type BrokenLink = {
+  source: string;
+  destination: string;
+  anchor: string;
+  status: number;
+  origin: "internal" | "external";
+};
 
 export type AnchorsParseResult = {
   rows: AnchorRow[];
   by_destination: Map<string, AnchorDestinationSummary>;
-  total_links_raw: number;     // every line in the CSV
-  total_links_filtered: number; // after Type/Origine/Chemin filter
+  // Diagnostics: raw lines vs. rows that passed every filter.
+  total_links_raw: number;
+  total_links_filtered: number;
+  // Per-rejection counters so the import UI can explain WHY rows were
+  // dropped. Helps catch future SF locale / format drift early.
+  filtered_breakdown: {
+    not_hyperlink: number;
+    not_body_position: number;
+    no_destination: number;
+    non_200: number;
+    external: number;
+  };
+  broken_links: BrokenLink[];
   filename: string | null;
 };
 
-// Per-row aggregator built during streaming so we never hold the full
-// dataset uncompressed in memory.
+const MAX_FILTERED_ROWS = 50_000;
+const MAX_BROKEN_LINKS = 5_000;
+
 type Accumulator = {
   count: number;
-  anchors: Map<string, number>; // anchor text → occurrences for this dest
+  anchors: Map<string, number>;
 };
-
-// Cap the per-link sample we keep in memory for the XLSX export. 50k rows
-// covers all but very large sites; beyond that the Vercel POST body would
-// blow up anyway and we cap each subcategory at MAX_ISSUES_PER_CAT (800).
-const MAX_FILTERED_ROWS = 50_000;
 
 function streamAndFilter(
   text: string,
-  onRow: (row: AnchorRow) => void,
-  onStats: (raw: number, filtered: number) => void,
+  onAnchorRow: (row: AnchorRow) => void,
+  onBrokenLink: (link: BrokenLink) => void,
+  setStats: (stats: AnchorsParseResult["filtered_breakdown"] & { raw: number; filtered: number }) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let raw = 0;
     let filtered = 0;
+    let broken = 0;
+    const breakdown = {
+      not_hyperlink: 0,
+      not_body_position: 0,
+      no_destination: 0,
+      non_200: 0,
+      external: 0,
+    };
     let aborted = false;
     Papa.parse<Record<string, string>>(text, {
       header: true,
@@ -107,39 +160,71 @@ function streamAndFilter(
       transform: (v) => (typeof v === "string" ? v.trim() : v),
       step: ({ data }: { data: Record<string, string> }, parser) => {
         raw++;
-        // Screaming Frog FR keeps the "Type" cell value in English: it'll be
-        // "Hyperlink", "Image", "JavaScript", "CSS"…  Some bilingual exports
-        // also use "Lien hypertexte". Accept both, but reject everything else
-        // (images, JS, CSS, canonicals).
-        const type = (pick(data, TYPE_KEYS) || "").toLowerCase();
-        if (type && !type.includes("hyperlink") && !type.includes("ahref") && !type.includes("lien hypertexte")) return;
-        // Origine du lien: "interne" / "externe" in FR, "Internal" / "External"
-        // in EN. We only keep internal. If the column is missing entirely
-        // (older SF), don't filter on it.
-        const origin = (pick(data, ORIGIN_KEYS) || "").toLowerCase();
-        if (origin && !origin.includes("interne") && !origin.includes("internal")) return;
-        const path = pick(data, PATH_KEYS) || "";
-        if (isNavPath(path)) return;
+        const type = normalizeKey(pick(data, TYPE_KEYS) || "");
+        // Skip non-hyperlink rows (CSS, JS, Image, Iframe, Redirection HTTP,
+        // Hreflang HTML, Canonique HTML…). When the Type column is missing,
+        // we don't filter — better to keep too much than drop everything.
+        if (type && !HYPERLINK_TYPES.some((t) => type === t || type.includes(t))) {
+          breakdown.not_hyperlink++;
+          return;
+        }
         const dest = pick(data, DESTINATION_KEYS);
-        if (!dest || !/^https?:\/\//i.test(dest)) return;
+        if (!dest || !/^https?:\/\//i.test(dest)) {
+          breakdown.no_destination++;
+          return;
+        }
         const src = pick(data, SOURCE_KEYS) || "";
         const anchor = pick(data, ANCHOR_KEYS) || "";
+        const statusStr = pick(data, STATUS_KEYS);
+        const statusCode = statusStr ? parseInt(statusStr, 10) : 200;
+        const internal = src ? isSameDomain(src, dest) : true;
+
+        // Broken-link harvest (4xx / 5xx). Fires for both internal and
+        // external destinations and is independent of the body-position
+        // filter — a broken nav link is still a broken link.
+        if (statusCode >= 400 && broken < MAX_BROKEN_LINKS) {
+          broken++;
+          onBrokenLink({
+            source: src,
+            destination: dest,
+            anchor,
+            status: statusCode,
+            origin: internal ? "internal" : "external",
+          });
+        }
+
+        // Anchor analysis — only contextual, internal, 200-OK links count.
+        const position = normalizeKey(pick(data, POSITION_KEYS) || "");
+        if (position && !BODY_POSITIONS.some((p) => position === p || position.includes(p))) {
+          breakdown.not_body_position++;
+          return;
+        }
+        if (!internal) {
+          breakdown.external++;
+          return;
+        }
+        if (statusCode >= 300) {
+          breakdown.non_200++;
+          return;
+        }
+
         filtered++;
-        onRow({
+        onAnchorRow({
           source: src,
           destination: dest,
           anchor,
-          position: path,
+          position: position || "",
           is_generic: isGeneric(anchor),
           is_empty: !anchor.trim(),
         });
+
         if (filtered >= MAX_FILTERED_ROWS && !aborted) {
           aborted = true;
           parser.abort();
         }
       },
       complete: () => {
-        onStats(raw, filtered);
+        setStats({ raw, filtered, ...breakdown });
         resolve();
       },
       error: (err: Error) => reject(err),
@@ -148,8 +233,6 @@ function streamAndFilter(
 }
 
 export async function parseAnchorsCsv(file: File): Promise<AnchorsParseResult> {
-  // We read as text first (Papaparse's File input is also fine, but giving
-  // it text makes the streaming order deterministic across browsers).
   const text = await file.text();
   return parseAnchorsCsvText(text, file.name);
 }
@@ -158,9 +241,12 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
   const text = textRaw.replace(/^﻿/, "");
 
   const keptRows: AnchorRow[] = [];
+  const brokenLinks: BrokenLink[] = [];
   const aggregator = new Map<string, Accumulator>();
-  let rawCount = 0;
-  let filteredCount = 0;
+  let stats: AnchorsParseResult["filtered_breakdown"] & { raw: number; filtered: number } = {
+    raw: 0, filtered: 0,
+    not_hyperlink: 0, not_body_position: 0, no_destination: 0, non_200: 0, external: 0,
+  };
 
   await streamAndFilter(
     text,
@@ -175,10 +261,10 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
       const key = (row.anchor || "(vide)").trim();
       entry.anchors.set(key, (entry.anchors.get(key) || 0) + 1);
     },
-    (raw, filtered) => {
-      rawCount = raw;
-      filteredCount = filtered;
+    (link) => {
+      brokenLinks.push(link);
     },
+    (s) => { stats = s; },
   );
 
   const summary: Map<string, AnchorDestinationSummary> = new Map();
@@ -204,14 +290,20 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
   return {
     rows: keptRows,
     by_destination: summary,
-    total_links_raw: rawCount,
-    total_links_filtered: filteredCount,
+    total_links_raw: stats.raw,
+    total_links_filtered: stats.filtered,
+    filtered_breakdown: {
+      not_hyperlink: stats.not_hyperlink,
+      not_body_position: stats.not_body_position,
+      no_destination: stats.no_destination,
+      non_200: stats.non_200,
+      external: stats.external,
+    },
+    broken_links: brokenLinks,
     filename,
   };
 }
 
-// Pick the most "problematic" destinations: low diversity + high inlinks
-// volume. Returns them sorted with the worst at the top.
 export function pickWorstDestinations(
   summary: Map<string, AnchorDestinationSummary>,
   minInlinks = 10,
@@ -226,8 +318,6 @@ export function pickWorstDestinations(
   return out.slice(0, limit);
 }
 
-// Pick the top N destinations to display in the bar chart (most concentrated
-// dominant anchor = clearest over-optimization signal).
 export function pickTopConcentratedDestinations(
   summary: Map<string, AnchorDestinationSummary>,
   minInlinks = 5,

@@ -359,6 +359,21 @@ export default function NewAdvancedAuditPage() {
             <span className="text-emerald-400">✓ {issuesResult.matched_files.length}/{issuesResult.total_csv_files} CSV utilisés</span>
             {issuesResult.unknown_files.length > 0 && <span className="text-zinc-500"> · {issuesResult.unknown_files.length} ignorés</span>}
             {" · "}{(issuesFile.size / 1024 / 1024).toFixed(1)} MB
+            {issuesResult.unknown_files.length > 0 && (
+              <details className="text-[11px] text-zinc-500 mt-1.5">
+                <summary className="cursor-pointer hover:text-zinc-300">
+                  Voir les {issuesResult.unknown_files.length} fichiers non reconnus
+                </summary>
+                <div className="mt-1.5 p-2 bg-black/20 rounded font-mono text-[10px] break-all max-h-32 overflow-y-auto">
+                  {issuesResult.unknown_files.slice(0, 30).map((f, i) => (
+                    <div key={i}>{f.split("/").pop()}</div>
+                  ))}
+                  {issuesResult.unknown_files.length > 30 && (
+                    <div className="text-zinc-600 mt-1">… et {issuesResult.unknown_files.length - 30} autres</div>
+                  )}
+                </div>
+              </details>
+            )}
           </>
         )}
       />
@@ -373,13 +388,28 @@ export default function NewAdvancedAuditPage() {
         statusLine={anchorsResult && anchorsFile && (
           <>
             <span className={anchorsResult.total_links_filtered > 0 ? "text-emerald-400" : "text-amber-400"}>
-              {anchorsResult.total_links_filtered > 0 ? "✓" : "⚠"} {anchorsResult.total_links_filtered.toLocaleString("fr-FR")} liens contextuels
+              {anchorsResult.total_links_filtered > 0 ? "✓" : "⚠"} {anchorsResult.total_links_filtered.toLocaleString("fr-FR")} liens contextuels internes
             </span>
-            <span className="text-zinc-500"> ({anchorsResult.total_links_raw.toLocaleString("fr-FR")} lus, le reste filtré : nav/header/footer/menu/non-hyperlinks/externes)</span>
+            <span className="text-zinc-500"> ({anchorsResult.total_links_raw.toLocaleString("fr-FR")} lus)</span>
+            {anchorsResult.broken_links.length > 0 && (
+              <span className="text-amber-300">{" · "}{anchorsResult.broken_links.length} liens rompus détectés</span>
+            )}
             {" · "}{(anchorsFile.size / 1024 / 1024).toFixed(1)} MB
+            <details className="text-[11px] text-zinc-500 mt-1.5">
+              <summary className="cursor-pointer hover:text-zinc-300">Détail du filtrage</summary>
+              <div className="mt-1 ml-2 font-mono text-[10.5px] space-y-0.5">
+                <div>• {anchorsResult.filtered_breakdown.not_hyperlink.toLocaleString("fr-FR")} non-hyperlinks (CSS, JS, images, iframes, hreflang…)</div>
+                <div>• {anchorsResult.filtered_breakdown.not_body_position.toLocaleString("fr-FR")} navigation/header/footer/menu</div>
+                <div>• {anchorsResult.filtered_breakdown.external.toLocaleString("fr-FR")} liens externes</div>
+                <div>• {anchorsResult.filtered_breakdown.non_200.toLocaleString("fr-FR")} liens 3xx/4xx/5xx</div>
+                {anchorsResult.filtered_breakdown.no_destination > 0 && (
+                  <div>• {anchorsResult.filtered_breakdown.no_destination.toLocaleString("fr-FR")} lignes sans URL valide</div>
+                )}
+              </div>
+            </details>
             {anchorsResult.total_links_filtered === 0 && anchorsResult.total_links_raw > 0 && (
               <div className="text-amber-300 mt-1 text-[11px]">
-                Aucun lien contextuel après filtrage. Vérifie que ton export inclut bien les colonnes <em>Type</em>, <em>Origine du lien</em> et <em>Chemin du lien</em>. Si tous tes liens internes sont dans <code className="text-zinc-400 text-[10px]">.nav</code> / <code className="text-zinc-400 text-[10px]">.header</code> / <code className="text-zinc-400 text-[10px]">.footer</code>, le filtre les exclut volontairement.
+                Aucun lien contextuel après filtrage. Vérifie que ton export contient bien les colonnes <em>Type</em>, <em>Position du lien</em>, <em>Source</em>, <em>Destination</em>.
               </div>
             )}
           </>
