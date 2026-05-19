@@ -393,25 +393,8 @@ function buildIndexabilityCrawl(
       : `${noindexRows.length} page(s) noindex : vérifier qu'elles sont bien volontairement exclues.`,
   };
 
-  // ----- LLMS.TXT (informational slide — analysis text only)
-  const llmsFetched = res?.llms_txt.fetched === true;
-  const slideLlms: AdvSlide = {
-    kind: "info",
-    section_id: "indexability_crawl",
-    sub_id: "llms_txt",
-    title: "Fichier llms.txt",
-    description: DESC.llms_txt,
-    facts: [
-      { label: "Statut sur le site", value: llmsFetched ? "✓ Présent" : "✗ Absent" },
-      { label: "Sites adopteurs", value: "+ 844 000" },
-      { label: "Adopteurs notables", value: "Anthropic, Cloudflare, Stripe" },
-    ],
-    callout: {
-      tone: "warn",
-      title: "À prendre avec des pincettes",
-      body: DESC.llms_txt_callout,
-    },
-  };
+  // (LLMS.txt slide moved to the GEO section — buildGeo() creates it now,
+  //  which is where it belongs thematically.)
 
   // ----- Recommendations slide
   const slideReco: AdvSlide = {
@@ -1378,6 +1361,14 @@ function buildImages(
     ],
     xlsx_sheet: "Images sans alt",
   };
+  // "Pages affectées" = sum of "Liens entrants IMG" across alt-less images.
+  // For the user's reference case this lifts an apparent "1 image" from
+  // looking trivial to "682 pages affected", which makes the priority
+  // immediately legible on the slide.
+  const altPagesAffected = (altMissing?.rows || []).reduce((s, l) => {
+    const n = parseInt(l.extras["liens entrants img"] || l.extras["nombre de liens entrants"] || l.extras["inlinks"] || "0", 10);
+    return s + (Number.isFinite(n) ? n : 0);
+  }, 0);
   const slideAlt: AdvSlide = {
     kind: "data",
     section_id: "images",
@@ -1388,14 +1379,36 @@ function buildImages(
       { label: "Images crawlées", value: imagesList.length, tone: "ok" },
       { label: "Sans attribut alt", value: altRows.length, tone: altRows.length > 0 ? "bad" : "ok" },
       { label: "% sans alt", value: imagesList.length > 0 ? `${Math.round((altRows.length / imagesList.length) * 100)} %` : "0 %", tone: altRows.length > 0 ? "warn" : "ok" },
+      { label: "Pages affectées", value: altPagesAffected.toLocaleString("fr-FR"), tone: altPagesAffected > 50 ? "warn" : "info" },
     ],
     xlsx_sheet: altRows.length > 0 ? subAlt.xlsx_sheet : undefined,
     issues_count: altRows.length,
+    takeaway: altRows.length === 0
+      ? "Toutes les images crawlées ont un attribut alt ✓"
+      : altRows.length === 1 && altPagesAffected > 50
+        ? `1 image sans alt mais référencée sur ${altPagesAffected.toLocaleString("fr-FR")} pages — typiquement un visuel de template (logo, footer). Un seul fix corrige toutes les occurrences.`
+        : `${altRows.length} image(s) unique(s) sans alt sur ${altPagesAffected.toLocaleString("fr-FR")} page(s) cumulée(s).`,
   };
 
-  // Size attrs (width/height missing) — dedupe per unique image URL,
-  // see comment on altRows above.
-  const sizeAttrRows = dedupByUrl(issueAsRows(sizeMissing, "medium", () => ({ problem: "Attributs largeur/hauteur manquants (impact CLS)" })));
+  // Size attrs (width/height missing).
+  //
+  // Screaming Frog FR emits this file in LINK-CENTRIC form: one row per
+  // (page × image) occurrence, with Source = the page, Destination = the
+  // image URL. We already extract Destination as the row URL upstream, so
+  // dedupByUrl gives us unique images. But the raw occurrence count and
+  // the distinct-pages-affected count are equally useful for the slide —
+  // a single image present on 1 040 pages is one template fix, not 1 040
+  // separate jobs.
+  const sizeRawRows = sizeMissing?.rows || [];
+  const sizeOccurrences = sizeRawRows.length;
+  const sizeUniquePages = new Set(
+    sizeRawRows.map((l) => l.extras["source"] || l.extras["page source"] || "").filter(Boolean),
+  ).size;
+  const sizeAttrRows = dedupByUrl(issueAsRows(sizeMissing, "medium", (l) => ({
+    problem: "Attributs largeur/hauteur manquants (impact CLS)",
+    source: l.extras["source"] || l.extras["page source"] || "",
+    position: l.extras["position du lien"] || "",
+  })));
   const subSize: AdvSubcategory = {
     id: "image_size_attr",
     label: "Images sans width/height",
@@ -1403,7 +1416,9 @@ function buildImages(
     issues_full: sizeAttrRows,
     columns: [
       { key: "problem", label: "Problème", width: 50 },
+      { key: "position", label: "Emplacement", width: 16 },
       { key: "url", label: "URL image", width: 60 },
+      { key: "source", label: "Exemple page source", width: 60 },
     ],
     xlsx_sheet: "Images sans dimensions",
   };
@@ -1414,11 +1429,20 @@ function buildImages(
     title: "Images sans attributs width/height",
     description: DESC.images_size_attr,
     kpis: [
-      { label: "Images concernées", value: sizeAttrRows.length, tone: sizeAttrRows.length > 0 ? "warn" : "ok" },
+      { label: "Images uniques concernées", value: sizeAttrRows.length, tone: sizeAttrRows.length > 0 ? "warn" : "ok" },
+      { label: "Occurrences sur le site", value: sizeOccurrences.toLocaleString("fr-FR"), tone: sizeOccurrences > 100 ? "warn" : "info" },
+      { label: "Pages affectées", value: sizeUniquePages.toLocaleString("fr-FR"), tone: sizeUniquePages > 100 ? "warn" : "info" },
       { label: "Impact CLS", value: sizeAttrRows.length > 0 ? "Élevé" : "Faible", tone: sizeAttrRows.length > 0 ? "bad" : "ok" },
     ],
     xlsx_sheet: sizeAttrRows.length > 0 ? subSize.xlsx_sheet : undefined,
     issues_count: sizeAttrRows.length,
+    takeaway: sizeAttrRows.length === 0
+      ? "Toutes les images crawlées déclarent width/height ✓"
+      : sizeAttrRows.length === 1 && sizeOccurrences > 50
+        ? `1 image unique mal balisée mais ${sizeOccurrences.toLocaleString("fr-FR")} occurrences — typiquement un visuel de template (footer, header). Un seul fix dans le template corrige tout.`
+        : sizeAttrRows.length < 10
+          ? `${sizeAttrRows.length} images uniques à corriger, présentes ${sizeOccurrences.toLocaleString("fr-FR")} fois — quelques fixes ciblés.`
+          : `${sizeAttrRows.length.toLocaleString("fr-FR")} images uniques sans width/height sur ${sizeUniquePages.toLocaleString("fr-FR")} pages — chantier transversal sur les templates de contenu.`,
   };
 
   // Weight — driven by images_tous.csv when available (full distribution),
@@ -1865,6 +1889,8 @@ const SECTION_WEIGHT_FOR_PRIORITY: Record<string, number> = {
   structure: 0.7,
   linking: 1.1,
   images: 0.7,
+  structured_data: 0.9,
+  geo: 1.0,
 };
 
 const SEV_WEIGHT: Record<string, number> = {
@@ -1894,12 +1920,19 @@ const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
   hn_hierarchy: "deep",
   internal_linking_overview: "deep",
   broken_links: "quick-win",
+  internal_redirects: "quick-win",
+  http_mixed_content: "quick-win",
   orphan_pages: "medium",
   anchors_links: "deep",
   anchors_destinations: "deep",
   image_alt: "medium",
   image_size_attr: "quick-win",
   image_weight: "medium",
+  image_formats: "medium",
+  schemas_detected: "medium",
+  schemas_missing: "medium",
+  ia_bots: "quick-win",
+  http_headers: "medium",
 };
 
 function buildPriorities(sections: AdvSection[]): PriorityItem[] {

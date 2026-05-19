@@ -507,7 +507,28 @@ function normalizeKey(s: string): string {
     .trim();
 }
 
-const URL_KEYS = ["adresse", "address", "url", "uri", "page", "page url"];
+// Order matters. Screaming Frog FR uses two distinct CSV shapes in the
+// Issues ZIP:
+//   • Page-centric (most files): the issue is ABOUT the page itself
+//     → primary column = "Adresse". Examples: h1_manquant.csv,
+//       title_des_pages_doublon.csv, codes_de_reponse_internes_*.csv
+//   • Link-centric (a handful, all image- and inlinks-related): the
+//     issue is ABOUT the target of a link, listed one row per
+//     (source page × target). The columns are Source / Destination
+//     instead of Adresse. Example: images_attributs_de_taille_manquants.csv
+//       (1 040 rows, all pointing to ONE unique image — the footer logo
+//        present on every page).
+// We try "Adresse" first because it's the page identity when present.
+// We then try Destination, which is the right URL for link-centric
+// files. Source is last because it's only meaningful when nothing else
+// works (and matching it as a top choice would dedupe by page on
+// image-link reports and inflate the count, which is the bug we just
+// caught).
+const URL_KEYS = [
+  "adresse", "address", "url", "uri", "page", "page url",
+  "destination", "url de destination",
+  "source", "url source", "page source",
+];
 
 function pickUrl(rec: Record<string, string>): string | null {
   for (const k of URL_KEYS) {
