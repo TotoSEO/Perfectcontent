@@ -1,6 +1,6 @@
 // Parse Screaming Frog FR Images > Tous (images_tous.csv). Gives us every
 // image discovered during the crawl with its size + how many pages
-// reference it — the ground truth for the "Poids des images" slide
+// reference it : the ground truth for the "Poids des images" slide
 // (the Issues ZIP only flags images > 100 Ko, which is too coarse).
 
 import Papa from "papaparse";
@@ -39,7 +39,7 @@ function pick(rec: Record<string, string>, aliases: string[]): string | null {
 }
 
 function num(s: string | null): number | null {
-  if (s === null || s === "" || s === "—") return null;
+  if (s === null || s === "" || s === ",") return null;
   const v = Number(String(s).replace(/\s/g, "").replace(",", ".").replace(/[^\d.\-]/g, ""));
   return Number.isFinite(v) ? v : null;
 }

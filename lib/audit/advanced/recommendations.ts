@@ -3,7 +3,7 @@
 // concrete per-row solution via `recommendFor` in lib/audit/solutions.ts.
 
 export type RecoGroup = {
-  sub_label: string;     // "Robots.txt & sitemap" — matches the slide title
+  sub_label: string;     // "Robots.txt & sitemap" : matches the slide title
   items: string[];       // 3-5 actionable bullets
 };
 
@@ -11,7 +11,7 @@ export const RECO_INDEXABILITY_CRAWL: RecoGroup[] = [
   {
     sub_label: "Robots.txt & sitemap",
     items: [
-      "Servir un robots.txt à la racine (toujours en HTTP 200), même minimal — laisse Google découvrir le site sans deviner.",
+      "Servir un robots.txt à la racine (toujours en HTTP 200), même minimal : laisse Google découvrir le site sans deviner.",
       "Référencer le sitemap dans le robots.txt via `Sitemap: https://…` : c'est la première chose que les crawlers regardent.",
       "Vérifier qu'aucune zone stratégique (catégories, articles, pages produits) n'est bloquée par un Disallow trop large.",
       "Fournir un sitemap XML à jour (auto-régénéré), avec uniquement les URLs canoniques en 200, sans pages noindex.",
@@ -24,14 +24,14 @@ export const RECO_INDEXABILITY_CRAWL: RecoGroup[] = [
       "Ramener les pages stratégiques à 3 clics maximum depuis la home, via le menu, des hubs catégorie ou un footer thématique.",
       "Pour les pages > profondeur 5, ajouter un lien direct depuis une page très visitée (home, catégorie pilier).",
       "Ne pas multiplier les pages de pagination profonde : utiliser load-more ou des filtres pertinents.",
-      "Auditer trimestriellement la profondeur — une catégorie en croissance enterre vite ses anciennes pages.",
+      "Auditer trimestriellement la profondeur : une catégorie en croissance enterre vite ses anciennes pages.",
     ],
   },
   {
     sub_label: "Détails codes HTTP",
     items: [
       "Corriger toutes les 404 internes en priorité : soit republier la page, soit poser une 301 vers la cible la plus pertinente.",
-      "Remplacer les 302 par des 301 pour les redirections définitives — la 302 ne transmet pas le PageRank correctement.",
+      "Remplacer les 302 par des 301 pour les redirections définitives : la 302 ne transmet pas le PageRank correctement.",
       "Mettre à jour les liens internes pour pointer directement vers l'URL finale (éviter les chaînes de redirection).",
       "Investiguer toute 5xx persistante côté logs serveur : c'est un signal de fragilité qui freine le crawl.",
     ],
@@ -42,7 +42,7 @@ export const RECO_INDEXABILITY_CRAWL: RecoGroup[] = [
       "Pour chaque page multilingue, déclarer une balise hreflang vers chaque version linguistique, **+ une auto-référence** vers elle-même.",
       "Ajouter une balise `x-default` pointant vers la version par défaut (généralement la page de sélection de langue ou la home).",
       "Vérifier la cohérence return-tag : si page A déclare B, alors B doit déclarer A en retour.",
-      "Aucune URL référencée en hreflang ne doit renvoyer une 3xx/4xx — toutes les cibles doivent être en 200 indexables.",
+      "Aucune URL référencée en hreflang ne doit renvoyer une 3xx/4xx : toutes les cibles doivent être en 200 indexables.",
     ],
   },
   {
@@ -50,7 +50,7 @@ export const RECO_INDEXABILITY_CRAWL: RecoGroup[] = [
     items: [
       "Définir une balise canonical sur **toutes les pages indexables**, même si elle pointe sur elle-même (self-canonical).",
       "Pour les pages avec paramètres (?utm=…, filtres), pointer le canonical vers la version propre sans paramètre.",
-      "Ne JAMAIS pointer plusieurs pages vers la home comme canonical — c'est un red flag majeur.",
+      "Ne JAMAIS pointer plusieurs pages vers la home comme canonical : c'est un red flag majeur.",
       "Vérifier que la cible canonical est bien en 200 indexable, sinon la balise est ignorée par Google.",
     ],
   },
@@ -59,7 +59,7 @@ export const RECO_INDEXABILITY_CRAWL: RecoGroup[] = [
     items: [
       "Créer un fichier `llms.txt` à la racine du site (https://votresite.com/llms.txt) au format Markdown.",
       "Y lister les pages-clés du site (page d'accueil, pages services, articles piliers) avec une courte description par lien.",
-      "Garder le fichier court (idéalement < 100 lignes) — l'objectif est d'orienter les IA, pas de tout dupliquer.",
+      "Garder le fichier court (idéalement < 100 lignes) : l'objectif est d'orienter les IA, pas de tout dupliquer.",
       "Optionnel : ajouter un `llms-full.txt` plus détaillé pour les IA qui veulent plus de contexte.",
       "Mettre à jour tous les 1-2 mois en fonction des nouveautés du site.",
     ],
@@ -71,18 +71,18 @@ export const RECO_PERFORMANCE: RecoGroup[] = [
     sub_label: "Temps de chargement",
     items: [
       "TTFB cible : < 0,6 s. Au-delà, optimiser le backend (cache page, CDN edge, requêtes DB) ou le mutualisé devient un frein.",
-      "Activer un cache HTTP côté CDN (Cloudflare, Fastly, Vercel Edge) pour les pages statiques — gain immédiat de plusieurs centaines de ms.",
+      "Activer un cache HTTP côté CDN (Cloudflare, Fastly, Vercel Edge) pour les pages statiques : gain immédiat de plusieurs centaines de ms.",
       "Pour les pages dynamiques : précalculer / mettre en cache fragments lourds (header, listes, recommandations).",
-      "Mesurer aussi en p75 et p95 — la moyenne masque les pics qui pénalisent vraiment le crawl et l'expérience.",
+      "Mesurer aussi en p75 et p95 : la moyenne masque les pics qui pénalisent vraiment le crawl et l'expérience.",
     ],
   },
   {
     sub_label: "Poids des pages HTML (limite 2 Mo Googlebot)",
     items: [
-      "Compresser le HTML servi (gzip / brotli) — un HTML de 800 Ko peut tomber à 80-100 Ko transférés.",
-      "Externaliser le CSS et JS — un bon HTML pèse < 100 Ko hors images. Au-delà, Googlebot risque la troncature à 2 Mo.",
+      "Compresser le HTML servi (gzip / brotli) : un HTML de 800 Ko peut tomber à 80-100 Ko transférés.",
+      "Externaliser le CSS et JS : un bon HTML pèse < 100 Ko hors images. Au-delà, Googlebot risque la troncature à 2 Mo.",
       "Limiter les attributs `data-*`, les JSON-LD volumineux, et le contenu invisible (modales, tabs masqués) inline dans le HTML.",
-      "Supprimer les commentaires HTML et les espaces inutiles (minification) — gain de 5-15% en production.",
+      "Supprimer les commentaires HTML et les espaces inutiles (minification) : gain de 5-15% en production.",
     ],
   },
 ];
@@ -101,14 +101,14 @@ export const RECO_META: RecoGroup[] = [
     sub_label: "Titles en double",
     items: [
       "Chaque page indexable doit avoir un title unique. Deux titles identiques = signal de cannibalisation.",
-      "Pour les listings paginés, ajouter `— Page 2` au title : Google traite chaque page de pagination distinctement.",
+      "Pour les listings paginés, ajouter `, Page 2` au title : Google traite chaque page de pagination distinctement.",
       "Pour les filtres / facettes générant des doublons, soit canonicaliser vers la version sans filtre, soit générer des titles distincts.",
     ],
   },
   {
     sub_label: "Meta descriptions en double",
     items: [
-      "Réécrire chaque meta unique avec un angle distinct — même la meta n'a pas d'impact direct sur le ranking, le CTR oui.",
+      "Réécrire chaque meta unique avec un angle distinct : même la meta n'a pas d'impact direct sur le ranking, le CTR oui.",
       "Si vraiment impossible (catalogue produits massif), accepter la duplication mais marquer les pages comme alternative via canonical.",
       "Pour gagner du temps : générer des metas dynamiques à partir du nom du produit + bénéfice principal + CTA implicite.",
     ],
@@ -137,7 +137,7 @@ export const RECO_STRUCTURE: RecoGroup[] = [
     items: [
       "Respecter l'ordre : H1 → H2 → H3 → H4. Ne pas passer d'un H2 directement à un H4.",
       "Les sauts de hiérarchie cassent l'accessibilité (lecteurs d'écran) et perturbent la compréhension du contenu par Google.",
-      "Vérifier que les niveaux de titre sont utilisés sémantiquement, pas pour le style visuel — utiliser le CSS pour ça.",
+      "Vérifier que les niveaux de titre sont utilisés sémantiquement, pas pour le style visuel : utiliser le CSS pour ça.",
     ],
   },
 ];
@@ -164,7 +164,7 @@ export const RECO_LINKING: RecoGroup[] = [
     items: [
       "Identifier les pages orphelines de valeur : leur ajouter 2-3 liens contextuels depuis des pages thématiquement proches.",
       "Si une page n'a aucun lien sortant, ajouter 2-4 liens contextuels vers des pages utiles pour le lecteur.",
-      "Auditer le footer / méga-menu : trop de liens dilue le signal — viser des hubs thématiques plutôt qu'un footer exhaustif.",
+      "Auditer le footer / méga-menu : trop de liens dilue le signal : viser des hubs thématiques plutôt qu'un footer exhaustif.",
     ],
   },
   {
@@ -183,7 +183,7 @@ export const RECO_IMAGES: RecoGroup[] = [
     sub_label: "Images sans attribut alt",
     items: [
       "Ajouter un attribut `alt` descriptif à chaque image porteuse de sens : c'est obligatoire pour l'accessibilité et utile au SEO image.",
-      "Pour les images purement décoratives (icônes UI), utiliser `alt=\"\"` (vide explicite) — c'est sémantiquement correct.",
+      "Pour les images purement décoratives (icônes UI), utiliser `alt=\"\"` (vide explicite) : c'est sémantiquement correct.",
       "L'alt doit décrire ce que voit l'utilisateur, pas \"image de…\". Exemple : `alt=\"Camion de déménagement vide intérieur cuisine\"` plutôt que `alt=\"camion\"`.",
     ],
   },
@@ -192,15 +192,15 @@ export const RECO_IMAGES: RecoGroup[] = [
     items: [
       "Toujours déclarer `width` et `height` sur chaque `<img>` pour réserver l'espace au navigateur avant le chargement.",
       "Sans ces attributs, le contenu de la page saute au moment où l'image charge → CLS dégradé (Core Web Vitals).",
-      "Si la taille varie selon l'écran, utiliser CSS `aspect-ratio` ou `srcset` + `sizes` — Google gère parfaitement le responsive sur images.",
+      "Si la taille varie selon l'écran, utiliser CSS `aspect-ratio` ou `srcset` + `sizes` : Google gère parfaitement le responsive sur images.",
     ],
   },
   {
     sub_label: "Poids des images",
     items: [
-      "Compresser et convertir au format WebP ou AVIF — gain typique de 30-50% par rapport à JPEG/PNG, sans perte visible.",
+      "Compresser et convertir au format WebP ou AVIF : gain typique de 30-50% par rapport à JPEG/PNG, sans perte visible.",
       "Redimensionner à la taille d'affichage réelle : une image de 4000×3000 affichée à 600×400 est un gaspillage de bande passante.",
-      "Activer le lazy-loading (`loading=\"lazy\"`) sur toutes les images hors écran initial — gain immédiat sur LCP.",
+      "Activer le lazy-loading (`loading=\"lazy\"`) sur toutes les images hors écran initial : gain immédiat sur LCP.",
       "Cible : aucune image > 200 Ko en production. Images héros : tolérance jusqu'à 300 Ko si non compressibles.",
     ],
   },
@@ -211,8 +211,8 @@ export const RECO_GEO: RecoGroup[] = [
     sub_label: "Accès des crawlers IA",
     items: [
       "Déclarer explicitement GPTBot, ChatGPT-User, CCBot, Google-Extended, ClaudeBot et PerplexityBot dans le robots.txt avec Allow: / pour autoriser leur accès sans ambiguïté.",
-      "Vérifier qu'aucun firewall applicatif (Cloudflare, WAF) ne bloque ces user-agents au niveau réseau — le robots.txt ne suffit pas s'ils sont rejetés en amont.",
-      "Mettre à jour la liste des bots IA tous les 6 mois — de nouveaux apparaissent régulièrement (Applebot-Extended, Meta-ExternalAgent, Bytespider…).",
+      "Vérifier qu'aucun firewall applicatif (Cloudflare, WAF) ne bloque ces user-agents au niveau réseau : le robots.txt ne suffit pas s'ils sont rejetés en amont.",
+      "Mettre à jour la liste des bots IA tous les 6 mois : de nouveaux apparaissent régulièrement (Applebot-Extended, Meta-ExternalAgent, Bytespider…).",
     ],
   },
   {
@@ -220,7 +220,7 @@ export const RECO_GEO: RecoGroup[] = [
     items: [
       "Créer un fichier llms.txt à la racine du site (https://votresite.com/llms.txt) au format Markdown.",
       "Y lister les pages-clés du site (page d'accueil, pages services, articles piliers) avec une courte description par lien.",
-      "Garder le fichier court (idéalement < 100 lignes) — l'objectif est d'orienter les IA, pas de tout dupliquer.",
+      "Garder le fichier court (idéalement < 100 lignes) : l'objectif est d'orienter les IA, pas de tout dupliquer.",
       "Optionnel : ajouter un llms-full.txt plus détaillé pour les IA qui veulent plus de contexte.",
       "Mettre à jour tous les 1-2 mois en fonction des nouveautés du site.",
     ],
@@ -229,7 +229,7 @@ export const RECO_GEO: RecoGroup[] = [
     sub_label: "Rendu sans JavaScript",
     items: [
       "Tester chaque typologie de page (home, LP, fiche produit, article, FAQ) en désactivant le JavaScript dans le navigateur.",
-      "Tout contenu critique (H1, paragraphes, FAQ, données produit) doit être présent dans le HTML initial — pas chargé après le first paint.",
+      "Tout contenu critique (H1, paragraphes, FAQ, données produit) doit être présent dans le HTML initial : pas chargé après le first paint.",
       "Si le site utilise un widget tiers (FAQ Smart Tribune, ZenDesk, etc.) qui injecte du contenu en JS, prévoir un fallback SSR ou afficher les Q/R en plain HTML caché.",
       "Idéalement, utiliser Server-Side Rendering ou Static Site Generation pour garantir un HTML complet dès le premier byte.",
     ],
@@ -237,9 +237,9 @@ export const RECO_GEO: RecoGroup[] = [
   {
     sub_label: "Headers ETag & Last-Modified",
     items: [
-      "Activer un header ETag sur les réponses HTML — la plupart des CDN modernes le génèrent automatiquement (Cloudflare, Vercel, Fastly).",
+      "Activer un header ETag sur les réponses HTML : la plupart des CDN modernes le génèrent automatiquement (Cloudflare, Vercel, Fastly).",
       "Renseigner un Last-Modified qui reflète la VRAIE date de modification du contenu (pas la date du cache).",
-      "Sur les pages legacy / non cachées, activer un cache CDN — chaque crawl rechargeant tout consomme inutilement du budget.",
+      "Sur les pages legacy / non cachées, activer un cache CDN : chaque crawl rechargeant tout consomme inutilement du budget.",
       "Vérifier la cohérence : si Googlebot reçoit ETag + If-None-Match, il doit obtenir un 304 Not Modified quand rien n'a changé.",
     ],
   },
@@ -249,16 +249,16 @@ export const RECO_STRUCTURED_DATA: RecoGroup[] = [
   {
     sub_label: "Schémas critiques",
     items: [
-      "Organization + WebSite sur la home : nom, logo, URL, sameAs (profils sociaux), contact — c'est le socle du Knowledge Panel.",
+      "Organization + WebSite sur la home : nom, logo, URL, sameAs (profils sociaux), contact : c'est le socle du Knowledge Panel.",
       "BreadcrumbList sur toutes les pages internes : remplace l'URL par un fil d'Ariane lisible en SERP.",
-      "Product + Offer + AggregateRating sur les fiches/pages produit — débloque étoiles, prix, stock en SERP (jusqu'à +30 % de CTR).",
-      "FAQPage sur les pages avec questions visibles (FAQ, accordéon en bas de LP) — capture les People Also Ask.",
+      "Product + Offer + AggregateRating sur les fiches/pages produit : débloque étoiles, prix, stock en SERP (jusqu'à +30 % de CTR).",
+      "FAQPage sur les pages avec questions visibles (FAQ, accordéon en bas de LP) : capture les People Also Ask.",
     ],
   },
   {
     sub_label: "Méthode d'implémentation",
     items: [
-      "Privilégier JSON-LD (recommandé par Google) plutôt que microdata ou RDFa — plus simple à maintenir, séparé du HTML visible.",
+      "Privilégier JSON-LD (recommandé par Google) plutôt que microdata ou RDFa : plus simple à maintenir, séparé du HTML visible.",
       "Tester chaque balisage avec l'outil de test des résultats enrichis de Google (https://search.google.com/test/rich-results).",
       "Centraliser les balises dans un layout / composant réutilisable plutôt que de les recopier sur chaque template.",
       "Auditer les balisages tous les trimestres : un changement de structure de contenu (ajout d'une catégorie, refonte FAQ) doit s'accompagner d'un audit JSON-LD.",

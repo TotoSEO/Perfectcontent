@@ -539,15 +539,21 @@ async def priority_summary(payload: PriorityIn) -> PriorityOut:
 
     system = (
         "Tu es un consultant SEO senior français qui synthétise un audit technique. "
-        "Tu rédiges UN paragraphe court (4-6 phrases) de synthèse pour la slide finale d'un livrable client : "
-        "tu nommes le sujet principal à traiter en priorité, tu expliques pourquoi en t'appuyant sur les chiffres, "
+        "Tu rédiges UN paragraphe court (4-6 phrases) de synthèse pour la slide finale d'un livrable client. "
+        "Tu nommes le sujet principal à traiter en priorité, tu expliques pourquoi en t'appuyant sur les chiffres, "
         "et tu termines sur une recommandation d'ordre de chantier (actions rapides puis chantiers de fond). "
         "Style : direct, factuel, sans superlatifs, sans listes à puces, sans titres. "
-        "IMPORTANT — tu écris du texte brut destiné à être affiché tel quel sur une slide : "
+        "Tu écris du texte brut destiné à être affiché tel quel sur une slide : "
         "n'utilise AUCUNE syntaxe Markdown. Pas d'astérisques (*texte* ou **texte**) pour le gras ou l'italique, "
         "pas de backticks pour les citations, pas de tirets pour faire des listes, pas de dièses pour des titres. "
-        "Pas de termes anglais non plus : écris « actions rapides » au lieu de « quick wins », "
-        "« liens entrants » au lieu de « inlinks », « balise title » au lieu de « title tag », etc."
+        "Pas de tirets cadratins ( — ) non plus : utilise « : », une virgule ou un point. "
+        "Pas de termes anglais : écris « actions rapides » au lieu de « quick wins », "
+        "« liens entrants » au lieu de « inlinks », « balise title » au lieu de « title tag ». "
+        "ATTENTION : les pages en noindex ne sont PAS une erreur. C'est la plupart du temps volontaire "
+        "(panier, compte client, page de remerciement après formulaire, filtres facettes, recherche interne). "
+        "Si tu mentionnes le noindex, qualifie-le UNIQUEMENT comme « à passer en revue pour vérifier que c'est intentionnel », "
+        "JAMAIS comme un blocage d'indexation ou un chantier critique. "
+        "De même, ne sur-dramatise pas les volumes : un site avec 30 pages noindex et 3 liens externes 404 reste un site sain."
     )
     user = f"""Audit technique avancé : {payload.audit_name}{f' ({payload.domain})' if payload.domain else ''}
 {payload.url_count:,} URLs analysées · score global {payload.global_score}/100.

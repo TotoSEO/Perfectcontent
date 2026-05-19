@@ -1,5 +1,5 @@
 // Types for the "Audit technique avancé" feature.
-// Imports : 2 files — interne_html.csv (Screaming Frog FR Internal export) +
+// Imports : 2 files : interne_html.csv (Screaming Frog FR Internal export) +
 // a ZIP of "Bulk Export > Issues > All". Plus optional all_inlinks.csv for
 // detailed anchor analysis. Output : a multi-section report with cover slides,
 // data slides, recommendation slides, and a final AI-assisted priority slide.
@@ -44,7 +44,7 @@ export type AnchorDestinationSummary = {
   dominant_anchor_pct: number; // 0..100
 };
 
-// Slide kinds — drives rendering in the viewer.
+// Slide kinds : drives rendering in the viewer.
 export type AdvSlide =
   | {
       kind: "cover";
@@ -92,6 +92,12 @@ export type AdvSlide =
       callout?: { tone: "warn" | "info"; title: string; body: string };
       // Optional facts/figures grid (e.g. "844 000 sites ont adopté llms.txt").
       facts?: { label: string; value: string }[];
+      // When true, the right-hand side of the slide is replaced by an
+      // empty styled "drop your screenshot here" placeholder card.
+      // Used on the "Rendu sans JavaScript" slide so the consultant can
+      // paste a screenshot of their before/after JS-disabled test into
+      // the deliverable.
+      screenshot_placeholder?: boolean;
     }
   | {
       kind: "anchor-bars";
@@ -117,13 +123,13 @@ export type AdvSlide =
   | {
       kind: "reco";
       section_id: string;
-      title: string;             // "Recommandations — Indexabilité & crawl"
+      title: string;             // "Recommandations : Indexabilité & crawl"
       groups: { sub_label: string; items: string[] }[];
     }
   | {
       kind: "priority";
       title: string;
-      // Always computed deterministically — never AI-hallucinated:
+      // Always computed deterministically : never AI-hallucinated:
       items: PriorityItem[];
       // Optional Claude-generated narrative summary (1-3 short paragraphs).
       ai_summary: string | null;
@@ -175,7 +181,7 @@ export type AdvReport = {
   html_count: number;
   global_score: number;
   // Site-level inputs fetched server-side (robots.txt / sitemap.xml / llms.txt)
-  // — may be null on failure; the slide degrades gracefully.
+  // : may be null on failure; the slide degrades gracefully.
   site_resources: {
     robots_txt: {
       fetched: boolean;
@@ -186,7 +192,7 @@ export type AdvReport = {
       disallow_count: number;
       allow_count: number;
       raw_preview?: string;
-      // IA-crawler analysis (new — drives the GEO section)
+      // IA-crawler analysis (new : drives the GEO section)
       ia_bots_declared?: string[];
       ia_bots_blocked?: string[];
       ia_bots_allowed?: string[];

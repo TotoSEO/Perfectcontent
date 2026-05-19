@@ -125,13 +125,13 @@ function normalizeKey(s: string): string {
 function pick(rec: Record<string, string>, aliases: string[]): string | null {
   for (const a of aliases) {
     const v = rec[normalizeKey(a)];
-    if (v !== undefined && v !== "" && v !== "—") return v;
+    if (v !== undefined && v !== "" && v !== ",") return v;
   }
   return null;
 }
 
 function num(s: string | null): number | null {
-  if (s === null || s === "" || s === "—") return null;
+  if (s === null || s === "" || s === ",") return null;
   // SF FR uses comma as decimal separator: "1,2" → 1.2
   const v = Number(String(s).replace(/\s/g, "").replace(",", ".").replace(/[^\d.\-]/g, ""));
   return Number.isFinite(v) ? v : null;
@@ -144,6 +144,7 @@ export type InternalParseStats = {
   headers: string[];
   delimiter: string;
   rows_without_url: number;
+  pagination_skipped: number;
 };
 
 export type InternalParseResult = {
@@ -186,9 +187,11 @@ export function parseInterneHtmlCsvText(textRaw: string, filename: string | null
   const rows: InternalRow[] = [];
   let html = 0;
   let rows_without_url = 0;
+  let pagination_skipped = 0;
   for (const rec of result.data as Record<string, string>[]) {
     const url = pick(rec, COL_ALIASES.url);
     if (!url || !/^https?:\/\//i.test(url)) { rows_without_url++; continue; }
+    if (isPaginationUrl(url)) { pagination_skipped++; continue; }
     const ct = pick(rec, COL_ALIASES.content_type);
     if (ct && /text\/html/i.test(ct)) html++;
     rows.push({
@@ -229,8 +232,29 @@ export function parseInterneHtmlCsvText(textRaw: string, filename: string | null
       headers,
       delimiter,
       rows_without_url,
+      pagination_skipped,
     },
   };
+}
+
+// Pagination URLs (e.g. ?pagination=2, ?page=3, /page/4/) inflate the URL
+// count and pollute every distribution downstream : same template, same
+// content, same internal links. The reference page (page 1, no parameter)
+// is always kept; only the deeper paginated copies are filtered out at
+// parse time.
+export function isPaginationUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const params = u.searchParams;
+    for (const key of ["pagination", "page", "paged", "p", "start", "offset"]) {
+      const v = params.get(key);
+      if (v && /^\d+$/.test(v)) return true;
+    }
+    if (/\/page\/\d+\/?$/i.test(u.pathname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 // Extract the site root domain from the first HTML URL we see. Used for

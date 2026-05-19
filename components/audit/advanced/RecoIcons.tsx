@@ -248,7 +248,7 @@ export function RecoIcon({ name, size = 28 }: { name: string; size?: number }) {
       );
     case "ai":
     case "robot":
-      // stylised robot head — used for the GEO section cover
+      // stylised robot head : used for the GEO section cover
       return (
         <svg {...props}>
           <rect x="4" y="7" width="16" height="12" rx="2.5" />

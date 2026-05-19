@@ -1,5 +1,5 @@
 // Parse Screaming Frog FR "Exporter en bloc > Problèmes > Tous" ZIP archive.
-// The ZIP contains 60+ CSVs but we only need a whitelist of ~25 of them —
+// The ZIP contains 60+ CSVs but we only need a whitelist of ~25 of them ,
 // the rest are ignored to keep parsing fast and the memory footprint small.
 // Each whitelisted filename maps to a normalized issue category that the
 // analyzer consumes for one specific slide.
@@ -8,10 +8,10 @@ import Papa from "papaparse";
 import type { Severity } from "../types";
 
 export type IssueLine = {
-  // The "Adresse" / "Address" column — primary URL. Always present.
+  // The "Adresse" / "Address" column : primary URL. Always present.
   url: string;
   // Free-form extra columns kept as strings (we let the analyzer pull what it
-  // needs by key — we don't typecast at parse time because each issue CSV has
+  // needs by key : we don't typecast at parse time because each issue CSV has
   // a different schema).
   extras: Record<string, string>;
 };
@@ -23,7 +23,7 @@ export type ParsedIssue = {
   filename: string;
   // Short human label rendered in the XLSX tab name.
   short_label: string;
-  // Severity assigned by us (not by SF — SF only tags warnings/issues/opps).
+  // Severity assigned by us (not by SF : SF only tags warnings/issues/opps).
   severity: Severity;
   // Logical group used by the analyzer to dispatch to the right slide.
   group:
@@ -516,7 +516,7 @@ function normalizeKey(s: string): string {
 //     issue is ABOUT the target of a link, listed one row per
 //     (source page × target). The columns are Source / Destination
 //     instead of Adresse. Example: images_attributs_de_taille_manquants.csv
-//       (1 040 rows, all pointing to ONE unique image — the footer logo
+//       (1 040 rows, all pointing to ONE unique image : the footer logo
 //        present on every page).
 // We try "Adresse" first because it's the page identity when present.
 // We then try Destination, which is the right URL for link-centric
@@ -535,7 +535,7 @@ function pickUrl(rec: Record<string, string>): string | null {
     const v = rec[normalizeKey(k)];
     if (v && /^https?:\/\//i.test(v)) return v;
   }
-  // Sometimes the URL is in an unknown column — fall back to the first string
+  // Sometimes the URL is in an unknown column : fall back to the first string
   // that looks like a URL.
   for (const v of Object.values(rec)) {
     if (typeof v === "string" && /^https?:\/\//i.test(v)) return v;
@@ -573,7 +573,7 @@ function parseCsvText(text: string): IssueLine[] {
 
 // Match a normalized filename against one of our patterns.
 // Screaming Frog frequently appends a response-code suffix to issue
-// filenames — e.g. "codes_de_reponse_internes_erreur_du_client_(4xx).csv"
+// filenames : e.g. "codes_de_reponse_internes_erreur_du_client_(4xx).csv"
 // or "codes_de_reponse_internes_redirection_(3xx).csv". The previous strict
 // equality check missed every one of those, which is why "Liens rompus"
 // was always reporting 0 even on sites with hundreds of broken links.
@@ -645,7 +645,7 @@ export async function parseIssuesZip(file: File): Promise<IssuesParseResult> {
 }
 
 // Helper for the analyzer: pick a specific issue by id (returns empty if not
-// in the ZIP — most issue files are only emitted when there are actual hits).
+// in the ZIP : most issue files are only emitted when there are actual hits).
 export function findIssue(issues: ParsedIssue[], id: string): ParsedIssue | null {
   return issues.find((i) => i.id === id) || null;
 }

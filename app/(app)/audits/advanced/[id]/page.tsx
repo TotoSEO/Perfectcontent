@@ -45,6 +45,10 @@ export default function AdvancedAuditPage() {
   );
   const [exporting, setExporting] = useState(false);
   const [exportErr, setExportErr] = useState<string | null>(null);
+  // Separate state for PDF so the two buttons can run independently
+  // (XLSX is fast, PDF can take 30-60 s for a 49-slide deck).
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState({ current: 0, total: 0 });
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiErr, setAiErr] = useState<string | null>(null);
@@ -125,6 +129,23 @@ export default function AdvancedAuditPage() {
     }
   }
 
+  async function exportPdf() {
+    if (!audit) return;
+    setExportingPdf(true);
+    setExportErr(null);
+    setPdfProgress({ current: 0, total: slides.length });
+    try {
+      const { exportDeckToPdf } = await import("@/lib/audit/advanced/export-pdf");
+      await exportDeckToPdf(audit.name, "[data-deck-root]", (current, total) => {
+        setPdfProgress({ current, total });
+      });
+    } catch (e) {
+      setExportErr(`Échec export PDF : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   async function deleteAudit() {
     if (!confirm("Supprimer cet audit ?")) return;
     await api(`/srv/audits/${id}`, { method: "DELETE" });
@@ -176,11 +197,21 @@ export default function AdvancedAuditPage() {
             {" · "}{slides.length} slides · {totalIssues} problèmes · généré le {generatedDate}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button
+            onClick={exportPdf}
+            disabled={exportingPdf}
+            className="btn-primary text-sm"
+            title="Exporte la présentation en PDF (1 slide = 1 page, dimensions identiques à l'affichage)."
+          >
+            {exportingPdf
+              ? `PDF ${pdfProgress.current}/${pdfProgress.total}…`
+              : "🖨 Exporter en PDF"}
+          </button>
           <button
             onClick={exportXlsx}
             disabled={exporting || !audit.issues}
-            className="btn-primary text-sm"
+            className="btn-secondary text-sm"
             title="Exporte le fichier .xlsx complet avec un onglet par sous-catégorie de problème et un onglet de priorisation."
           >
             {exporting ? "Export en cours…" : "📊 Exporter le fichier XLSX"}
@@ -199,7 +230,10 @@ export default function AdvancedAuditPage() {
         💡 Chaque slide est en 16:9 — capture-la et colle-la directement dans tes Google Slides client.
       </p>
 
-      <div className="space-y-6">
+      {/* data-deck-root is the anchor the PDF exporter walks to find every
+          slide. Each direct child below wraps a slide and carries
+          data-pdf-slide, so the exporter snapshots each in DOM order. */}
+      <div className="space-y-6" data-deck-root>
         {slides.map((s, i) => {
           if (s.kind === "cover") {
             return (

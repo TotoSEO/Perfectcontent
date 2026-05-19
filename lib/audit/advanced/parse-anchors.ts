@@ -2,22 +2,22 @@
 // (liens_entrants_tous.csv).
 //
 // COLUMN VALUES OBSERVED IN REAL FR EXPORTS (don't trust the user-facing
-// spec — the values are localised):
+// spec : the values are localised):
 //
 //   • Type             "Hyperlien" (FR) / "Hyperlink" (EN) / "Lien hypertexte"
 //                      Also: "CSS", "Canonique HTML", "Hreflang HTML",
 //                      "Hreflang HTTP", "Iframe", "Image", "JavaScript",
-//                      "Redirection HTTP" — all to be excluded.
+//                      "Redirection HTTP" : all to be excluded.
 //   • Position du lien (←dedicated column, not "Chemin du lien")
 //                      "Contenu" (the only one we keep),
 //                      "Navigation", "En-tête", "Tête", "Pied de page".
 //   • Code de statut   the HTTP status of the *destination* of the link.
 //                      We use this to surface broken links straight out
-//                      of this file — Screaming Frog's Bulk Issues export
+//                      of this file : Screaming Frog's Bulk Issues export
 //                      doesn't always carry "broken internal links" as a
 //                      named file, but every <a href> with a non-2xx
 //                      destination shows up here.
-//   • Origine du lien  "HTML" / "HTTP" — this is the link delivery
+//   • Origine du lien  "HTML" / "HTTP" : this is the link delivery
 //                      format, NOT internal/external. To tell internal
 //                      apart from external, compare hostnames between
 //                      Source and Destination.
@@ -31,6 +31,10 @@ import type { AnchorDestinationSummary, AnchorRow } from "./types";
 const SOURCE_KEYS = ["source", "url source", "page source", "from"];
 const DESTINATION_KEYS = ["destination", "url de destination", "to"];
 const ANCHOR_KEYS = ["ancrage", "anchor", "anchor text", "texte d'ancre", "texte de l'ancre", "texte de l ancre"];
+// Fallback: when Ancrage is empty (typical case of <a><img></a>), use the
+// image alt as the link's accessible name : Google and the LLMs treat the
+// alt as the effective anchor text in that case.
+const ALT_KEYS = ["texte alt", "alt", "alt text", "image alt"];
 const TYPE_KEYS = ["type", "type de lien", "link type"];
 const POSITION_KEYS = ["position du lien", "link position", "emplacement du lien", "position"];
 const PATH_KEYS = ["chemin du lien", "link path", "type de chemin"];
@@ -39,8 +43,8 @@ const STATUS_TEXT_KEYS = ["statut", "status"];
 
 // FR + EN values for "this row is an <a href>" Type column.
 const HYPERLINK_TYPES = ["hyperlien", "hyperlink", "lien hypertexte", "ahref"];
-// FR + EN values that count as "body content" Position (everything else —
-// Navigation, En-tête, Tête, Pied de page, Sidebar, Aside — is dropped).
+// FR + EN values that count as "body content" Position (everything else ,
+// Navigation, En-tête, Tête, Pied de page, Sidebar, Aside : is dropped).
 const BODY_POSITIONS = [
   "contenu", "content",
   "body", "main", "article", "section",
@@ -55,6 +59,23 @@ const GENERIC_ANCHORS = new Set([
   "here", "click", "click here", "read more", "learn more", "more",
   "see more", "link", "this", "this link",
 ]);
+
+// Local copy of parse-internal.ts's isPaginationUrl to avoid a circular
+// dependency between the two parsers.
+function isPaginationUrlInline(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const params = u.searchParams;
+    for (const key of ["pagination", "page", "paged", "p", "start", "offset"]) {
+      const v = params.get(key);
+      if (v && /^\d+$/.test(v)) return true;
+    }
+    if (/\/page\/\d+\/?$/i.test(u.pathname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 function normalizeKey(s: string): string {
   return s
@@ -190,7 +211,7 @@ function streamAndFilter(
         const type = normalizeKey(pick(data, TYPE_KEYS) || "");
         // Skip non-hyperlink rows (CSS, JS, Image, Iframe, Redirection HTTP,
         // Hreflang HTML, Canonique HTML…). When the Type column is missing,
-        // we don't filter — better to keep too much than drop everything.
+        // we don't filter : better to keep too much than drop everything.
         if (type && !HYPERLINK_TYPES.some((t) => type === t || type.includes(t))) {
           breakdown.not_hyperlink++;
           return;
@@ -200,15 +221,24 @@ function streamAndFilter(
           breakdown.no_destination++;
           return;
         }
+        // Skip pagination destinations (?pagination=2, /page/3/...) : they
+        // pollute the diversity ranking with article/?pagination=2 etc.
+        if (isPaginationUrlInline(dest)) {
+          breakdown.no_destination++;
+          return;
+        }
         const src = pick(data, SOURCE_KEYS) || "";
-        const anchor = pick(data, ANCHOR_KEYS) || "";
+        // Use Ancrage when present, else fall back to Texte Alt (the link
+        // is an image wrapper). Stays "" only when both are empty : that's
+        // a true accessibility/SEO issue and shows as "(vide)" on the slide.
+        const anchor = pick(data, ANCHOR_KEYS) || pick(data, ALT_KEYS) || "";
         const statusStr = pick(data, STATUS_KEYS);
         const statusCode = statusStr ? parseInt(statusStr, 10) : 200;
         const internal = src ? isSameDomain(src, dest) : true;
 
         // Broken-link harvest (4xx / 5xx). Fires for both internal and
         // external destinations and is independent of the body-position
-        // filter — a broken nav link is still a broken link.
+        // filter : a broken nav link is still a broken link.
         if (statusCode >= 400 && broken < MAX_BROKEN_LINKS) {
           broken++;
           onBrokenLink({
@@ -220,7 +250,7 @@ function streamAndFilter(
           });
         }
 
-        // Redirect-link harvest (3xx). Internal only — these are the
+        // Redirect-link harvest (3xx). Internal only : these are the
         // links you want to update to skip the redirect chain.
         if (statusCode >= 300 && statusCode < 400 && internal && redirected < MAX_REDIRECT_LINKS) {
           redirected++;
@@ -245,7 +275,7 @@ function streamAndFilter(
           onHttpLink({ source: src, destination: dest, anchor });
         }
 
-        // Anchor analysis — only contextual, internal, 200-OK links count.
+        // Anchor analysis : only contextual, internal, 200-OK links count.
         const position = normalizeKey(pick(data, POSITION_KEYS) || "");
         if (position && !BODY_POSITIONS.some((p) => position === p || position.includes(p))) {
           breakdown.not_body_position++;

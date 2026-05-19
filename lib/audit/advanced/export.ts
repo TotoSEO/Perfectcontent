@@ -72,7 +72,7 @@ function styleHeader(row: { height?: number; eachCell: (cb: (cell: { fill: unkno
 export async function exportAdvancedToXlsx(report: AdvReport, auditName: string): Promise<void> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "PerfectContent — Audit avancé";
+  wb.creator = "PerfectContent : Audit avancé";
   wb.created = new Date();
 
   // ===== Synthèse sheet =====
@@ -195,7 +195,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
           sc.alignment = { horizontal: "center" };
         }
         // URL-like columns become hyperlinks. Only touch columns we declared
-        // for this sheet — calling getCell() with a key that doesn't match
+        // for this sheet : calling getCell() with a key that doesn't match
         // any column triggers exceljs's "Out of bounds. Excel supports
         // columns from 1 to 16384" because the column index resolves to NaN.
         const declaredKeys = new Set(sub.columns.map((c) => c.key));

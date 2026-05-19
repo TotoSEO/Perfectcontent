@@ -374,6 +374,71 @@ function chartCaption(type: "donut" | "bar" | "histogram" | "stat-grid"): string
 }
 
 export function InfoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "info" }> }) {
+  // Two-column layout when a screenshot placeholder is requested (the
+  // "Rendu sans JavaScript" slide): text + callout on the left, empty
+  // screenshot card on the right that the consultant fills in.
+  if (slide.screenshot_placeholder) {
+    return (
+      <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
+        <div className="col-span-7 flex flex-col gap-3 min-w-0 min-h-0">
+          <div
+            className="flex-1 min-w-0 pl-3 rounded-r-md min-h-0 overflow-hidden"
+            style={{ borderLeft: `3px solid ${VBT.terracotta500}` }}
+          >
+            <DescriptionBlock text={slide.description} maxLines={10} />
+          </div>
+          {slide.callout && (
+            <div
+              className="rounded-xl p-3.5"
+              style={{
+                background: slide.callout.tone === "warn" ? VBT.amber50 : VBT.terracotta50,
+                border: `1px solid ${slide.callout.tone === "warn" ? VBT.amber200 : VBT.terracotta200}`,
+              }}
+            >
+              <div
+                className="text-[11px] uppercase tracking-[0.18em] mb-1"
+                style={{ color: slide.callout.tone === "warn" ? VBT.amber700 : VBT.terracotta700, fontWeight: 700 }}
+              >
+                {slide.callout.title}
+              </div>
+              <div className="text-[12px]" style={{ color: VBT.inkSoft, lineHeight: 1.5 }}>
+                {slide.callout.body}
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Empty screenshot placeholder zone */}
+        <div className="col-span-5 min-w-0 flex items-stretch">
+          <div
+            className="flex-1 rounded-xl flex flex-col items-center justify-center text-center px-6 py-6"
+            style={{
+              background: VBT.paper,
+              border: `2px dashed ${VBT.paperEdge}`,
+              color: VBT.zinc,
+            }}
+          >
+            <div
+              className="text-[36px] mb-2 leading-none opacity-50"
+              style={{ color: VBT.terracotta400 }}
+              aria-hidden
+            >
+              ⊞
+            </div>
+            <div
+              className="text-[11px] uppercase tracking-[0.16em] mb-1"
+              style={{ color: VBT.terracotta600, fontWeight: 700 }}
+            >
+              Emplacement capture
+            </div>
+            <div className="text-[12px] max-w-xs leading-relaxed" style={{ color: VBT.inkSoft }}>
+              Insérez ici votre capture du test JavaScript désactivé, et votre commentaire sur ce qui disparaît du rendu.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col gap-4 min-h-0">
       <DescriptionBlock text={slide.description} maxLines={10} />
@@ -675,7 +740,7 @@ function RecoCard({
   );
 }
 
-// Anchor bar chart — top concentrated destinations with their top anchors.
+// Anchor bar chart : top concentrated destinations with their top anchors.
 export function AnchorBarsBody({ slide }: { slide: Extract<AdvSlide, { kind: "anchor-bars" }> }) {
   const hasData = slide.destinations.length > 0;
   return (
@@ -757,7 +822,7 @@ export function AnchorBarsBody({ slide }: { slide: Extract<AdvSlide, { kind: "an
   );
 }
 
-// Anchor diversity table — destinations ranked by lowest diversity ratio.
+// Anchor diversity table : destinations ranked by lowest diversity ratio.
 export function AnchorTableBody({ slide }: { slide: Extract<AdvSlide, { kind: "anchor-table" }> }) {
   return (
     <div className="flex-1 flex flex-col gap-3 min-h-0">
@@ -834,7 +899,7 @@ function AnchorRow({ row }: { row: AnchorDestinationSummary }) {
         </span>
       </td>
       <td className="px-2.5 py-1.5 truncate" style={{ color: VBT.ink }} title={row.dominant_anchor}>
-        <span className="truncate">{row.dominant_anchor || "—"}</span>
+        <span className="truncate">{row.dominant_anchor || ","}</span>
         <span className="ml-1.5 text-[10px] tabular-nums" style={{ color: VBT.zinc }}>
           ({row.dominant_anchor_pct}%)
         </span>
@@ -863,12 +928,12 @@ export function PrioritySlideBody({
   onRequestAi: () => void;
   busy: boolean;
 }) {
-  // Show the top 10 — fits cleanly in the slide height without scrolling
+  // Show the top 10 : fits cleanly in the slide height without scrolling
   // and still captures the bulk of the actionable findings.
   const items = slide.items.slice(0, 10);
   return (
     <div className="flex-1 grid grid-cols-12 gap-5 min-h-0 overflow-hidden">
-      {/* Left column — priorities */}
+      {/* Left column : priorities */}
       <div className="col-span-7 flex flex-col gap-2 min-w-0">
         <div
           className="text-[10px] uppercase tracking-[0.18em] flex items-center gap-2"
@@ -887,7 +952,7 @@ export function PrioritySlideBody({
         </div>
       </div>
 
-      {/* Right column — AI synthesis */}
+      {/* Right column : AI synthesis */}
       <div className="col-span-5 flex flex-col gap-2 min-w-0 min-h-0">
         <div
           className="text-[10px] uppercase tracking-[0.18em] flex items-center gap-2"
@@ -938,7 +1003,7 @@ export function PrioritySlideBody({
             ) : (
               <>
                 <p className="mb-3">
-                  Une synthèse rédigée par IA (Claude Haiku) résumera ici les priorités à traiter, en s'appuyant sur les scores et compteurs du rapport. Aucune URL n'est transmise — seuls les chiffres agrégés.
+                  Une synthèse rédigée par IA (Claude Haiku) résumera ici les priorités à traiter, en s'appuyant sur les scores et compteurs du rapport. Aucune URL n'est transmise : seuls les chiffres agrégés.
                 </p>
                 <button
                   onClick={onRequestAi}
@@ -1033,7 +1098,7 @@ function PriorityRow({ item }: { item: PriorityItem }) {
 
 // Render `**bold**` segments as styled <strong> spans (the Haiku prompt now
 // forbids Markdown, but older audits already in the DB still carry the
-// asterisks — rendering them properly keeps the slide legible without
+// asterisks : rendering them properly keeps the slide legible without
 // requiring a re-generate).
 function renderRichText(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);

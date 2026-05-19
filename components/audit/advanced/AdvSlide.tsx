@@ -44,7 +44,9 @@ export function AdvSlide({
         : VBT.paper;
 
   return (
-    <div className="w-full" style={{ aspectRatio: "16 / 9" }}>
+    // data-pdf-slide marks this node for the PDF exporter so every slide
+    // is captured in DOM order at its rendered size.
+    <div className="w-full" style={{ aspectRatio: "16 / 9" }} data-pdf-slide>
       <div
         className="w-full h-full rounded-2xl overflow-hidden flex flex-col relative"
         style={{
@@ -83,7 +85,7 @@ export function AdvSlide({
                   letterSpacing: "-0.015em",
                   color: VBT.ink,
                   lineHeight: 1.1,
-                  // Allow up to 2 lines instead of truncating — long titles
+                  // Allow up to 2 lines instead of truncating : long titles
                   // like "Pages sans / avec peu de liens entrants" need this.
                   display: "-webkit-box",
                   WebkitLineClamp: 2,
