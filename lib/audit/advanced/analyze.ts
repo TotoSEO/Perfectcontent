@@ -20,6 +20,7 @@ import type {
   AdvSubcategory,
   AdvReport,
   AdvIssueRow,
+  AnchorDestinationSummary,
   PriorityItem,
 } from "./types";
 import {
@@ -84,6 +85,30 @@ function issueAsRows(issue: ParsedIssue | null, severity: Severity, extractor?: 
     const extras = extractor ? extractor(line) : {};
     return toRow(line.url, severity, extras);
   });
+}
+
+// Build the row set for the diversity scatter plot (4.9). The N worst
+// destinations come first (so the slide's "Top 3 à corriger" widget reads
+// the right ones from rows[0..2]), then a broader sample of the rest of
+// the destinations so the plot itself shows a real distribution.
+function sampleForScatter(
+  byDest: Map<string, AnchorDestinationSummary>,
+  worst: AnchorDestinationSummary[],
+  cap = 120,
+): AnchorDestinationSummary[] {
+  const seen = new Set(worst.map((w) => w.destination));
+  const others = [...byDest.values()].filter(
+    (d) => !seen.has(d.destination) && d.inlinks_count >= 2,
+  );
+  // Even-stride sample so we don't bias toward the most-linked pages.
+  const remaining = Math.max(0, cap - worst.length);
+  if (others.length <= remaining) return [...worst, ...others];
+  const step = others.length / remaining;
+  const picked: AnchorDestinationSummary[] = [];
+  for (let i = 0; i < remaining; i++) {
+    picked.push(others[Math.floor(i * step)]);
+  }
+  return [...worst, ...picked];
 }
 
 // ---------- Site resources (robots / sitemap / llms) -----------------------
@@ -1269,7 +1294,12 @@ function buildLinking(
   const subAnchor: AdvSubcategory[] = [];
   if (anchors) {
     const topConc = pickTopConcentratedDestinations(anchors.by_destination, 5, 6);
+    // Pull a wider sample of destinations for the diversity scatter plot
+    // (4.9) so the chart shows a real distribution and not just 8 points.
+    // The 15 worst still come first in the array — the "Top 3 à corriger"
+    // widget on the slide reads from the beginning.
     const worst = pickWorstDestinations(anchors.by_destination, 10, 15);
+    const scatterSample = sampleForScatter(anchors.by_destination, worst, 120);
     // Build anchor rows for XLSX (one row per link)
     const anchorAllRows: AdvIssueRow[] = anchors.rows.map((r) => ({
       url: r.destination,
@@ -1354,7 +1384,7 @@ function buildLinking(
       sub_id: "anchors_diversity",
       title: "Texte des ancres : score de diversité",
       description: DESC.anchor_table,
-      rows: worst.slice(0, 8),
+      rows: scatterSample,
       xlsx_sheet: "Ancres : par destination",
       issues_count: worst.length,
     });

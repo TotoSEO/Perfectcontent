@@ -45,6 +45,33 @@ export const VBT = {
   warn:  "#D8B962",   // amber 300
   bad:   "#A55448",   // brick 400
   info:  "#C46B30",   // terracotta 500
+
+  // Semantic urgency palette (4.6) : crisp signal colors that read well at
+  // a glance in cards / lanes / scatter dots. Used by priority lanes, KPI
+  // tone overrides and scatter colorings.
+  sigRed:    "#DC2626",
+  sigOrange: "#EA580C",
+  sigGreen:  "#16A34A",
+  sigBlue:   "#2563EB",
+} as const;
+
+// Typography tokens (4.1, 4.13) : single source of truth for the deck so
+// every slide reads from the same hierarchy. Numbers are in CSS px, all
+// authored against the 1600×900 slide canvas.
+export const VBT_TYPO = {
+  heroNumber:  72,  // cover score, sparse hero KPIs
+  pageTitle:   36,  // h2 in slide header
+  subhead:     22,  // section eyebrows, large takeaways
+  body:        17,  // primary text content
+  bodySm:      14,  // table / dense
+  caption:     12,  // labels / footnotes
+  micro:       10,  // ALL CAPS labels / metadata
+} as const;
+
+export const VBT_SPACING = {
+  slidePadX: 80,    // 4.14 — horizontal breathing room (cover/section)
+  slidePadXTight: 56, // for data slides where we need slightly more space for charts
+  slidePadY: 48,    // vertical padding
 } as const;
 
 export const VBT_NAME = "Visibili'tea";
