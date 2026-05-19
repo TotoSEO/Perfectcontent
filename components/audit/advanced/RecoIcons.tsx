@@ -237,6 +237,29 @@ export function RecoIcon({ name, size = 28 }: { name: string; size?: number }) {
           <path d="M21 16l-5-5-9 9" />
         </svg>
       );
+    case "schema":
+    case "structured":
+      // brackets-and-braces, the universal JSON-LD signal
+      return (
+        <svg {...props}>
+          <path d="M8 4c-2 0-3 1-3 3v3c0 1-1 2-2 2 1 0 2 1 2 2v3c0 2 1 3 3 3" />
+          <path d="M16 4c2 0 3 1 3 3v3c0 1 1 2 2 2-1 0-2 1-2 2v3c0 2-1 3-3 3" />
+        </svg>
+      );
+    case "ai":
+    case "robot":
+      // stylised robot head — used for the GEO section cover
+      return (
+        <svg {...props}>
+          <rect x="4" y="7" width="16" height="12" rx="2.5" />
+          <path d="M12 4v3" />
+          <circle cx="12" cy="4" r="0.9" fill={VBT.terracotta600} />
+          <circle cx="9" cy="12" r="1.2" fill={VBT.terracotta600} />
+          <circle cx="15" cy="12" r="1.2" fill={VBT.terracotta600} />
+          <path d="M9 16h6" />
+          <path d="M3 12h1.5M19.5 12H21" />
+        </svg>
+      );
     default:
       // generic checkmark-in-circle
       return (
@@ -273,5 +296,12 @@ export function iconForReco(subLabel: string): string {
   if (s.includes("ancre")) return "anchors";
   if (s.includes("alt")) return "image_alt";
   if (s.includes("width") || s.includes("height") || s.includes("dimensions") || s.includes("largeur")) return "image_size_attr";
+  if (s.includes("format")) return "image_weight";
+  if (s.includes("crawler") || s.includes("ia") || s.includes("gptbot") || s.includes("claudebot")) return "ai";
+  if (s.includes("rendu") || s.includes("javascript")) return "ai";
+  if (s.includes("etag") || s.includes("header")) return "http_codes";
+  if (s.includes("schema") || s.includes("json-ld") || s.includes("donnees structurees") || s.includes("données structurées")) return "schema";
+  if (s.includes("301") || s.includes("redirection")) return "broken_links";
+  if (s.includes("http") && (s.includes("mixte") || s.includes("contenu mixte"))) return "canonical";
   return "default";
 }

@@ -97,14 +97,33 @@ function isSameDomain(source: string, destination: string): boolean {
 }
 
 // A broken or redirected link discovered in the same stream that powers
-// the anchor analysis. We surface these so the "Liens rompus" slide works
-// even when the Issues ZIP is missing the codes_de_reponse_* files.
+// the anchor analysis. We surface these so the "Liens rompus" and
+// "Liens 301 internes" slides work even when the Issues ZIP is missing the
+// codes_de_reponse_* files.
 export type BrokenLink = {
   source: string;
   destination: string;
   anchor: string;
   status: number;
   origin: "internal" | "external";
+};
+
+// An internal redirect we want to surface: page A has an <a href> to
+// page B which returns 3xx. The fix is to update A's link to point
+// straight at the redirect target.
+export type RedirectedLink = {
+  source: string;
+  destination: string;
+  anchor: string;
+  status: number; // 301 / 302 / 307 / 308
+};
+
+// An internal link still emitted in HTTP (mixed content risk on an
+// HTTPS site).
+export type HttpLink = {
+  source: string;
+  destination: string;
+  anchor: string;
 };
 
 export type AnchorsParseResult = {
@@ -123,11 +142,15 @@ export type AnchorsParseResult = {
     external: number;
   };
   broken_links: BrokenLink[];
+  redirected_links: RedirectedLink[];
+  http_links: HttpLink[];
   filename: string | null;
 };
 
 const MAX_FILTERED_ROWS = 50_000;
 const MAX_BROKEN_LINKS = 5_000;
+const MAX_REDIRECT_LINKS = 5_000;
+const MAX_HTTP_LINKS = 2_000;
 
 type Accumulator = {
   count: number;
@@ -138,12 +161,16 @@ function streamAndFilter(
   text: string,
   onAnchorRow: (row: AnchorRow) => void,
   onBrokenLink: (link: BrokenLink) => void,
+  onRedirect: (link: RedirectedLink) => void,
+  onHttpLink: (link: HttpLink) => void,
   setStats: (stats: AnchorsParseResult["filtered_breakdown"] & { raw: number; filtered: number }) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let raw = 0;
     let filtered = 0;
     let broken = 0;
+    let redirected = 0;
+    let httpLinks = 0;
     const breakdown = {
       not_hyperlink: 0,
       not_body_position: 0,
@@ -191,6 +218,31 @@ function streamAndFilter(
             status: statusCode,
             origin: internal ? "internal" : "external",
           });
+        }
+
+        // Redirect-link harvest (3xx). Internal only — these are the
+        // links you want to update to skip the redirect chain.
+        if (statusCode >= 300 && statusCode < 400 && internal && redirected < MAX_REDIRECT_LINKS) {
+          redirected++;
+          onRedirect({
+            source: src,
+            destination: dest,
+            anchor,
+            status: statusCode,
+          });
+        }
+
+        // Mixed-content harvest: internal links still emitted as http://
+        // even though the site is served over https://. Both source and
+        // destination must be internal for this to be actionable.
+        if (
+          internal &&
+          dest.startsWith("http://") &&
+          (!src || src.startsWith("https://")) &&
+          httpLinks < MAX_HTTP_LINKS
+        ) {
+          httpLinks++;
+          onHttpLink({ source: src, destination: dest, anchor });
         }
 
         // Anchor analysis — only contextual, internal, 200-OK links count.
@@ -242,6 +294,8 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
 
   const keptRows: AnchorRow[] = [];
   const brokenLinks: BrokenLink[] = [];
+  const redirectedLinks: RedirectedLink[] = [];
+  const httpLinks: HttpLink[] = [];
   const aggregator = new Map<string, Accumulator>();
   let stats: AnchorsParseResult["filtered_breakdown"] & { raw: number; filtered: number } = {
     raw: 0, filtered: 0,
@@ -261,9 +315,9 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
       const key = (row.anchor || "(vide)").trim();
       entry.anchors.set(key, (entry.anchors.get(key) || 0) + 1);
     },
-    (link) => {
-      brokenLinks.push(link);
-    },
+    (link) => { brokenLinks.push(link); },
+    (link) => { redirectedLinks.push(link); },
+    (link) => { httpLinks.push(link); },
     (s) => { stats = s; },
   );
 
@@ -300,6 +354,8 @@ export async function parseAnchorsCsvText(textRaw: string, filename: string | nu
       external: stats.external,
     },
     broken_links: brokenLinks,
+    redirected_links: redirectedLinks,
+    http_links: httpLinks,
     filename,
   };
 }

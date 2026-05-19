@@ -11,7 +11,7 @@ import { VBT } from "../brand";
 import type { Severity } from "../types";
 import type { InternalRow } from "./parse-internal";
 import { findIssue, type ParsedIssue } from "./parse-issues";
-import { DESC, SECTION_COVER } from "./descriptions";
+import { DESC, DESC_EXT, SECTION_COVER } from "./descriptions";
 import { recosForSection } from "./recommendations";
 import type {
   AdvKPI,
@@ -48,6 +48,17 @@ function clamp(n: number, lo = 0, hi = 100): number {
 
 function scoreFromRatio(badRatio: number): number {
   return Math.round(clamp(100 * (1 - clamp(badRatio, 0, 1))));
+}
+
+// Extract a normalised image format from a URL. Used by the format
+// distribution slide. Falls back to "autre" for unknown or missing
+// extensions, normalises "jpg" → "jpeg" so the chart doesn't split them.
+function extractFormat(url: string): string {
+  const path = url.split("?")[0].split("#")[0];
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  if (ext === "jpg") return "jpeg";
+  if (!ext || ext.length > 5) return "autre";
+  return ext;
 }
 
 function toRow(url: string, severity: Severity, extras: Record<string, string | number | undefined> = {}): AdvIssueRow {
@@ -423,7 +434,10 @@ function buildIndexabilityCrawl(
 
   return {
     section,
-    slides: [cover, slideRobots, slideDepth, slideHttp, slideHreflang, slideCanonical, slideNoindex, slideLlms, slideReco],
+    // llms.txt was moved to the new GEO section — it sat awkwardly in
+    // "Indexabilité & crawl" because it's specifically an LLM signal, not a
+    // search-engine indexation lever.
+    slides: [cover, slideRobots, slideDepth, slideHttp, slideHreflang, slideCanonical, slideNoindex, slideReco],
   };
 }
 
@@ -1034,6 +1048,113 @@ function buildLinking(
     issues_count: brokenIssues.length,
   };
 
+  // ----- Liens internes 301 (chaînes de redirection) -----
+  // SF emits a per-redirect file in the Issues ZIP and the anchor file
+  // carries every link's destination status. Both feed this slide; we
+  // dedupe by (source, destination) to keep the volume actionable.
+  const redirectIssue = findIssue(issues, "http_internal_redirection");
+  const redirectsFromAnchors = anchors?.redirected_links || [];
+  const redirRows: AdvIssueRow[] = [];
+  const seenRedir = new Set<string>();
+  for (const line of (redirectIssue?.rows || [])) {
+    const key = line.url;
+    if (seenRedir.has(key)) continue;
+    seenRedir.add(key);
+    redirRows.push(toRow(line.url, "medium", {
+      code: line.extras["code http"] || line.extras["code de statut"] || "301",
+      target: line.extras["url de redirection"] || line.extras["redirect url"] || "",
+      source: "",
+      anchor: "",
+    }));
+  }
+  for (const rl of redirectsFromAnchors) {
+    const key = `${rl.source}|${rl.destination}`;
+    if (seenRedir.has(key)) continue;
+    seenRedir.add(key);
+    redirRows.push(toRow(rl.destination, rl.status === 302 ? "medium" : "low", {
+      code: rl.status,
+      target: "",
+      source: rl.source,
+      anchor: rl.anchor,
+    }));
+  }
+  const subRedirects: AdvSubcategory = {
+    id: "internal_redirects",
+    label: "Liens internes 301",
+    score: scoreFromRatio(redirRows.length / Math.max(rows.length, 1) * 0.3),
+    issues_full: redirRows,
+    columns: [
+      { key: "code", label: "Code", width: 10 },
+      { key: "source", label: "Page source", width: 60 },
+      { key: "url", label: "URL redirigée", width: 60 },
+      { key: "target", label: "Cible finale", width: 60 },
+      { key: "anchor", label: "Ancre", width: 30 },
+    ],
+    xlsx_sheet: "Liens 301 internes",
+  };
+  const slideRedirects: AdvSlide = {
+    kind: "data",
+    section_id: "linking",
+    sub_id: "internal_redirects",
+    title: "Liens internes 301 (chaînes de redirection)",
+    description: DESC_EXT.inlinks_301,
+    kpis: [
+      { label: "Liens vers redirections", value: redirRows.length, tone: redirRows.length === 0 ? "ok" : redirRows.length < 50 ? "warn" : "bad" },
+      { label: "Pages sources distinctes", value: new Set(redirRows.map((r) => r.source).filter(Boolean)).size, tone: "info" },
+    ],
+    xlsx_sheet: redirRows.length > 0 ? subRedirects.xlsx_sheet : undefined,
+    issues_count: redirRows.length,
+    takeaway: redirRows.length === 0
+      ? "Aucun lien interne vers une page redirigée ✓"
+      : `${redirRows.length} liens internes pointent vers des pages en 301/302 — à mettre à jour pour pointer directement sur la cible finale.`,
+  };
+
+  // ----- Liens HTTP (mixed content) -----
+  const httpLinksList = anchors?.http_links || [];
+  const httpIssue = findIssue(issues, "sec_inlinks_http");
+  const httpRows: AdvIssueRow[] = [];
+  const seenHttp = new Set<string>();
+  for (const line of (httpIssue?.rows || [])) {
+    const key = line.url;
+    if (seenHttp.has(key)) continue;
+    seenHttp.add(key);
+    httpRows.push(toRow(line.url, "high", { source: "", anchor: "" }));
+  }
+  for (const hl of httpLinksList) {
+    const key = `${hl.source}|${hl.destination}`;
+    if (seenHttp.has(key)) continue;
+    seenHttp.add(key);
+    httpRows.push(toRow(hl.destination, "high", { source: hl.source, anchor: hl.anchor }));
+  }
+  const subHttp: AdvSubcategory = {
+    id: "http_mixed_content",
+    label: "Liens en HTTP",
+    score: scoreFromRatio(httpRows.length / Math.max(rows.length, 1)),
+    issues_full: httpRows,
+    columns: [
+      { key: "url", label: "Destination HTTP", width: 60 },
+      { key: "source", label: "Page source", width: 60 },
+      { key: "anchor", label: "Ancre", width: 30 },
+    ],
+    xlsx_sheet: "Liens HTTP (mixte)",
+  };
+  const slideHttp: AdvSlide = {
+    kind: "data",
+    section_id: "linking",
+    sub_id: "http_mixed_content",
+    title: "Liens internes en HTTP (contenu mixte)",
+    description: DESC_EXT.http_mixed_content,
+    kpis: [
+      { label: "Liens HTTP", value: httpRows.length, tone: httpRows.length === 0 ? "ok" : "bad" },
+      { label: "Pages sources distinctes", value: new Set(httpRows.map((r) => r.source).filter(Boolean)).size, tone: "info" },
+    ],
+    xlsx_sheet: httpRows.length > 0 ? subHttp.xlsx_sheet : undefined,
+    issues_count: httpRows.length,
+    takeaway: httpRows.length === 0
+      ? "Aucun lien interne en HTTP ✓"
+      : `${httpRows.length} liens internes encore en HTTP — à passer en HTTPS pour éviter l'alerte de contenu mixte.`,
+  };
+
   // Orphans / under-linked
   const subOrphans: AdvSubcategory = {
     id: "orphan_pages",
@@ -1193,7 +1314,7 @@ function buildLinking(
     groups: recosForSection("linking"),
   };
 
-  const subcategories = [subOverview, subBroken, subOrphans, ...subAnchor];
+  const subcategories = [subOverview, subBroken, subRedirects, subHttp, subOrphans, ...subAnchor];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
   const section: AdvSection = {
     id: "linking",
@@ -1205,7 +1326,7 @@ function buildLinking(
   };
   return {
     section,
-    slides: [cover, slideOverview, slideBroken, slideOrphans, ...slidesAnchor, reco],
+    slides: [cover, slideOverview, slideBroken, slideRedirects, slideHttp, slideOrphans, ...slidesAnchor, reco],
   };
 }
 
@@ -1357,11 +1478,67 @@ function buildImages(
     issues_count: heavyRows.length,
   };
 
+  // ----- Format distribution (JPEG / PNG / WebP / AVIF / SVG / autre)
+  // Datashake-style insight: knowing that 98 % of the parc is still JPEG/PNG
+  // is far more actionable than just "X images > 100 Ko".
+  const formatCounts: Record<string, number> = {};
+  for (const img of imagesList) {
+    const ext = extractFormat(img.url);
+    formatCounts[ext] = (formatCounts[ext] || 0) + 1;
+  }
+  const totalImages = imagesList.length || 1;
+  const modernCount = (formatCounts["webp"] || 0) + (formatCounts["avif"] || 0);
+  const legacyCount = (formatCounts["jpeg"] || 0) + (formatCounts["jpg"] || 0) + (formatCounts["png"] || 0);
+  const modernPct = Math.round((modernCount / totalImages) * 1000) / 10;
+  const legacyPct = Math.round((legacyCount / totalImages) * 1000) / 10;
+
+  const subFormats: AdvSubcategory = {
+    id: "image_formats",
+    label: "Formats d'images",
+    score: scoreFromRatio(legacyCount / totalImages),
+    issues_full: [],
+    columns: [],
+    xlsx_sheet: "Formats d'images",
+  };
+  const formatSegments = Object.entries(formatCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([fmt, count]) => {
+      const color =
+        fmt === "webp" || fmt === "avif" ? COLORS.ok :
+        fmt === "svg" ? COLORS.info :
+        fmt === "jpeg" || fmt === "jpg" ? COLORS.warn :
+        fmt === "png" ? COLORS.warn :
+        COLORS.muted;
+      return { label: fmt.toUpperCase(), value: count, color };
+    });
+  const slideFormats: AdvSlide = {
+    kind: "data",
+    section_id: "images",
+    sub_id: "image_formats",
+    title: "Formats d'images servis",
+    description: DESC_EXT.image_formats,
+    kpis: [
+      { label: "Total images", value: imagesList.length, tone: "ok" },
+      { label: "Formats modernes (WebP/AVIF)", value: `${modernCount} · ${modernPct} %`, tone: modernPct >= 50 ? "ok" : modernPct > 0 ? "warn" : "bad" },
+      { label: "Formats legacy (JPEG/PNG)", value: `${legacyCount} · ${legacyPct} %`, tone: legacyPct < 30 ? "ok" : legacyPct < 70 ? "warn" : "bad" },
+    ],
+    chart: {
+      type: "donut",
+      segments: formatSegments,
+    },
+    issues_count: 0,
+    takeaway: modernPct === 0
+      ? `${legacyPct} % du parc en JPEG/PNG, WebP/AVIF quasi-absent — gros gain potentiel sur LCP en convertissant les visuels de dessus de page.`
+      : modernPct >= 50
+        ? `${modernPct} % du parc déjà en formats modernes — bonne base, à étendre.`
+        : `${modernPct} % en formats modernes — la conversion progresse, à poursuivre sur les LP stratégiques.`,
+  };
+
   const cover: AdvSlide = {
     kind: "section-cover",
     section_id: "images",
     title: SECTION_COVER.images.title,
-    eyebrow: "Partie 6 / 6",
+    eyebrow: "Partie 6 / 8",
     icon: SECTION_COVER.images.icon,
     bullets: SECTION_COVER.images.bullets,
   };
@@ -1372,7 +1549,7 @@ function buildImages(
     groups: recosForSection("images"),
   };
 
-  const subcategories = [subAlt, subSize, subWeight];
+  const subcategories = [subAlt, subSize, subWeight, subFormats];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
   const section: AdvSection = {
     id: "images",
@@ -1382,7 +1559,301 @@ function buildImages(
     summary: `${imagesList.length.toLocaleString("fr-FR")} images · ${altRows.length} sans alt · ${sizeAttrRows.length} sans dimensions · ${heavyCount + veryHeavy} > 100 Ko`,
     subcategories,
   };
-  return { section, slides: [cover, slideAlt, slideSize, slideWeight, reco] };
+  return { section, slides: [cover, slideAlt, slideSize, slideWeight, slideFormats, reco] };
+}
+
+// ---------- Données structurées section ------------------------------------
+
+// Schémas qu'on flag comme critiques pour une LP / un site e-commerce
+// classique. Order matters — the order here drives the "missing schemas"
+// list on the slide so the most impactful absences surface first.
+const CRITICAL_SCHEMAS: Array<{
+  schema: string;
+  label: string;
+  blurb: string;
+}> = [
+  { schema: "Organization", label: "Organization", blurb: "Identité de l'entreprise (logo, contact, profils sociaux) — fondation du Knowledge Panel." },
+  { schema: "WebSite", label: "WebSite", blurb: "Déclaration du site (URL, nom, recherche interne) — signal de base attendu sur la home." },
+  { schema: "BreadcrumbList", label: "BreadcrumbList", blurb: "Fil d'Ariane affichable directement en SERP — gros gain de lisibilité." },
+  { schema: "Product", label: "Product", blurb: "Pages produit : nom, image, marque, prix (avec Offer). Débloque les étoiles + prix en SERP." },
+  { schema: "Offer", label: "Offer", blurb: "Prix, disponibilité, devise — combiné à Product pour les rich results commerce." },
+  { schema: "AggregateRating", label: "AggregateRating", blurb: "Note moyenne + nombre d'avis — affiche les étoiles en SERP, +20-30 % de CTR." },
+  { schema: "FAQPage", label: "FAQPage", blurb: "Questions-réponses : affichage déroulant en SERP, capture les People Also Ask." },
+  { schema: "Article", label: "Article", blurb: "Articles éditoriaux : auteur, date, image — éligible à Top Stories." },
+  { schema: "LocalBusiness", label: "LocalBusiness", blurb: "Si présence physique : adresse, horaires, géoloc — débloque le Local Pack." },
+];
+
+function buildStructuredData(res: SiteResources | null): { section: AdvSection; slides: AdvSlide[] } {
+  const sd = res?.structured_data;
+  const homepageFetched = sd?.homepage_fetched === true;
+  const schemasFound = new Set(
+    (sd?.schemas_found || []).map((s) => s.toLowerCase()),
+  );
+  const blocksCount = sd?.blocks_count || 0;
+
+  const missing = CRITICAL_SCHEMAS.filter(
+    (c) => !schemasFound.has(c.schema.toLowerCase()),
+  );
+  const present = CRITICAL_SCHEMAS.filter(
+    (c) => schemasFound.has(c.schema.toLowerCase()),
+  );
+
+  // Section cover
+  const cover: AdvSlide = {
+    kind: "section-cover",
+    section_id: "structured_data",
+    title: SECTION_COVER.structured_data.title,
+    eyebrow: "Partie 7 / 8",
+    icon: SECTION_COVER.structured_data.icon,
+    bullets: SECTION_COVER.structured_data.bullets,
+  };
+
+  // Slide 1 — JSON-LD détectées sur la home
+  const slideDetected: AdvSlide = {
+    kind: "data",
+    section_id: "structured_data",
+    sub_id: "schemas_detected",
+    title: "Données structurées détectées sur la page d'accueil",
+    description: DESC_EXT.structured_data + (homepageFetched
+      ? `\n\nNous avons analysé le HTML de la page d'accueil et détecté ${blocksCount} bloc(s) JSON-LD, couvrant ${schemasFound.size} type(s) de schéma.`
+      : "\n\n⚠️ Impossible d'analyser la page d'accueil automatiquement. Vérifie manuellement avec l'outil Google Rich Results Test."),
+    kpis: [
+      { label: "Blocs JSON-LD", value: blocksCount, tone: blocksCount > 0 ? "ok" : "bad" },
+      { label: "Schémas distincts", value: schemasFound.size, tone: schemasFound.size > 2 ? "ok" : schemasFound.size > 0 ? "warn" : "bad" },
+      { label: "Schémas critiques manquants", value: missing.length, tone: missing.length === 0 ? "ok" : missing.length > 4 ? "bad" : "warn" },
+    ],
+    issues_count: 0,
+    takeaway: homepageFetched
+      ? (schemasFound.size === 0
+        ? "Aucun JSON-LD sur la home : c'est le premier signal manquant pour les rich snippets et les moteurs IA."
+        : missing.length > 4
+          ? `${missing.length} schémas critiques absents sur ${CRITICAL_SCHEMAS.length} attendus — fort potentiel d'amélioration.`
+          : `${present.length}/${CRITICAL_SCHEMAS.length} schémas critiques présents — bonne base, à étendre.`)
+      : undefined,
+  };
+
+  // Slide 2 — Schémas critiques absents (one per row)
+  const missingRows: AdvIssueRow[] = missing.map((m) => ({
+    url: m.schema,
+    severity: ["Organization", "WebSite", "Product"].includes(m.schema) ? "high" : "medium",
+    schema: m.schema,
+    impact: m.blurb,
+  } as AdvIssueRow));
+  const subDetected: AdvSubcategory = {
+    id: "schemas_detected",
+    label: "JSON-LD détectés",
+    score: schemasFound.size > 0 ? 100 : 0,
+    issues_full: [],
+    columns: [],
+    xlsx_sheet: "Données structurées",
+  };
+  const subMissing: AdvSubcategory = {
+    id: "schemas_missing",
+    label: "Schémas critiques manquants",
+    score: scoreFromRatio(missing.length / CRITICAL_SCHEMAS.length),
+    issues_full: missingRows,
+    columns: [
+      { key: "schema", label: "Schéma", width: 24 },
+      { key: "impact", label: "Pourquoi c'est important", width: 80 },
+    ],
+    xlsx_sheet: "Schémas manquants",
+  };
+
+  // Recommendations slide
+  const slideReco: AdvSlide = {
+    kind: "reco",
+    section_id: "structured_data",
+    title: "Recommandations — Données structurées",
+    groups: recosForSection("structured_data"),
+  };
+
+  const subcategories = [subDetected, subMissing];
+  const sectionScore = Math.round(
+    subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length,
+  );
+  const section: AdvSection = {
+    id: "structured_data",
+    label: "Données structurées",
+    score: sectionScore,
+    weight: 8,
+    summary: `${blocksCount} blocs JSON-LD · ${schemasFound.size} schémas distincts · ${missing.length} schémas critiques manquants`,
+    subcategories,
+  };
+
+  return { section, slides: [cover, slideDetected, slideReco] };
+}
+
+// ---------- GEO (Generative Engine Optimization) section --------------------
+
+const ALL_IA_BOTS = [
+  "gptbot", "chatgpt-user", "ccbot", "google-extended",
+  "claudebot", "anthropic-ai", "perplexitybot",
+  "applebot-extended", "bytespider", "meta-externalagent", "cohere-ai",
+];
+
+function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: AdvSection; slides: AdvSlide[] } {
+  const robots = res?.robots_txt;
+  const declared = robots?.ia_bots_declared || [];
+  const blocked = robots?.ia_bots_blocked || [];
+  const allowed = robots?.ia_bots_allowed || [];
+  const missing = ALL_IA_BOTS.filter((b) => !declared.includes(b));
+
+  // ----- Slide 1: Accès des crawlers IA -----
+  const subBots: AdvSubcategory = {
+    id: "ia_bots",
+    label: "Crawlers IA",
+    score: scoreFromRatio((blocked.length * 1 + missing.length * 0.2) / ALL_IA_BOTS.length),
+    issues_full: [
+      ...blocked.map((b) => ({
+        url: b,
+        severity: "critical" as Severity,
+        bot: b,
+        status: "Bloqué",
+        recommendation: "Retirer le Disallow: / ou remplacer par Allow: /",
+      } as AdvIssueRow)),
+      ...missing.map((b) => ({
+        url: b,
+        severity: "medium" as Severity,
+        bot: b,
+        status: "Non déclaré",
+        recommendation: "Ajouter User-agent: " + b + " avec Allow: /",
+      } as AdvIssueRow)),
+    ],
+    columns: [
+      { key: "bot", label: "Bot IA", width: 24 },
+      { key: "status", label: "Statut", width: 16 },
+      { key: "recommendation", label: "Action", width: 60 },
+    ],
+    xlsx_sheet: "Bots IA",
+  };
+  const slideBots: AdvSlide = {
+    kind: "data",
+    section_id: "geo",
+    sub_id: "ia_bots",
+    title: "Accès des crawlers IA dans le robots.txt",
+    description: DESC_EXT.ia_crawlers,
+    kpis: [
+      { label: "Bots IA déclarés", value: declared.length, tone: declared.length >= 4 ? "ok" : declared.length > 0 ? "warn" : "bad" },
+      { label: "Autorisés (Allow: /)", value: allowed.length, tone: allowed.length > 0 ? "ok" : "warn" },
+      { label: "Bloqués (Disallow: /)", value: blocked.length, tone: blocked.length === 0 ? "ok" : "bad" },
+      { label: "Non déclarés", value: missing.length, tone: missing.length > 6 ? "warn" : "ok" },
+    ],
+    xlsx_sheet: subBots.issues_full.length > 0 ? subBots.xlsx_sheet : undefined,
+    issues_count: subBots.issues_full.length,
+    takeaway: blocked.length > 0
+      ? `${blocked.length} bot(s) IA explicitement bloqué(s) — votre contenu n'apparaît pas dans leurs réponses.`
+      : declared.length === 0
+        ? "Aucun bot IA explicitement déclaré — l'accès passe par la règle User-agent: *. Déclarer explicitement supprime tout risque d'ambiguïté."
+        : `${declared.length} bot(s) IA déclaré(s) explicitement — bonne posture GEO.`,
+  };
+
+  // ----- Slide 2: Fichier llms.txt -----
+  const llmsFetched = res?.llms_txt.fetched === true;
+  const llmsLines = res?.llms_txt.lines ?? null;
+  const slideLlms: AdvSlide = {
+    kind: "info",
+    section_id: "geo",
+    sub_id: "llms_txt",
+    title: "Fichier llms.txt",
+    description: DESC.llms_txt,
+    facts: [
+      { label: "Statut sur le site", value: llmsFetched ? "✓ Présent" : "✗ Absent" },
+      { label: "Sites adopteurs (2026)", value: "+ 844 000" },
+      { label: "Adopteurs notables", value: "Anthropic, Cloudflare, Stripe" },
+    ],
+    callout: {
+      tone: "warn",
+      title: "À prendre avec des pincettes",
+      body: DESC.llms_txt_callout,
+    },
+  };
+
+  // ----- Slide 3: Rendu sans JavaScript (informational) -----
+  const slideJs: AdvSlide = {
+    kind: "info",
+    section_id: "geo",
+    sub_id: "js_rendering",
+    title: "Rendu sans JavaScript",
+    description: DESC_EXT.js_rendering,
+    facts: [
+      { label: "Bots IA exécutent JS ?", value: "Non" },
+      { label: "Googlebot exécute JS ?", value: "Oui (avec délai)" },
+      { label: "Méthode de test", value: "Cmd+U vs DOM final" },
+    ],
+    callout: {
+      tone: "info",
+      title: "Comment tester rapidement",
+      body: "Désactive JavaScript dans le navigateur (DevTools → Settings → Disable JavaScript) puis recharge la page. Tout ce qui disparaît est invisible pour les bots IA. À tester sur au moins une page de chaque template (home, fiche produit, article, FAQ, formulaire).",
+    },
+  };
+
+  // ----- Slide 4: Headers HTTP ETag & Last-Modified -----
+  const hsample = res?.headers_sample;
+  const sampled = hsample?.sample_size || 0;
+  const withEtag = hsample?.with_etag || 0;
+  const withLm = hsample?.with_last_modified || 0;
+  const subHeaders: AdvSubcategory = {
+    id: "http_headers",
+    label: "Headers HTTP (ETag / Last-Modified)",
+    score: sampled === 0 ? 50 : scoreFromRatio(1 - (withEtag / sampled)),
+    issues_full: [],
+    columns: [],
+    xlsx_sheet: "Headers HTTP",
+  };
+  const slideHeaders: AdvSlide = {
+    kind: "data",
+    section_id: "geo",
+    sub_id: "http_headers",
+    title: "Headers ETag & Last-Modified",
+    description: DESC_EXT.http_headers,
+    kpis: [
+      { label: "URLs échantillonnées", value: sampled, tone: "info" },
+      { label: "Avec ETag", value: withEtag, tone: sampled > 0 && withEtag === sampled ? "ok" : withEtag > 0 ? "warn" : "bad" },
+      { label: "Avec Last-Modified", value: withLm, tone: sampled > 0 && withLm === sampled ? "ok" : withLm > 0 ? "warn" : "bad" },
+      { label: "% couvertes", value: sampled > 0 ? `${Math.round(((withEtag + withLm) / (sampled * 2)) * 100)} %` : "—", tone: "info" },
+    ],
+    issues_count: 0,
+    takeaway: sampled === 0
+      ? "Échantillonnage indisponible — vérifie manuellement avec un curl -I sur quelques URLs."
+      : withEtag === sampled && withLm === sampled
+        ? "Toutes les pages échantillonnées renvoient ETag et Last-Modified ✓"
+        : withEtag === 0
+          ? "Aucune des pages échantillonnées n'a d'ETag : chaque crawl re-télécharge tout."
+          : `${sampled - withEtag} page(s) sans ETag — pertes de budget de crawl côté Googlebot et bots IA.`,
+  };
+
+  // Section cover + reco
+  const cover: AdvSlide = {
+    kind: "section-cover",
+    section_id: "geo",
+    title: SECTION_COVER.geo.title,
+    eyebrow: "Partie 8 / 8",
+    icon: SECTION_COVER.geo.icon,
+    bullets: SECTION_COVER.geo.bullets,
+  };
+  const slideReco: AdvSlide = {
+    kind: "reco",
+    section_id: "geo",
+    title: "Recommandations — Optimisation pour les IA (GEO)",
+    groups: recosForSection("geo"),
+  };
+
+  // Score: penalize blocked bots more than missing declarations
+  const botsScore = scoreFromRatio((blocked.length * 1 + Math.min(missing.length, 8) * 0.1) / 8);
+  const headersScore = subHeaders.score;
+  const llmsScore = llmsFetched ? 100 : 60;
+  const subcategories = [subBots, subHeaders];
+  const sectionScore = Math.round((botsScore + headersScore + llmsScore) / 3);
+  const section: AdvSection = {
+    id: "geo",
+    label: "Optimisation pour les IA (GEO)",
+    score: sectionScore,
+    weight: 12,
+    summary: `${declared.length}/${ALL_IA_BOTS.length} bots IA déclarés · llms.txt ${llmsFetched ? "présent" : "absent"} · ${sampled > 0 ? `${withEtag}/${sampled} ETag` : "headers non échantillonnés"}`,
+    subcategories,
+  };
+
+  return { section, slides: [cover, slideBots, slideLlms, slideJs, slideHeaders, slideReco] };
 }
 
 // ---------- Priorities -----------------------------------------------------
@@ -1508,8 +1979,14 @@ export function analyzeAdvanced(
   const { section: secStruct, slides: slStruct } = buildStructure(rows, issues);
   const { section: secLink, slides: slLink } = buildLinking(rows, issues, opts.anchors);
   const { section: secImg, slides: slImg } = buildImages(rows, issues, opts.images_all);
+  // New sections inspired by the datashake / SEO-agency benchmark:
+  //  • Données structurées (JSON-LD) — analyses the homepage HTML
+  //  • Optimisation pour les IA (GEO) — bots IA in robots.txt, llms.txt,
+  //    JS rendering, ETag/Last-Modified headers
+  const { section: secSD, slides: slSD } = buildStructuredData(opts.site_resources);
+  const { section: secGeo, slides: slGeo } = buildGeo(rows, opts.site_resources);
 
-  const sections = [secIdx, secPerf, secMeta, secStruct, secLink, secImg];
+  const sections = [secIdx, secPerf, secMeta, secStruct, secLink, secImg, secSD, secGeo];
   const totalWeight = sections.reduce((s, c) => s + c.weight, 0);
   const weightedSum = sections.reduce((s, c) => s + c.score * c.weight, 0);
   const global_score = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
@@ -1560,6 +2037,8 @@ export function analyzeAdvanced(
     ...slStruct,
     ...slLink,
     ...slImg,
+    ...slSD,
+    ...slGeo,
     prioritySlide,
   ];
 
