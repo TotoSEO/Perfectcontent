@@ -118,6 +118,17 @@ export default function AdvancedAuditPage() {
         ...audit.summary,
         sections: fullSections,
         slides: audit.summary.slides,
+        // Legacy audits saved before the diagnostics field was added —
+        // give the exporter a safe default so the Exclusions sheet
+        // still renders with zeros instead of crashing.
+        diagnostics: audit.summary.diagnostics || {
+          pagination_excluded_count: 0,
+          html_pages_count: audit.summary.html_count || 0,
+          indexable_html_count: 0,
+          contextual_links_count: 0,
+          editorial_links_count: 0,
+          empty_editorial_anchor_count: 0,
+        },
       };
       const { exportAdvancedToXlsx } = await import("@/lib/audit/advanced/export");
       await exportAdvancedToXlsx(fullReport, audit.name);

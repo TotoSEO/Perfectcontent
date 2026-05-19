@@ -22,7 +22,13 @@ type Stage =
   | "analyzing"
   | "saving";
 
-const MAX_ISSUES_PER_CAT = 800;
+// No artificial row cap any more — the XLSX is a client deliverable and
+// must carry every row. Vercel function bodies are capped at ~4.5 MB, so
+// we still apply a very-high safety ceiling per subcategory to avoid
+// catastrophic 413s on edge-case audits; 50 000 rows × ~250 B ≈ 12.5 MB
+// which is over the limit, so we cap there as a last resort. Realistic
+// audits (a few thousand rows per category) flow through untouched.
+const MAX_ISSUES_PER_CAT = 50_000;
 
 const UPLOAD_GUIDE: Array<{
   num: number;
@@ -108,6 +114,7 @@ export default function NewAdvancedAuditPage() {
         site_resources: siteRes,
         anchors,
         images_all: images,
+        pagination_excluded: internalStats?.pagination_skipped ?? 0,
       });
       setReport(r);
     },
@@ -238,6 +245,7 @@ export default function NewAdvancedAuditPage() {
         url_count: report.url_count,
         html_count: report.html_count,
         domain: report.domain,
+        diagnostics: report.diagnostics,
         site_resources: report.site_resources,
         priorities: report.priorities,
         sections: report.sections.map((s) => ({

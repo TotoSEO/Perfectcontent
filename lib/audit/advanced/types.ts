@@ -28,10 +28,15 @@ export type AdvIssueRow = {
 export type AnchorRow = {
   source: string;
   destination: string;
-  anchor: string;
-  position: string; // "Body" / "Header" / "Footer" / "Nav" / ...
-  is_generic: boolean;
-  is_empty: boolean;
+  anchor: string;            // raw Ancrage, else Texte Alt fallback
+  position: string;          // Contenu / Navigation / En-tête / Pied de page
+  is_generic: boolean;       // anchor text in the generic list (ici, cliquez…)
+  is_empty: boolean;         // BOTH Ancrage AND Texte Alt are empty
+  is_template_cta: boolean;  // anchor matches a templated CTA wording
+  is_image_link: boolean;    // <a><img alt="…"></a> — not a real anchor
+  is_card_like: boolean;     // Chemin du lien matches a card pattern
+  is_button_like: boolean;   // Chemin du lien matches a button pattern
+  link_path: string;         // raw Chemin du lien for the XLSX export
 };
 
 export type AnchorDestinationSummary = {
@@ -171,6 +176,34 @@ export type AdvSection = {
   subcategories: AdvSubcategory[];
 };
 
+// Transparency block surfaced in the XLSX "Exclusions" sheet and used
+// by some slide footers to make the analysis perimeter explicit.
+export type AuditDiagnostics = {
+  // URLs detected as pagination and excluded from every count.
+  pagination_excluded_count: number;
+  // Total HTML pages found in interne_html.csv (text/html content type)
+  // after pagination filtering. Used by slides that need to display the
+  // "perimeter" footnote.
+  html_pages_count: number;
+  // Indexable subset of html_pages_count.
+  indexable_html_count: number;
+  // Total contextual links found in liens_entrants_tous.csv (Position=Contenu).
+  contextual_links_count: number;
+  // Editorial subset of contextual links (after CTA / card / button / image filter).
+  editorial_links_count: number;
+  // Empty editorial anchors (no Ancrage and no Texte Alt).
+  empty_editorial_anchor_count: number;
+  // Per-bucket counters for the anchor filtering (templated CTA, image-
+  // wrapping, card-like path, button-like path, pagination destination).
+  anchor_filter_breakdown?: {
+    template_cta: number;
+    image_wrapping: number;
+    card_path: number;
+    button_path: number;
+    pagination_dest: number;
+  };
+};
+
 export type AdvReport = {
   schema_version: 1;
   audit_type: "advanced";
@@ -180,6 +213,7 @@ export type AdvReport = {
   url_count: number;
   html_count: number;
   global_score: number;
+  diagnostics: AuditDiagnostics;
   // Site-level inputs fetched server-side (robots.txt / sitemap.xml / llms.txt)
   // : may be null on failure; the slide degrades gracefully.
   site_resources: {

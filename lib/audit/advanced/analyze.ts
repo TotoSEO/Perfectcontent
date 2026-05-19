@@ -50,6 +50,15 @@ function scoreFromRatio(badRatio: number): number {
   return Math.round(clamp(100 * (1 - clamp(badRatio, 0, 1))));
 }
 
+// Strict scoring used by the maillage subcategories. The previous
+// scoreFromRatio decayed too slowly (a 28% orphan ratio still scored
+// ~72/100). With this variant, score 100 at 0% bad, 50 at `badAt`,
+// 0 at `4*badAt`. Tighter penalty on what should be a small ratio.
+function scoreStrict(badRatio: number, badAt = 0.05): number {
+  const r = Math.max(0, Math.min(1, badRatio / (badAt * 4)));
+  return Math.round(100 * (1 - r));
+}
+
 // Extract a normalised image format from a URL. Used by the format
 // distribution slide. Falls back to "autre" for unknown or missing
 // extensions, normalises "jpg" → "jpeg" so the chart doesn't split them.
@@ -332,9 +341,14 @@ function buildIndexabilityCrawl(
   };
 
   // ----- URLs without canonical (computed from interne_html.csv)
+  // Perimeter = ALL HTML pages (hors pagination), not just indexable.
+  // A page without a canonical tag is a problem regardless of its
+  // indexability — Google may pick a different URL as canonical, and
+  // a noindex page without canonical can still appear in the index
+  // if Google chooses to ignore the noindex.
   let missingCanon = 0, selfCanon = 0, crossCanon = 0;
   const noCanonRows: AdvIssueRow[] = [];
-  for (const r of html.filter(isIndexable)) {
+  for (const r of html) {
     const c = (r.canonical || "").trim();
     if (!c) {
       missingCanon++;
@@ -604,9 +618,18 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
 // ---------- Meta section ---------------------------------------------------
 
 function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSection; slides: AdvSlide[] } {
-  const html = rows.filter(isHtml).filter(isIndexable);
+  // Perimeter for title/meta/H1 checks = ALL HTML pages (not just
+  // indexable). A title missing on a noindex page is still a title
+  // missing — the client needs to see it to validate that the noindex
+  // is intentional. Restricting to indexable previously hid real issues.
+  const html = rows.filter(isHtml);
+  // Indexable HTML — used for the *duplicate* counts (duplicates on
+  // noindex pages are rarely actionable since the pages aren't in
+  // search).
+  const htmlIndexable = html.filter(isIndexable);
 
-  // Compute basic counts on the spot (lengths, missing)
+  // Compute basic counts on the spot (lengths, missing) — on the full HTML
+  // perimeter, not just indexable.
   let titleMissing = 0, metaMissing = 0, h1Missing = 0;
   let titleShort = 0, titleLong = 0, metaShort = 0, metaLong = 0;
   for (const r of html) {
@@ -949,10 +972,18 @@ function buildLinking(
       orphanRows.push(toRow(r.url, "low", { inlinks: contextualInlinks ? inlinksFor(r.url) : (r.inlinks ?? 0), outlinks: 0, problem: "Cul-de-sac (0 lien sortant)" }));
     }
   }
+  const orphanRatio = orphans / Math.max(html.length, 1);
+  const underlinkedRatio = (orphans + low) / Math.max(html.length, 1);
   const subOverview: AdvSubcategory = {
     id: "internal_linking_overview",
     label: "Maillage : vue d'ensemble",
-    score: scoreFromRatio((orphans + low * 0.5 + noOutlinks * 0.2) / Math.max(html.length, 1)),
+    // Strict scoring : at 1% orphans we already drop into "warning"
+    // territory; at 5% orphans we hit zero. Same for the broader
+    // "under-linked" pool (orphans + 1-2 inlinks).
+    score: Math.min(
+      scoreStrict(orphanRatio, 0.01),         // > 1% orphans = real problem
+      scoreStrict(underlinkedRatio, 0.05),    // > 5% under-linked = real problem
+    ),
     issues_full: [],
     columns: [],
     xlsx_sheet: "Maillage : vue",
@@ -1054,7 +1085,9 @@ function buildLinking(
   const subBroken: AdvSubcategory = {
     id: "broken_links",
     label: "Liens rompus",
-    score: scoreFromRatio(brokenIssues.length / Math.max(rows.length, 1)),
+    // Broken links should be ZERO. Strict scoring : even a small ratio
+    // (1% of pages with broken links) drops the score significantly.
+    score: scoreStrict(brokenIssues.length / Math.max(rows.length, 1), 0.005),
     issues_full: brokenIssues,
     columns: [
       { key: "type", label: "Origine", width: 12 },
@@ -1114,7 +1147,12 @@ function buildLinking(
   const subRedirects: AdvSubcategory = {
     id: "internal_redirects",
     label: "Liens internes 301",
-    score: scoreFromRatio(redirRows.length / Math.max(rows.length, 1) * 0.3),
+    // Ratio = redirected internal links / total contextual links. Strict
+    // at 10% : a healthy site has < 1-2% redirects in editorial links.
+    score: scoreStrict(
+      redirRows.length / Math.max(anchors?.total_editorial_links || rows.length, 1),
+      0.10,
+    ),
     issues_full: redirRows,
     columns: [
       { key: "code", label: "Code", width: 10 },
@@ -1188,11 +1226,15 @@ function buildLinking(
       : `${httpRows.length} liens internes encore en HTTP : à passer en HTTPS pour éviter l'alerte de contenu mixte.`,
   };
 
-  // Orphans / under-linked
+  // Orphans / under-linked. Strict scoring : > 1% orphans is bad,
+  // > 5% is critical.
   const subOrphans: AdvSubcategory = {
     id: "orphan_pages",
     label: "Pages orphelines",
-    score: scoreFromRatio((orphans + low * 0.5) / Math.max(html.length, 1)),
+    score: Math.min(
+      scoreStrict(orphans / Math.max(html.length, 1), 0.01),
+      scoreStrict((orphans + low) / Math.max(html.length, 1), 0.05),
+    ),
     issues_full: orphanRows,
     columns: [
       { key: "problem", label: "Problème", width: 40 },
@@ -2024,20 +2066,27 @@ function buildPriorities(sections: AdvSection[]): PriorityItem[] {
       // Aggregate severity counts
       const sevCount = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
       for (const r of sub.issues_full) sevCount[r.severity]++;
-      // Score: severity-weighted volume × section impact
+      const affected = sub.issues_full.length;
+      // Severity-weighted base score, biased by section weight.
       const rawScore = (
         sevCount.critical * SEV_WEIGHT.critical +
         sevCount.high * SEV_WEIGHT.high +
         sevCount.medium * SEV_WEIGHT.medium +
         sevCount.low * SEV_WEIGHT.low
       ) * secWeight;
+      // Urgency : volume-aware so a 1 250-row "low severity" finding
+      // doesn't get classed Low. Major refactor from the previous
+      // logic which never escalated on volume alone.
       const urgency: PriorityItem["urgency"] =
-        sevCount.critical > 0 ? "critical"
-          : sevCount.high > 5 ? "high"
-            : sevCount.high > 0 || sevCount.medium > 10 ? "medium"
+        sevCount.critical > 0 || affected > 2000 ? "critical"
+          : sevCount.high > 5 || affected > 500 ? "high"
+            : sevCount.high > 0 || sevCount.medium > 10 || affected > 100 ? "medium"
               : "low";
       const effort = SUB_EFFORT[sub.id] || "medium";
-      const impact: PriorityItem["impact"] = secWeight >= 1.1 ? "high" : secWeight >= 0.9 ? "medium" : "low";
+      // Impact : blend section weight + volume so a low-weight section
+      // with thousands of problems doesn't read as "Faible impact".
+      const impactScore = secWeight * 0.5 + Math.min(affected / 100, 10) * 0.5;
+      const impact: PriorityItem["impact"] = impactScore >= 1.5 ? "high" : impactScore >= 0.8 ? "medium" : "low";
       items.push({
         rank: 0,
         section_id: sec.id,
@@ -2077,6 +2126,10 @@ export type AdvancedAnalyzeOpts = {
   site_resources: SiteResources | null;
   anchors: AnchorsParseResult | null;
   images_all: ImagesAllParseResult | null;
+  // How many pagination URLs were stripped from interne_html.csv at
+  // parse time. Threaded through into report.diagnostics for the
+  // Exclusions sheet in the XLSX.
+  pagination_excluded?: number;
 };
 
 export function analyzeAdvanced(
@@ -2155,6 +2208,24 @@ export function analyzeAdvanced(
     prioritySlide,
   ];
 
+  const diagnostics: AdvReport["diagnostics"] = {
+    pagination_excluded_count: opts.pagination_excluded ?? 0,
+    html_pages_count: htmlCount,
+    indexable_html_count: rows.filter(isHtml).filter(isIndexable).length,
+    contextual_links_count: opts.anchors?.total_links_filtered ?? 0,
+    editorial_links_count: opts.anchors?.total_editorial_links ?? 0,
+    empty_editorial_anchor_count: opts.anchors?.empty_editorial_anchors ?? 0,
+    anchor_filter_breakdown: opts.anchors?.filtered_breakdown
+      ? {
+        template_cta: opts.anchors.filtered_breakdown.template_cta,
+        image_wrapping: opts.anchors.filtered_breakdown.image_wrapping,
+        card_path: opts.anchors.filtered_breakdown.card_path,
+        button_path: opts.anchors.filtered_breakdown.button_path,
+        pagination_dest: opts.anchors.filtered_breakdown.pagination_dest,
+      }
+      : undefined,
+  };
+
   return {
     schema_version: 1,
     audit_type: "advanced",
@@ -2164,6 +2235,7 @@ export function analyzeAdvanced(
     url_count: rows.length,
     html_count: htmlCount,
     global_score,
+    diagnostics,
     site_resources: opts.site_resources,
     sections,
     priorities,
