@@ -1,26 +1,34 @@
 // PDF export for the advanced audit deck.
 //
-// Constraints from the user :
-//   • One slide = one PDF page (no aggregation, no margins, no extra pages)
-//   • The PDF must look EXACTLY like the visualisation : same fonts, same
-//     positioning, same colours. Pixel-perfect when possible.
-//   • No drift in dimensions : the slide's 16:9 ratio must be preserved
-//     end-to-end, with NO empty bands at top/bottom.
+// Constraints from the user:
+//   • 1 slide = 1 PDF page (no aggregation, no extra pages)
+//   • PDF must look EXACTLY like the visualisation: same fonts, colours,
+//     positioning. The image must FILL the page — no black bands.
+//   • No drift in dimensions: the slide's 16:9 ratio must be preserved
+//     end-to-end.
 //
-// Implementation :
-//   • Each slide is rendered in the DOM at a fixed design size (1600×900,
-//     the same canvas we use everywhere). We snapshot each slide with
-//     html2canvas at scale=2 (Retina-friendly, ~3200×1800 raw).
-//   • We create a jsPDF document whose page size is EXACTLY the slide's
-//     pixel size (in jsPDF "px" units), so the embedded image lays out
-//     1:1 with no scaling artefact and no margin.
-//   • Each slide becomes one PDF page (pdf.addPage(...) for subsequent
-//     slides).
-//
-// Loading the heavy deps (jsPDF, html2canvas) is deferred behind dynamic
-// import() so the main bundle stays small until the user actually clicks
-// "Exporter en PDF".
+// Implementation notes:
+//   • We pick a fixed 16:9 PAGE SIZE IN MM (the most reliable unit in
+//     jsPDF — pt and px both have version-dependent quirks). 297 mm wide
+//     × 167.0625 mm tall = perfect 16:9.
+//   • Each slide is captured at the size it currently occupies in the
+//     DOM, with html2canvas at scale 2 for Retina quality. The resulting
+//     canvas is downscaled to fit the PDF page exactly. No empty bands
+//     because the page is the same aspect ratio as the slide and the
+//     image is drawn at (0, 0, PAGE_W, PAGE_H).
+//   • Each slide is scroll-into-viewed before capture so the browser has
+//     done a full layout pass (and any virtualised content is rendered).
+//   • Heavy deps (jspdf, html2canvas) are dynamic-imported so they don't
+//     ship in the main bundle.
 
+// 16:9 landscape page sized to match A4-width. Any 16:9 size would work,
+// what matters is that the aspect ratio matches the slide so the image
+// fills the page without bars.
+const PAGE_W_MM = 297;
+const PAGE_H_MM = (297 * 9) / 16; // 167.0625
+// Slide design canvas. Every snapshot is forced to this resolution
+// regardless of the user's viewport so the captured layout is identical
+// across desktop / laptop / external monitor / Vercel preview iframe.
 const SLIDE_W = 1600;
 const SLIDE_H = 900;
 const RENDER_SCALE = 2;
@@ -34,8 +42,6 @@ export async function exportDeckToPdf(
 ): Promise<void> {
   const { default: jsPDF } = await import("jspdf");
 
-  // Grab every slide currently in the DOM. We rely on the data-attribute
-  // hook added by the viewer (the AdvSlide wrapper sets data-pdf-slide).
   const container = document.querySelector(containerSelector);
   if (!container) {
     throw new Error(`Conteneur '${containerSelector}' introuvable dans le DOM.`);
@@ -44,17 +50,16 @@ export async function exportDeckToPdf(
     container.querySelectorAll<HTMLElement>("[data-pdf-slide]"),
   );
   if (nodes.length === 0) {
-    throw new Error("Aucune slide à exporter. Attends que les slides soient affichées avant de lancer l'export.");
+    throw new Error("Aucune slide à exporter. Attendez que les slides soient affichées avant de lancer l'export.");
   }
 
-  // PDF page sized to match the slide pixel-for-pixel — no margins, no
-  // empty bands, no aspect-ratio drift.
+  // The page is a 16:9 landscape page in millimetres. mm is the safest
+  // unit in jsPDF (px and pt have version-dependent scaling bugs).
   const pdf = new jsPDF({
-    orientation: SLIDE_W >= SLIDE_H ? "landscape" : "portrait",
-    unit: "px",
-    format: [SLIDE_W, SLIDE_H],
+    orientation: "landscape",
+    unit: "mm",
+    format: [PAGE_W_MM, PAGE_H_MM],
     compress: true,
-    hotfixes: ["px_scaling"],
   });
 
   const failedSlides: number[] = [];
@@ -62,26 +67,31 @@ export async function exportDeckToPdf(
   for (let i = 0; i < nodes.length; i++) {
     onProgress?.(i, nodes.length);
     const node = nodes[i];
-    // Wait for layout / fonts / images to settle before snapshot.
+
+    // Bring the slide into view first. Lazy / off-screen elements
+    // sometimes report wrong dimensions until they hit the viewport.
+    node.scrollIntoView({ block: "center", behavior: "auto" });
+    // One animation frame is enough for layout to settle.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
     await waitForImagesAndFonts(node);
 
     let canvas: HTMLCanvasElement;
     try {
       canvas = await captureSlide(node);
+      // Defensive: if html2canvas somehow returned a 0×0 canvas, treat
+      // as a failure rather than silently producing a blank page.
+      if (!canvas.width || !canvas.height) {
+        throw new Error(`canvas reçu en ${canvas.width}×${canvas.height}`);
+      }
     } catch (err) {
-      // html2canvas occasionally fails on a single slide (a CSS feature
-      // it can't render, a third-party image with bad CORS, etc.).
-      // Rather than failing the whole 48-slide export, we emit a stand-in
-      // page that names the slide and asks the user to capture it
-      // manually, then keep going.
       console.warn(`[pdf] slide ${i + 1} capture failed:`, err);
       failedSlides.push(i + 1);
-      if (i > 0) pdf.addPage([SLIDE_W, SLIDE_H], "landscape");
-      pdf.setFontSize(18);
+      if (i > 0) pdf.addPage([PAGE_W_MM, PAGE_H_MM], "landscape");
+      pdf.setFontSize(16);
       pdf.text(
         `Slide ${i + 1} non capturée. Capture manuelle requise.`,
-        SLIDE_W / 2,
-        SLIDE_H / 2,
+        PAGE_W_MM / 2,
+        PAGE_H_MM / 2,
         { align: "center" },
       );
       continue;
@@ -91,10 +101,10 @@ export async function exportDeckToPdf(
     const imgData = canvas.toDataURL("image/jpeg", 0.92);
 
     if (i > 0) {
-      pdf.addPage([SLIDE_W, SLIDE_H], "landscape");
+      pdf.addPage([PAGE_W_MM, PAGE_H_MM], "landscape");
     }
-    // Position at (0, 0) with the full page size, zero margins.
-    pdf.addImage(imgData, "JPEG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
+    // (0, 0) with the FULL page size = zero margins, fills the page.
+    pdf.addImage(imgData, "JPEG", 0, 0, PAGE_W_MM, PAGE_H_MM, undefined, "FAST");
   }
 
   onProgress?.(nodes.length, nodes.length);
@@ -103,8 +113,6 @@ export async function exportDeckToPdf(
   pdf.save(`audit-avance-${safeName || "seo"}-${date}.pdf`);
 
   if (failedSlides.length > 0) {
-    // Don't throw — the export still succeeded for most slides. We just
-    // surface a warning so the caller can show a note in the UI.
     throw new Error(
       `PDF généré, mais ${failedSlides.length} slide(s) non capturée(s) : ${failedSlides.join(", ")}. ` +
         "Captures manuelles à intégrer dans les pages correspondantes.",
@@ -118,34 +126,41 @@ async function captureSlide(node: HTMLElement): Promise<HTMLCanvasElement> {
     scale: RENDER_SCALE,
     useCORS: true,
     allowTaint: false,
-    backgroundColor: null,
+    backgroundColor: "#FFFCF7", // paper colour: avoids transparent areas that some PDF viewers render black
     logging: false,
-    // Pin the rendering width/height to the design size so the canvas
-    // never gets resized by the responsive scaling of the page,
-    // ensuring the PDF page matches the visualisation 1:1.
-    width: node.offsetWidth,
-    height: node.offsetHeight,
-    windowWidth: node.offsetWidth,
-    windowHeight: node.offsetHeight,
-    // The cloned DOM is mutated *only* for the snapshot, the on-screen
-    // slide is untouched. We use this to sand off CSS that html2canvas
-    // doesn't render well :
-    //   • dashed / dotted borders trigger 'createPattern' with a 0×0
-    //     pattern canvas — the exact error the user just hit.
-    //   • backdrop-filter is a no-op on canvas and may leave artefacts.
-    // Replacing both with their solid / no-op equivalents keeps the
-    // visual approximation right without crashing the export.
+    // Force the snapshot to render the slide at its DESIGN resolution
+    // (1600×900), not at the user's current viewport size. Without this,
+    // the layout looked broken on narrower screens (overlapping flex
+    // items, charts spilling over, etc.) because Tailwind responsive
+    // breakpoints didn't fire.
+    width: SLIDE_W,
+    height: SLIDE_H,
+    windowWidth: SLIDE_W,
+    windowHeight: SLIDE_H,
+    // The cloned DOM is mutated only for the snapshot; the on-screen
+    // slide is untouched.
+    //   • Pin the slide to 1600×900 explicitly (Tailwind's aspect-ratio
+    //     based sizing doesn't always survive html2canvas's
+    //     re-layout pass).
+    //   • Strip CSS features that crash html2canvas: dashed/dotted
+    //     borders + outlines (createPattern with 0×0), backdrop-filter
+    //     (no-op + artefacts), bitmap url() backgrounds.
     onclone: (clonedDoc) => {
+      // Pin every slide root to design size before html2canvas walks it.
+      const slides = clonedDoc.querySelectorAll<HTMLElement>("[data-pdf-slide]");
+      slides.forEach((s) => {
+        s.style.width = SLIDE_W + "px";
+        s.style.height = SLIDE_H + "px";
+        s.style.maxWidth = "none";
+        s.style.aspectRatio = "auto";
+      });
       const els = clonedDoc.querySelectorAll<HTMLElement>("*");
       els.forEach((el) => {
         const s = el.style;
-        if (s.borderStyle === "dashed" || s.borderStyle === "dotted") {
-          s.borderStyle = "solid";
-        }
-        // The shorthand `border: 2px dashed …` puts dashed inside `border`.
-        // Same for explicit sides.
-        for (const prop of ["border", "borderTop", "borderRight", "borderBottom", "borderLeft"] as const) {
-          const v = s[prop as keyof CSSStyleDeclaration] as string | undefined;
+        if (s.borderStyle === "dashed" || s.borderStyle === "dotted") s.borderStyle = "solid";
+        if (s.outlineStyle === "dashed" || s.outlineStyle === "dotted") s.outlineStyle = "solid";
+        for (const prop of ["border", "borderTop", "borderRight", "borderBottom", "borderLeft", "outline"] as const) {
+          const v = (s as unknown as Record<string, string>)[prop];
           if (v && /\b(dashed|dotted)\b/.test(v)) {
             (s as unknown as Record<string, string>)[prop] = v
               .replace(/\bdashed\b/g, "solid")
@@ -153,14 +168,22 @@ async function captureSlide(node: HTMLElement): Promise<HTMLCanvasElement> {
           }
         }
         if (s.backdropFilter) s.backdropFilter = "";
+        const wkBackdrop = (s as unknown as Record<string, string>)["webkitBackdropFilter"];
+        if (wkBackdrop) (s as unknown as Record<string, string>)["webkitBackdropFilter"] = "";
+        if (s.backgroundImage && /\burl\s*\(/i.test(s.backgroundImage)) {
+          s.backgroundImage = "none";
+        }
       });
+      // Remove the body::after grain so it can't leak into the capture,
+      // and force every slide to a known background.
+      const style = clonedDoc.createElement("style");
+      style.textContent = `body::after, body::before { display: none !important; content: none !important; }
+        [data-pdf-slide] { background: #FFFCF7; }`;
+      clonedDoc.head.appendChild(style);
     },
   });
 }
 
-// Make sure every <img> in the node is loaded and the page's fonts are
-// applied before we snapshot — otherwise html2canvas captures missing
-// glyphs or broken images.
 async function waitForImagesAndFonts(node: HTMLElement): Promise<void> {
   const imgs = Array.from(node.querySelectorAll<HTMLImageElement>("img"));
   const imgPromises = imgs.map((img) => {
@@ -168,7 +191,6 @@ async function waitForImagesAndFonts(node: HTMLElement): Promise<void> {
     return new Promise<void>((resolve) => {
       img.addEventListener("load", () => resolve(), { once: true });
       img.addEventListener("error", () => resolve(), { once: true });
-      // safety timeout : never block forever on a missing asset
       setTimeout(resolve, 3000);
     });
   });
