@@ -1198,7 +1198,7 @@ function buildImages(
     kind: "data",
     section_id: "images",
     sub_id: "image_alt",
-    title: "Images sans alt text",
+    title: "Images sans attribut alt",
     description: DESC.images_alt,
     kpis: [
       { label: "Images crawlées", value: imagesList.length, tone: "ok" },
