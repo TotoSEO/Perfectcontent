@@ -393,25 +393,8 @@ function buildIndexabilityCrawl(
       : `${noindexRows.length} page(s) noindex : vérifier qu'elles sont bien volontairement exclues.`,
   };
 
-  // ----- LLMS.TXT (informational slide — analysis text only)
-  const llmsFetched = res?.llms_txt.fetched === true;
-  const slideLlms: AdvSlide = {
-    kind: "info",
-    section_id: "indexability_crawl",
-    sub_id: "llms_txt",
-    title: "Fichier llms.txt",
-    description: DESC.llms_txt,
-    facts: [
-      { label: "Statut sur le site", value: llmsFetched ? "✓ Présent" : "✗ Absent" },
-      { label: "Sites adopteurs", value: "+ 844 000" },
-      { label: "Adopteurs notables", value: "Anthropic, Cloudflare, Stripe" },
-    ],
-    callout: {
-      tone: "warn",
-      title: "À prendre avec des pincettes",
-      body: DESC.llms_txt_callout,
-    },
-  };
+  // (LLMS.txt slide moved to the GEO section — buildGeo() creates it now,
+  //  which is where it belongs thematically.)
 
   // ----- Recommendations slide
   const slideReco: AdvSlide = {
@@ -1865,6 +1848,8 @@ const SECTION_WEIGHT_FOR_PRIORITY: Record<string, number> = {
   structure: 0.7,
   linking: 1.1,
   images: 0.7,
+  structured_data: 0.9,
+  geo: 1.0,
 };
 
 const SEV_WEIGHT: Record<string, number> = {
@@ -1894,12 +1879,19 @@ const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
   hn_hierarchy: "deep",
   internal_linking_overview: "deep",
   broken_links: "quick-win",
+  internal_redirects: "quick-win",
+  http_mixed_content: "quick-win",
   orphan_pages: "medium",
   anchors_links: "deep",
   anchors_destinations: "deep",
   image_alt: "medium",
   image_size_attr: "quick-win",
   image_weight: "medium",
+  image_formats: "medium",
+  schemas_detected: "medium",
+  schemas_missing: "medium",
+  ia_bots: "quick-win",
+  http_headers: "medium",
 };
 
 function buildPriorities(sections: AdvSection[]): PriorityItem[] {
