@@ -141,7 +141,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
         section: sec?.label || p.section_id,
         title: p.title,
         affected: p.affected,
-        effort: p.effort === "quick-win" ? "Quick win" : p.effort === "medium" ? "Modéré" : "Chantier",
+        effort: p.effort === "quick-win" ? "Action rapide" : p.effort === "medium" ? "Effort modéré" : "Chantier de fond",
         impact: p.impact === "high" ? "Fort" : p.impact === "medium" ? "Modéré" : "Faible",
         rationale: p.rationale,
       });
@@ -194,9 +194,13 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
           sc.font = { color: { argb: fg }, bold: true };
           sc.alignment = { horizontal: "center" };
         }
-        // URL columns become hyperlinks. We treat "url", "source",
-        // "destination" specifically.
+        // URL-like columns become hyperlinks. Only touch columns we declared
+        // for this sheet — calling getCell() with a key that doesn't match
+        // any column triggers exceljs's "Out of bounds. Excel supports
+        // columns from 1 to 16384" because the column index resolves to NaN.
+        const declaredKeys = new Set(sub.columns.map((c) => c.key));
         for (const key of ["url", "source", "destination"]) {
+          if (!declaredKeys.has(key)) continue;
           const cell = wsRow.getCell(key);
           const v = data[key];
           if (typeof v === "string" && /^https?:\/\//.test(v)) {

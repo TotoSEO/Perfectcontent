@@ -64,7 +64,18 @@ export async function parseImagesAllCsv(file: File): Promise<ImagesAllParseResul
 }
 
 export function parseImagesAllCsvText(textRaw: string, filename: string | null): ImagesAllParseResult {
-  const text = textRaw.replace(/^﻿/, "");
+  let text = textRaw.replace(/^﻿/, "");
+  // Some Screaming Frog exports prepend a banner line ("Spider Export …")
+  // before the real header row. Walk down to the row that contains an
+  // Adresse / Address / URL column header.
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    const probe = normalizeKey(lines[i]);
+    if (/(?:^|[,;\t])\s*(adresse|address|url)(?:[,;\t]|$)/.test(probe)) {
+      if (i > 0) text = lines.slice(i).join("\n");
+      break;
+    }
+  }
   const result = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: "greedy",

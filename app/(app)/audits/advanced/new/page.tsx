@@ -372,9 +372,16 @@ export default function NewAdvancedAuditPage() {
         onPick={onPickAnchors}
         statusLine={anchorsResult && anchorsFile && (
           <>
-            <span className="text-emerald-400">✓ {anchorsResult.total_links_filtered.toLocaleString("fr-FR")} liens contextuels</span>
-            <span className="text-zinc-500"> ({anchorsResult.total_links_raw.toLocaleString("fr-FR")} lus, le reste filtré : nav/header/footer/images/JS)</span>
+            <span className={anchorsResult.total_links_filtered > 0 ? "text-emerald-400" : "text-amber-400"}>
+              {anchorsResult.total_links_filtered > 0 ? "✓" : "⚠"} {anchorsResult.total_links_filtered.toLocaleString("fr-FR")} liens contextuels
+            </span>
+            <span className="text-zinc-500"> ({anchorsResult.total_links_raw.toLocaleString("fr-FR")} lus, le reste filtré : nav/header/footer/menu/non-hyperlinks/externes)</span>
             {" · "}{(anchorsFile.size / 1024 / 1024).toFixed(1)} MB
+            {anchorsResult.total_links_filtered === 0 && anchorsResult.total_links_raw > 0 && (
+              <div className="text-amber-300 mt-1 text-[11px]">
+                Aucun lien contextuel après filtrage. Vérifie que ton export inclut bien les colonnes <em>Type</em>, <em>Origine du lien</em> et <em>Chemin du lien</em>. Si tous tes liens internes sont dans <code className="text-zinc-400 text-[10px]">.nav</code> / <code className="text-zinc-400 text-[10px]">.header</code> / <code className="text-zinc-400 text-[10px]">.footer</code>, le filtre les exclut volontairement.
+              </div>
+            )}
           </>
         )}
       />

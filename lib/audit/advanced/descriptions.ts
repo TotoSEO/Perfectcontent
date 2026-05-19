@@ -43,7 +43,7 @@ export const DESC = {
 
   anchor_table: `Le score de diversité d'ancres est le ratio entre le nombre d'ancres uniques et le nombre total de liens entrants internes par page de destination. Plus le ratio est proche de 1, plus la diversité est bonne ; proche de 0, c'est qu'une même ancre revient en boucle. Les pages avec un ratio faible ET un volume de liens entrants élevé sont les plus urgentes à corriger.`,
 
-  images_alt: `L'attribut alt est le texte alternatif d'une image. Il permet à Google de comprendre le contenu de l'image, contribue au référencement dans Google Images, et est indispensable pour l'accessibilité (lecteurs d'écran). Une image sans alt text est une opportunité SEO manquée et un problème d'accessibilité.`,
+  images_alt: `L'attribut alt est le texte alternatif d'une image. Il permet à Google de comprendre le contenu de l'image, contribue au référencement dans Google Images, et est indispensable pour l'accessibilité (lecteurs d'écran). Une image sans attribut alt est une opportunité SEO manquée et un problème d'accessibilité.`,
 
   images_size_attr: `Les attributs width et height définissent les dimensions de l'image dans le code HTML. Sans eux, le navigateur ne connaît pas la taille de l'image avant de la charger, ce qui provoque des décalages visuels pendant le chargement. C'est l'une des principales causes d'un mauvais score CLS (Cumulative Layout Shift), un des Core Web Vitals mesurés par Google.`,
 
@@ -99,7 +99,7 @@ export const SECTION_COVER: Record<string, { title: string; bullets: string[]; i
     title: "Images",
     icon: "image",
     bullets: [
-      "Alt text et accessibilité",
+      "Attribut alt et accessibilité",
       "Dimensions HTML (CLS)",
       "Poids et formats modernes",
     ],
