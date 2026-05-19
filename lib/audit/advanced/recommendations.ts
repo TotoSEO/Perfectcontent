@@ -206,6 +206,66 @@ export const RECO_IMAGES: RecoGroup[] = [
   },
 ];
 
+export const RECO_GEO: RecoGroup[] = [
+  {
+    sub_label: "Accès des crawlers IA",
+    items: [
+      "Déclarer explicitement GPTBot, ChatGPT-User, CCBot, Google-Extended, ClaudeBot et PerplexityBot dans le robots.txt avec Allow: / pour autoriser leur accès sans ambiguïté.",
+      "Vérifier qu'aucun firewall applicatif (Cloudflare, WAF) ne bloque ces user-agents au niveau réseau — le robots.txt ne suffit pas s'ils sont rejetés en amont.",
+      "Mettre à jour la liste des bots IA tous les 6 mois — de nouveaux apparaissent régulièrement (Applebot-Extended, Meta-ExternalAgent, Bytespider…).",
+    ],
+  },
+  {
+    sub_label: "Fichier llms.txt",
+    items: [
+      "Créer un fichier llms.txt à la racine du site (https://votresite.com/llms.txt) au format Markdown.",
+      "Y lister les pages-clés du site (page d'accueil, pages services, articles piliers) avec une courte description par lien.",
+      "Garder le fichier court (idéalement < 100 lignes) — l'objectif est d'orienter les IA, pas de tout dupliquer.",
+      "Optionnel : ajouter un llms-full.txt plus détaillé pour les IA qui veulent plus de contexte.",
+      "Mettre à jour tous les 1-2 mois en fonction des nouveautés du site.",
+    ],
+  },
+  {
+    sub_label: "Rendu sans JavaScript",
+    items: [
+      "Tester chaque typologie de page (home, LP, fiche produit, article, FAQ) en désactivant le JavaScript dans le navigateur.",
+      "Tout contenu critique (H1, paragraphes, FAQ, données produit) doit être présent dans le HTML initial — pas chargé après le first paint.",
+      "Si le site utilise un widget tiers (FAQ Smart Tribune, ZenDesk, etc.) qui injecte du contenu en JS, prévoir un fallback SSR ou afficher les Q/R en plain HTML caché.",
+      "Idéalement, utiliser Server-Side Rendering ou Static Site Generation pour garantir un HTML complet dès le premier byte.",
+    ],
+  },
+  {
+    sub_label: "Headers ETag & Last-Modified",
+    items: [
+      "Activer un header ETag sur les réponses HTML — la plupart des CDN modernes le génèrent automatiquement (Cloudflare, Vercel, Fastly).",
+      "Renseigner un Last-Modified qui reflète la VRAIE date de modification du contenu (pas la date du cache).",
+      "Sur les pages legacy / non cachées, activer un cache CDN — chaque crawl rechargeant tout consomme inutilement du budget.",
+      "Vérifier la cohérence : si Googlebot reçoit ETag + If-None-Match, il doit obtenir un 304 Not Modified quand rien n'a changé.",
+    ],
+  },
+];
+
+export const RECO_STRUCTURED_DATA: RecoGroup[] = [
+  {
+    sub_label: "Schémas critiques",
+    items: [
+      "Organization + WebSite sur la home : nom, logo, URL, sameAs (profils sociaux), contact — c'est le socle du Knowledge Panel.",
+      "BreadcrumbList sur toutes les pages internes : remplace l'URL par un fil d'Ariane lisible en SERP.",
+      "Product + Offer + AggregateRating sur les fiches/pages produit — débloque étoiles, prix, stock en SERP (jusqu'à +30 % de CTR).",
+      "FAQPage sur les pages avec questions visibles (FAQ, accordéon en bas de LP) — capture les People Also Ask.",
+    ],
+  },
+  {
+    sub_label: "Méthode d'implémentation",
+    items: [
+      "Privilégier JSON-LD (recommandé par Google) plutôt que microdata ou RDFa — plus simple à maintenir, séparé du HTML visible.",
+      "Tester chaque balisage avec l'outil de test des résultats enrichis de Google (https://search.google.com/test/rich-results).",
+      "Centraliser les balises dans un layout / composant réutilisable plutôt que de les recopier sur chaque template.",
+      "Auditer les balisages tous les trimestres : un changement de structure de contenu (ajout d'une catégorie, refonte FAQ) doit s'accompagner d'un audit JSON-LD.",
+    ],
+  },
+];
+
 export function recosForSection(sectionId: string): RecoGroup[] {
   switch (sectionId) {
     case "indexability_crawl": return RECO_INDEXABILITY_CRAWL;
@@ -214,6 +274,8 @@ export function recosForSection(sectionId: string): RecoGroup[] {
     case "structure":          return RECO_STRUCTURE;
     case "linking":            return RECO_LINKING;
     case "images":             return RECO_IMAGES;
+    case "geo":                return RECO_GEO;
+    case "structured_data":    return RECO_STRUCTURED_DATA;
     default:                   return [];
   }
 }

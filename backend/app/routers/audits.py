@@ -96,6 +96,13 @@ class RobotsTxtInfo(BaseModel):
     disallow_count: int = 0
     allow_count: int = 0
     raw_preview: str | None = None
+    # IA-crawler declarations parsed out of robots.txt. Lower-cased bot
+    # names, deduplicated. "Declared" = an explicit "User-agent: <bot>"
+    # section exists. "Blocked" = that section contains "Disallow: /".
+    # "Allowed" = explicit Allow: / on that bot (the desired state for GEO).
+    ia_bots_declared: list[str] = []
+    ia_bots_blocked: list[str] = []
+    ia_bots_allowed: list[str] = []
 
 
 class SitemapInfo(BaseModel):
@@ -109,6 +116,21 @@ class SitemapInfo(BaseModel):
 class LlmsTxtInfo(BaseModel):
     fetched: bool
     size_bytes: int | None = None
+    lines: int | None = None
+
+
+class StructuredDataInfo(BaseModel):
+    # Result of scraping the homepage HTML for <script type="application/ld+json">.
+    homepage_fetched: bool
+    blocks_count: int = 0
+    schemas_found: list[str] = []  # @type values, deduplicated, e.g. ["Organization", "WebSite"]
+    raw_preview: str | None = None
+
+
+class HeadersSampleInfo(BaseModel):
+    sample_size: int = 0
+    with_etag: int = 0
+    with_last_modified: int = 0
 
 
 class SiteResourcesOut(BaseModel):
@@ -116,6 +138,8 @@ class SiteResourcesOut(BaseModel):
     robots_txt: RobotsTxtInfo
     sitemap_xml: SitemapInfo
     llms_txt: LlmsTxtInfo
+    structured_data: StructuredDataInfo = StructuredDataInfo(homepage_fetched=False)
+    headers_sample: HeadersSampleInfo = HeadersSampleInfo()
 
 
 def _normalise_origin(value: str) -> str:
@@ -181,6 +205,170 @@ async def _expand_sitemap(client: httpx.AsyncClient, url: str, depth: int = 0, m
     return [], 0
 
 
+# Bots IA we explicitly look for in robots.txt. Mirrors the audit standard
+# from agencies (datashake, semrush…): every name lowercased, stable order.
+_IA_BOTS = [
+    "gptbot",            # OpenAI training crawler (ChatGPT)
+    "chatgpt-user",      # ChatGPT browse-with-bing real-time fetches
+    "ccbot",             # Common Crawl — used by many LLMs as training source
+    "google-extended",   # Gemini + Google AI Overviews training opt-out token
+    "claudebot",         # Anthropic Claude crawler
+    "anthropic-ai",      # Anthropic (legacy / browse fetch)
+    "perplexitybot",     # Perplexity AI
+    "applebot-extended", # Apple Intelligence training token
+    "bytespider",        # ByteDance / TikTok / Doubao AI crawler
+    "meta-externalagent",# Meta AI training crawler
+    "cohere-ai",         # Cohere
+]
+
+
+def _parse_ia_bot_rules(robots_text: str) -> tuple[list[str], list[str], list[str]]:
+    """Walk through robots.txt and figure out which IA bots are mentioned.
+
+    Returns three lists (declared, blocked, allowed):
+      • declared: bot has its own "User-agent: <bot>" stanza
+      • blocked:  declared AND its first Disallow rule blocks the whole site
+      • allowed:  declared AND has Allow: / (the GEO-recommended state)
+    """
+    declared: list[str] = []
+    blocked: list[str] = []
+    allowed: list[str] = []
+    # Walk the file once, keeping the current "User-agent: …" stanza in scope.
+    current_bot: str | None = None
+    bot_disallow: dict[str, list[str]] = {}
+    bot_allow: dict[str, list[str]] = {}
+    for raw_line in robots_text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            current_bot = None
+            continue
+        lower = line.lower()
+        if lower.startswith("user-agent:"):
+            agent = lower.split(":", 1)[1].strip()
+            if agent in _IA_BOTS:
+                current_bot = agent
+                if agent not in declared:
+                    declared.append(agent)
+                bot_disallow.setdefault(agent, [])
+                bot_allow.setdefault(agent, [])
+            else:
+                current_bot = None
+            continue
+        if current_bot is None:
+            continue
+        if lower.startswith("disallow:"):
+            val = line.split(":", 1)[1].strip()
+            bot_disallow[current_bot].append(val)
+        elif lower.startswith("allow:"):
+            val = line.split(":", 1)[1].strip()
+            bot_allow[current_bot].append(val)
+
+    for bot in declared:
+        d_rules = bot_disallow.get(bot, [])
+        a_rules = bot_allow.get(bot, [])
+        # Blocked = the bot has Disallow: / (or equivalent) and no Allow: /
+        # overrides it.
+        if "/" in d_rules and "/" not in a_rules:
+            blocked.append(bot)
+        if "/" in a_rules:
+            allowed.append(bot)
+    return declared, blocked, allowed
+
+
+_JSONLD_RE = re.compile(
+    r"<script[^>]*type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def _extract_jsonld_types(html: str) -> tuple[list[str], int, str | None]:
+    """Pull every <script type=\"application/ld+json\"> block out of the
+    homepage HTML and return the deduplicated set of @type values found
+    (sorted), the raw block count, and a short preview for the slide.
+    """
+    import json as _json
+
+    matches = _JSONLD_RE.findall(html)
+    found: set[str] = set()
+    blocks_count = 0
+    first_preview: str | None = None
+    for blob in matches:
+        blocks_count += 1
+        try:
+            data = _json.loads(blob.strip())
+        except Exception:  # noqa: BLE001
+            # Some sites wrap JSON-LD with CDATA or have invalid JSON —
+            # still count the block but skip parsing.
+            if first_preview is None:
+                first_preview = blob.strip()[:300]
+            continue
+        # JSON-LD can be an object, a list of objects, or have @graph nesting.
+        for t in _collect_types(data):
+            found.add(t)
+        if first_preview is None:
+            try:
+                first_preview = _json.dumps(data, ensure_ascii=False, indent=2)[:300]
+            except Exception:  # noqa: BLE001
+                first_preview = blob.strip()[:300]
+    return sorted(found), blocks_count, first_preview
+
+
+def _collect_types(node) -> list[str]:
+    """Recursively walk a parsed JSON-LD payload and yield @type strings."""
+    out: list[str] = []
+    if isinstance(node, dict):
+        t = node.get("@type")
+        if isinstance(t, str):
+            out.append(t)
+        elif isinstance(t, list):
+            for v in t:
+                if isinstance(v, str):
+                    out.append(v)
+        # @graph nests further schema objects
+        for key in ("@graph", "mainEntity", "itemListElement", "publisher", "author"):
+            if key in node:
+                out.extend(_collect_types(node[key]))
+    elif isinstance(node, list):
+        for item in node:
+            out.extend(_collect_types(item))
+    return out
+
+
+async def _sample_etag_headers(origin: str, sitemap_url_candidates: list[str]) -> HeadersSampleInfo:
+    """HEAD a handful of URLs (5 max) and tally how many ship an ETag or a
+    Last-Modified header. Used by the GEO slide on crawler budget."""
+    targets = [origin]
+    # Cheap mini-expansion: pull a few URLs from the first sitemap if available
+    # without doing the full re-walk we already did upstream.
+    if sitemap_url_candidates:
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as c:
+                r = await c.get(sitemap_url_candidates[0])
+                if 200 <= r.status_code < 300:
+                    locs = re.findall(r"<loc>\s*([^<]+?)\s*</loc>", r.text)
+                    targets.extend(locs[:4])
+        except httpx.HTTPError:
+            pass
+    targets = list(dict.fromkeys(targets))[:5]
+    with_etag = 0
+    with_lm = 0
+    async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+        for url in targets:
+            try:
+                r = await client.head(url)
+                if r.headers.get("etag"):
+                    with_etag += 1
+                if r.headers.get("last-modified"):
+                    with_lm += 1
+            except httpx.HTTPError:
+                continue
+    return HeadersSampleInfo(
+        sample_size=len(targets),
+        with_etag=with_etag,
+        with_last_modified=with_lm,
+    )
+
+
 @router.post("/site-resources", response_model=SiteResourcesOut)
 async def site_resources(payload: SiteResourcesIn) -> SiteResourcesOut:
     """Fetch robots.txt + sitemap.xml + llms.txt for the given origin.
@@ -194,6 +382,8 @@ async def site_resources(payload: SiteResourcesIn) -> SiteResourcesOut:
     robots = RobotsTxtInfo(fetched=False)
     sitemap = SitemapInfo(fetched=False)
     llms = LlmsTxtInfo(fetched=False)
+    structured = StructuredDataInfo(homepage_fetched=False)
+    headers_sample = HeadersSampleInfo()
     robots_text = ""
     sitemap_url_candidates: list[str] = []
 
@@ -212,6 +402,7 @@ async def site_resources(payload: SiteResourcesIn) -> SiteResourcesOut:
                     m = re.match(r"\s*sitemap\s*:\s*(\S+)\s*$", ln, flags=re.IGNORECASE)
                     if m:
                         sitemap_url_candidates.append(m.group(1))
+                ia_declared, ia_blocked, ia_allowed = _parse_ia_bot_rules(robots_text)
                 robots = RobotsTxtInfo(
                     fetched=True,
                     size_bytes=len(robots_text.encode("utf-8")),
@@ -221,6 +412,9 @@ async def site_resources(payload: SiteResourcesIn) -> SiteResourcesOut:
                     disallow_count=disallow,
                     allow_count=allow,
                     raw_preview=robots_text[:600],
+                    ia_bots_declared=ia_declared,
+                    ia_bots_blocked=ia_blocked,
+                    ia_bots_allowed=ia_allowed,
                 )
         except httpx.HTTPError:
             pass
@@ -265,11 +459,47 @@ async def site_resources(payload: SiteResourcesIn) -> SiteResourcesOut:
         try:
             r = await client.get(f"{origin}/llms.txt", timeout=10)
             if 200 <= r.status_code < 300 and r.text.strip():
-                llms = LlmsTxtInfo(fetched=True, size_bytes=len(r.text.encode("utf-8")))
+                llms = LlmsTxtInfo(
+                    fetched=True,
+                    size_bytes=len(r.text.encode("utf-8")),
+                    lines=sum(1 for ln in r.text.splitlines() if ln.strip()),
+                )
         except httpx.HTTPError:
             pass
 
-    return SiteResourcesOut(origin=origin, robots_txt=robots, sitemap_xml=sitemap, llms_txt=llms)
+        # ----- homepage HTML → JSON-LD detection -----
+        # Powers the new "Données structurées" section. We grab the raw HTML
+        # of the origin, regex out every <script type="application/ld+json">
+        # block, and pull the @type values. Best-effort: a single GET, no
+        # parsing of nested pages — enough for the slide to say "Organization
+        # is on the home, but Product/FAQPage are nowhere".
+        try:
+            r = await client.get(origin, timeout=15)
+            if 200 <= r.status_code < 300 and r.text:
+                schemas, blocks_count, preview = _extract_jsonld_types(r.text)
+                structured = StructuredDataInfo(
+                    homepage_fetched=True,
+                    blocks_count=blocks_count,
+                    schemas_found=schemas,
+                    raw_preview=preview,
+                )
+        except httpx.HTTPError:
+            pass
+
+    # Sample ETag/Last-Modified on 5 known URLs (homepage + 4 from the
+    # sitemap when available). The agency benchmark flags pages that ship
+    # without ETag because Googlebot/GPTBot/ClaudeBot have to re-download
+    # the full body on every visit. Each HEAD short-circuits at 8 s.
+    headers_sample = await _sample_etag_headers(origin, sitemap_url_candidates)
+
+    return SiteResourcesOut(
+        origin=origin,
+        robots_txt=robots,
+        sitemap_xml=sitemap,
+        llms_txt=llms,
+        structured_data=structured,
+        headers_sample=headers_sample,
+    )
 
 
 # ---- Priority summary (Claude Haiku) -------------------------------------

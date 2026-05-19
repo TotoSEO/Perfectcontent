@@ -104,4 +104,41 @@ export const SECTION_COVER: Record<string, { title: string; bullets: string[]; i
       "Poids et formats modernes",
     ],
   },
+  structured_data: {
+    title: "Données structurées",
+    icon: "schema",
+    bullets: [
+      "JSON-LD détectées sur la page d'accueil",
+      "Schémas critiques (Organization, Product, FAQPage…)",
+      "Rich snippets et compréhension par les moteurs",
+    ],
+  },
+  geo: {
+    title: "Optimisation pour les IA (GEO)",
+    icon: "ai",
+    bullets: [
+      "Accès des crawlers IA (GPTBot, ClaudeBot, Perplexity, Gemini)",
+      "Fichier llms.txt à la racine du site",
+      "Rendu sans JavaScript et headers HTTP",
+    ],
+  },
+};
+
+// New copy block, written to read like the consultant-style benchmark from
+// the SEO agency the user shared. Factual first sentence, mechanism in the
+// middle, business consequence at the end.
+export const DESC_EXT = {
+  ia_crawlers: `Plusieurs crawlers IA disposent de leur propre user-agent : GPTBot (ChatGPT), ClaudeBot (Anthropic), PerplexityBot (Perplexity) et Google-Extended (Gemini et AI Overviews). Les déclarer explicitement dans le robots.txt avec Allow: / apporte deux garanties : aucun risque qu'une règle future ne les bloque par accident, et un signal clair que vous autorisez votre contenu à être utilisé dans les réponses générées par les LLMs.`,
+
+  js_rendering: `Les crawlers IA n'exécutent pas le JavaScript. Tout contenu critique injecté en JS — H1 dynamiques, FAQ rendue par un widget, descriptions chargées après le first paint — reste invisible pour eux, alors qu'il l'est pour Googlebot moderne. Le test consiste à comparer le HTML source brut (Cmd+U) avec le DOM final : si la différence porte sur du contenu textuel important, c'est un trou GEO.`,
+
+  http_headers: `Les headers ETag et Last-Modified permettent aux crawlers de savoir si une page a été modifiée sans la retélécharger entièrement. C'est de l'économie pure de budget de crawl, particulièrement importante pour les bots IA qui revisitent les sites de référence pour rafraîchir leurs réponses. Une page sans ETag ni Last-Modified force chaque visite à un téléchargement intégral, même quand rien n'a changé depuis hier.`,
+
+  structured_data: `Les données structurées (JSON-LD) sont le format standardisé qui permet aux moteurs de comprendre la nature exacte de vos contenus : produit, article, FAQ, fil d'Ariane, entreprise locale. Pour Google, c'est ce qui débloque les rich snippets en SERP (étoiles, prix, image produit, fil d'Ariane). Pour les LLMs, c'est un signal de confiance — un site qui balise correctement ses contenus est plus facilement compris et cité.`,
+
+  image_formats: `La majorité des sites continuent à servir leurs images en JPEG ou PNG, alors que le format WebP offre une compression jusqu'à 30 % supérieure au JPEG et jusqu'à 26 % supérieure au PNG, à qualité visuelle équivalente. Google recommande explicitement WebP/AVIF et en tient compte dans le LCP (Core Web Vitals). Convertir le parc image — surtout les visuels du dessus de page — est un des gains les plus rapides en performance.`,
+
+  inlinks_301: `Un lien interne qui pointe vers une URL redirigée (301) crée un saut intermédiaire inutile : le robot suit la redirection, le PageRank est légèrement dilué à chaque saut, et le temps de chargement perçu augmente. La correction est mécanique — remplacer dans le HTML chaque lien par sa version finale en code 200.`,
+
+  http_mixed_content: `Tous les sites modernes doivent être servis en HTTPS. Un lien interne qui pointe encore en HTTP déclenche une alerte de contenu mixte dans le navigateur et signale à Google un manque de rigueur dans la migration HTTPS. Il suffit de remplacer le lien par sa version HTTPS — la cible existe déjà puisque le reste du site y est servi.`,
 };

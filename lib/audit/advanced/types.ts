@@ -177,9 +177,33 @@ export type AdvReport = {
   // Site-level inputs fetched server-side (robots.txt / sitemap.xml / llms.txt)
   // — may be null on failure; the slide degrades gracefully.
   site_resources: {
-    robots_txt: { fetched: boolean; size_bytes: number | null; lines: number | null; has_sitemap_ref: boolean; user_agents: number; disallow_count: number; allow_count: number; raw_preview?: string };
+    robots_txt: {
+      fetched: boolean;
+      size_bytes: number | null;
+      lines: number | null;
+      has_sitemap_ref: boolean;
+      user_agents: number;
+      disallow_count: number;
+      allow_count: number;
+      raw_preview?: string;
+      // IA-crawler analysis (new — drives the GEO section)
+      ia_bots_declared?: string[];
+      ia_bots_blocked?: string[];
+      ia_bots_allowed?: string[];
+    };
     sitemap_xml: { fetched: boolean; url_count: number | null; nested_count?: number; duplicates: number; reference_in_robots: boolean };
-    llms_txt: { fetched: boolean; size_bytes: number | null };
+    llms_txt: { fetched: boolean; size_bytes: number | null; lines?: number | null };
+    structured_data?: {
+      homepage_fetched: boolean;
+      blocks_count: number;
+      schemas_found: string[];
+      raw_preview?: string | null;
+    };
+    headers_sample?: {
+      sample_size: number;
+      with_etag: number;
+      with_last_modified: number;
+    };
   } | null;
   sections: AdvSection[];
   priorities: PriorityItem[];
