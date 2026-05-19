@@ -934,15 +934,57 @@ function buildLinking(
     issues_count: 0,
   };
 
-  // Broken links
+  // Broken links — two complementary sources:
+  // 1. The Bulk Issues ZIP (codes_de_reponse_* CSVs) which lists pages of
+  //    the user's own site returning 4xx/5xx.
+  // 2. The Inlinks export, which lists every <a href> with its destination
+  //    status code — catches both internal broken targets AND external
+  //    URLs that the site links to that have died. This is the more
+  //    reliable source because SF emits the file consistently in the FR
+  //    locale where the Issues ZIP filenames vary.
   const brokenInternal = findIssue(issues, "http_internal_client_error");
   const brokenExternal4xx = findIssue(issues, "http_external_client_error");
   const brokenExternal5xx = findIssue(issues, "http_external_server_error");
+
   const brokenIssues: AdvIssueRow[] = [
-    ...issueAsRows(brokenInternal, "critical", (l) => ({ type: "Interne", code: l.extras["code http"] || l.extras["status code"] || "404" })),
-    ...issueAsRows(brokenExternal4xx, "high", (l) => ({ type: "Externe", code: l.extras["code http"] || l.extras["status code"] || "404" })),
-    ...issueAsRows(brokenExternal5xx, "critical", (l) => ({ type: "Externe", code: l.extras["code http"] || l.extras["status code"] || "5xx" })),
+    ...issueAsRows(brokenInternal, "critical", (l) => ({ type: "Interne", code: l.extras["code http"] || l.extras["code de statut"] || l.extras["status code"] || "404", source: "" })),
+    ...issueAsRows(brokenExternal4xx, "high", (l) => ({ type: "Externe", code: l.extras["code http"] || l.extras["code de statut"] || l.extras["status code"] || "404", source: "" })),
+    ...issueAsRows(brokenExternal5xx, "critical", (l) => ({ type: "Externe", code: l.extras["code http"] || l.extras["code de statut"] || l.extras["status code"] || "5xx", source: "" })),
   ];
+
+  // Augment with broken links picked out of the inlinks file. Dedupe by
+  // destination URL so we don't double-count the same broken target when
+  // both sources report it.
+  const seenDest = new Set(brokenIssues.map((r) => r.url));
+  let internalCountFromInlinks = 0;
+  let external4xxFromInlinks = 0;
+  let external5xxFromInlinks = 0;
+  if (anchors?.broken_links?.length) {
+    for (const bl of anchors.broken_links) {
+      if (bl.origin === "internal") internalCountFromInlinks++;
+      else if (bl.status >= 500) external5xxFromInlinks++;
+      else external4xxFromInlinks++;
+      if (seenDest.has(bl.destination)) continue;
+      seenDest.add(bl.destination);
+      const isInternal = bl.origin === "internal";
+      const severity: Severity =
+        bl.status >= 500 || isInternal ? "critical"
+          : bl.status >= 400 ? "high" : "medium";
+      brokenIssues.push({
+        url: bl.destination,
+        severity,
+        type: isInternal ? "Interne" : "Externe",
+        code: bl.status,
+        source: bl.source,
+        anchor: bl.anchor,
+      });
+    }
+  }
+
+  const internalTotal = (brokenInternal?.rows.length || 0) + internalCountFromInlinks;
+  const external4xxTotal = (brokenExternal4xx?.rows.length || 0) + external4xxFromInlinks;
+  const external5xxTotal = (brokenExternal5xx?.rows.length || 0) + external5xxFromInlinks;
+
   const subBroken: AdvSubcategory = {
     id: "broken_links",
     label: "Liens rompus",
@@ -952,6 +994,8 @@ function buildLinking(
       { key: "type", label: "Origine", width: 12 },
       { key: "code", label: "Code", width: 10 },
       { key: "url", label: "URL cible", width: 60 },
+      { key: "source", label: "Page source", width: 60 },
+      { key: "anchor", label: "Ancre", width: 30 },
     ],
     xlsx_sheet: "Liens rompus",
   };
@@ -962,9 +1006,9 @@ function buildLinking(
     title: "Liens internes / externes rompus",
     description: DESC.broken_links,
     kpis: [
-      { label: "Internes 4xx", value: brokenInternal?.rows.length || 0, tone: (brokenInternal?.rows.length || 0) > 0 ? "bad" : "ok" },
-      { label: "Externes 4xx", value: brokenExternal4xx?.rows.length || 0, tone: (brokenExternal4xx?.rows.length || 0) > 0 ? "warn" : "ok" },
-      { label: "Externes 5xx", value: brokenExternal5xx?.rows.length || 0, tone: (brokenExternal5xx?.rows.length || 0) > 0 ? "bad" : "ok" },
+      { label: "Internes 4xx/5xx", value: internalTotal, tone: internalTotal > 0 ? "bad" : "ok" },
+      { label: "Externes 4xx", value: external4xxTotal, tone: external4xxTotal > 0 ? "warn" : "ok" },
+      { label: "Externes 5xx", value: external5xxTotal, tone: external5xxTotal > 0 ? "bad" : "ok" },
       { label: "Total", value: brokenIssues.length, tone: brokenIssues.length > 0 ? "warn" : "ok" },
     ],
     xlsx_sheet: brokenIssues.length > 0 ? subBroken.xlsx_sheet : undefined,
