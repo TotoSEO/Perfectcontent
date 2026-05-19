@@ -1,9 +1,9 @@
-// Slide explanatory texts — sourced verbatim from the user's spec so the
+// Slide explanatory texts : sourced verbatim from the user's spec so the
 // terminology is consistent with their other deliverables.
 // Updating these texts only requires editing this file; nothing else.
 
 export const DESC = {
-  robots_sitemap: `Le robots.txt indique aux robots des moteurs de recherche quelles zones du site ils peuvent crawler. Mal configuré, il peut bloquer accidentellement des pages stratégiques. Le sitemap XML, lui, recense les URLs à indexer et leur fournit des métadonnées (date de dernière modification, priorité). Une bonne reco SEO : référencer le sitemap directement depuis le robots.txt — ça permet aux moteurs de le découvrir instantanément.`,
+  robots_sitemap: `Le robots.txt indique aux robots des moteurs de recherche quelles zones du site ils peuvent crawler. Mal configuré, il peut bloquer accidentellement des pages stratégiques. Le sitemap XML, lui, recense les URLs à indexer et leur fournit des métadonnées (date de dernière modification, priorité). Une bonne reco SEO : référencer le sitemap directement depuis le robots.txt : ça permet aux moteurs de le découvrir instantanément.`,
 
   depth: `La profondeur correspond au nombre de clics nécessaires pour atteindre une page depuis la page d'accueil. Plus une page est profonde, moins elle reçoit de jus SEO et moins elle sera crawlée fréquemment par Googlebot. Idéalement, les pages stratégiques doivent être accessibles en 3 clics maximum.`,
 
@@ -39,7 +39,7 @@ export const DESC = {
 
   orphan_pages: `Une page sans lien entrant (hors navigation) est quasiment invisible pour Google : elle reçoit peu ou pas de PageRank et sera rarement crawlée. Une page sans lien sortant n'est pas ancrée dans la structure du site. Ces pages isolées sont à relier au reste du contenu via un maillage contextuel.`,
 
-  anchor_bars: `Deux axes visuels pour analyser le texte des ancres de vos liens internes. D'abord, un bar chart des ancres les plus fréquentes par page de destination — il permet de repérer les pages qui reçoivent toujours la même ancre exacte (sur-optimisation) ou au contraire des ancres trop génériques.`,
+  anchor_bars: `Deux axes visuels pour analyser le texte des ancres de vos liens internes. D'abord, un bar chart des ancres les plus fréquentes par page de destination : il permet de repérer les pages qui reçoivent toujours la même ancre exacte (sur-optimisation) ou au contraire des ancres trop génériques.`,
 
   anchor_table: `Le score de diversité d'ancres est le ratio entre le nombre d'ancres uniques et le nombre total de liens entrants internes par page de destination. Plus le ratio est proche de 1, plus la diversité est bonne ; proche de 0, c'est qu'une même ancre revient en boucle. Les pages avec un ratio faible ET un volume de liens entrants élevé sont les plus urgentes à corriger.`,
 
@@ -50,7 +50,7 @@ export const DESC = {
   images_weight: `Le poids des images est souvent la première source de lenteur d'un site. Une image trop lourde rallonge le temps de chargement, dégrade le LCP (Largest Contentful Paint) et pénalise l'expérience mobile. Les formats modernes comme WebP ou AVIF permettent de réduire le poids de 30 à 50% par rapport au JPEG ou PNG, sans perte visible de qualité.`,
 } as const;
 
-// Section cover summaries — what the next section is about (3 short bullets).
+// Section cover summaries : what the next section is about (3 short bullets).
 export const SECTION_COVER: Record<string, { title: string; bullets: string[]; icon: string }> = {
   indexability_crawl: {
     title: "Indexabilité & crawl",
@@ -130,15 +130,15 @@ export const SECTION_COVER: Record<string, { title: string; bullets: string[]; i
 export const DESC_EXT = {
   ia_crawlers: `Plusieurs crawlers IA disposent de leur propre user-agent : GPTBot (ChatGPT), ClaudeBot (Anthropic), PerplexityBot (Perplexity) et Google-Extended (Gemini et AI Overviews). Les déclarer explicitement dans le robots.txt avec Allow: / apporte deux garanties : aucun risque qu'une règle future ne les bloque par accident, et un signal clair que vous autorisez votre contenu à être utilisé dans les réponses générées par les LLMs.`,
 
-  js_rendering: `Les crawlers IA n'exécutent pas le JavaScript. Tout contenu critique injecté en JS — H1 dynamiques, FAQ rendue par un widget, descriptions chargées après le first paint — reste invisible pour eux, alors qu'il l'est pour Googlebot moderne. Le test consiste à comparer le HTML source brut (Cmd+U) avec le DOM final : si la différence porte sur du contenu textuel important, c'est un trou GEO.`,
+  js_rendering: `Les crawlers IA n'exécutent pas le JavaScript. Tout contenu critique injecté en JS : H1 dynamiques, FAQ rendue par un widget, descriptions chargées après le first paint : reste invisible pour eux, alors qu'il l'est pour Googlebot moderne. Le test consiste à comparer le HTML source brut (Cmd+U) avec le DOM final : si la différence porte sur du contenu textuel important, c'est un trou GEO.`,
 
   http_headers: `Les headers ETag et Last-Modified permettent aux crawlers de savoir si une page a été modifiée sans la retélécharger entièrement. C'est de l'économie pure de budget de crawl, particulièrement importante pour les bots IA qui revisitent les sites de référence pour rafraîchir leurs réponses. Une page sans ETag ni Last-Modified force chaque visite à un téléchargement intégral, même quand rien n'a changé depuis hier.`,
 
-  structured_data: `Les données structurées (JSON-LD) sont le format standardisé qui permet aux moteurs de comprendre la nature exacte de vos contenus : produit, article, FAQ, fil d'Ariane, entreprise locale. Pour Google, c'est ce qui débloque les rich snippets en SERP (étoiles, prix, image produit, fil d'Ariane). Pour les LLMs, c'est un signal de confiance — un site qui balise correctement ses contenus est plus facilement compris et cité.`,
+  structured_data: `Les données structurées (JSON-LD) sont le format standardisé qui permet aux moteurs de comprendre la nature exacte de vos contenus : produit, article, FAQ, fil d'Ariane, entreprise locale. Pour Google, c'est ce qui débloque les rich snippets en SERP (étoiles, prix, image produit, fil d'Ariane). Pour les LLMs, c'est un signal de confiance : un site qui balise correctement ses contenus est plus facilement compris et cité.`,
 
-  image_formats: `La majorité des sites continuent à servir leurs images en JPEG ou PNG, alors que le format WebP offre une compression jusqu'à 30 % supérieure au JPEG et jusqu'à 26 % supérieure au PNG, à qualité visuelle équivalente. Google recommande explicitement WebP/AVIF et en tient compte dans le LCP (Core Web Vitals). Convertir le parc image — surtout les visuels du dessus de page — est un des gains les plus rapides en performance.`,
+  image_formats: `La majorité des sites continuent à servir leurs images en JPEG ou PNG, alors que le format WebP offre une compression jusqu'à 30 % supérieure au JPEG et jusqu'à 26 % supérieure au PNG, à qualité visuelle équivalente. Google recommande explicitement WebP/AVIF et en tient compte dans le LCP (Core Web Vitals). Convertir le parc image : surtout les visuels du dessus de page : est un des gains les plus rapides en performance.`,
 
-  inlinks_301: `Un lien interne qui pointe vers une URL redirigée (301) crée un saut intermédiaire inutile : le robot suit la redirection, le PageRank est légèrement dilué à chaque saut, et le temps de chargement perçu augmente. La correction est mécanique — remplacer dans le HTML chaque lien par sa version finale en code 200.`,
+  inlinks_301: `Un lien interne qui pointe vers une URL redirigée (301) crée un saut intermédiaire inutile : le robot suit la redirection, le PageRank est légèrement dilué à chaque saut, et le temps de chargement perçu augmente. La correction est mécanique : remplacer dans le HTML chaque lien par sa version finale en code 200.`,
 
-  http_mixed_content: `Tous les sites modernes doivent être servis en HTTPS. Un lien interne qui pointe encore en HTTP déclenche une alerte de contenu mixte dans le navigateur et signale à Google un manque de rigueur dans la migration HTTPS. Il suffit de remplacer le lien par sa version HTTPS — la cible existe déjà puisque le reste du site y est servi.`,
+  http_mixed_content: `Tous les sites modernes doivent être servis en HTTPS. Un lien interne qui pointe encore en HTTP déclenche une alerte de contenu mixte dans le navigateur et signale à Google un manque de rigueur dans la migration HTTPS. Il suffit de remplacer le lien par sa version HTTPS : la cible existe déjà puisque le reste du site y est servi.`,
 };

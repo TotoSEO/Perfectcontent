@@ -4,7 +4,7 @@
 //  3. Optional anchor analysis from all_inlinks.csv
 //  4. Optional site-level resources fetched server-side (robots.txt / sitemap.xml / llms.txt)
 //
-// The output is a slide-ready Report — one ordered list of slides + a list
+// The output is a slide-ready Report : one ordered list of slides + a list
 // of subcategories that drive the XLSX export.
 
 import { VBT } from "../brand";
@@ -92,32 +92,54 @@ function buildRobotsSitemap(
   const blockedByRobots = findIssue(internalIssues, "http_internal_blocked_robots");
   const blockedCount = blockedByRobots?.rows.length || 0;
 
+  // Distinguish three states:
+  //   • not-fetched : the upstream call to /srv/audits/site-resources
+  //     never returned (network failure, WAF block, timeout, etc.). On
+  //     this branch we can't claim the robots.txt is "missing" : we
+  //     simply didn't get the chance to look. Show an explicit warning.
+  //   • fetched but missing : the call returned and the file isn't there.
+  //   • fetched and present : analysed normally.
+  const notFetched = res === null;
   const robotsExists = res?.robots_txt.fetched === true;
   const sitemapExists = res?.sitemap_xml.fetched === true;
   const sitemapRef = res?.robots_txt.has_sitemap_ref === true;
   const sitemapDuplicates = res?.sitemap_xml.duplicates || 0;
   const sitemapUrls = res?.sitemap_xml.url_count ?? null;
 
+  // Build KPI values that reflect the three states. We use "Non analysé"
+  // instead of "Absent" when the fetch failed so the consultant doesn't
+  // mistakenly report to the client that the file is missing.
+  const robotsValue = notFetched ? "Non analysé" : robotsExists ? "Présent" : "Absent";
+  const sitemapValue = notFetched ? "Non analysé" : sitemapExists ? "Présent" : "Absent";
+  const sitemapRefValue = notFetched ? "Non analysé" : sitemapRef ? "Oui" : "Non";
+
   const kpis: AdvKPI[] = [
-    { label: "robots.txt", value: robotsExists ? "Présent" : "Absent", tone: robotsExists ? "ok" : "bad" },
-    { label: "sitemap.xml", value: sitemapExists ? "Présent" : "Absent", tone: sitemapExists ? "ok" : "bad" },
-    { label: "Sitemap dans robots", value: sitemapRef ? "Oui" : "Non", tone: sitemapRef ? "ok" : "warn" },
-    { label: "URLs dans sitemap", value: sitemapUrls != null ? sitemapUrls.toLocaleString("fr-FR") : "—", tone: "info" },
+    { label: "robots.txt", value: robotsValue, tone: notFetched ? "warn" : robotsExists ? "ok" : "bad" },
+    { label: "sitemap.xml", value: sitemapValue, tone: notFetched ? "warn" : sitemapExists ? "ok" : "bad" },
+    { label: "Sitemap dans robots", value: sitemapRefValue, tone: notFetched ? "warn" : sitemapRef ? "ok" : "warn" },
+    { label: "URLs dans sitemap", value: sitemapUrls != null ? sitemapUrls.toLocaleString("fr-FR") : ", ", tone: "info" },
     { label: "Doublons sitemap", value: sitemapDuplicates, tone: sitemapDuplicates > 0 ? "warn" : "ok" },
     { label: "Pages bloquées robots.txt", value: blockedCount, tone: blockedCount > 0 ? "warn" : "ok" },
   ];
 
   const issues: AdvIssueRow[] = [];
-  if (!robotsExists) issues.push(toRow("/robots.txt", "high", { reason: "Fichier absent ou non-200 — créer un robots.txt à la racine" }));
-  if (!sitemapExists) issues.push(toRow("/sitemap.xml", "high", { reason: "Sitemap absent ou non-200" }));
-  if (robotsExists && !sitemapRef) issues.push(toRow("/robots.txt", "medium", { reason: "Sitemap non référencé via `Sitemap:` dans le robots.txt" }));
-  if (sitemapDuplicates > 0) issues.push(toRow("/sitemap.xml", "medium", { reason: `${sitemapDuplicates} URLs dupliquées dans le sitemap` }));
+  if (!notFetched) {
+    // Only emit "create the file" issues when we actually attempted the
+    // fetch. If the analysis didn't run, we can't claim the file is
+    // missing.
+    if (!robotsExists) issues.push(toRow("/robots.txt", "high", { reason: "Fichier absent ou non-200, à créer à la racine" }));
+    if (!sitemapExists) issues.push(toRow("/sitemap.xml", "high", { reason: "Sitemap absent ou non-200" }));
+    if (robotsExists && !sitemapRef) issues.push(toRow("/robots.txt", "medium", { reason: "Sitemap non référencé via `Sitemap:` dans le robots.txt" }));
+    if (sitemapDuplicates > 0) issues.push(toRow("/sitemap.xml", "medium", { reason: `${sitemapDuplicates} URLs dupliquées dans le sitemap` }));
+  }
   issues.push(...issueAsRows(blockedByRobots, "medium", () => ({ reason: "Bloquée par robots.txt" })));
 
   const sub: AdvSubcategory = {
     id: "robots_sitemap",
     label: "Robots.txt & sitemap",
-    score: scoreFromRatio((!robotsExists ? 0.4 : 0) + (!sitemapExists ? 0.3 : 0) + (!sitemapRef && robotsExists ? 0.15 : 0) + (sitemapDuplicates > 0 ? 0.1 : 0)),
+    // Don't penalise the score when the analysis didn't run : fixed 50
+    // (neutral) instead of "everything is broken".
+    score: notFetched ? 50 : scoreFromRatio((!robotsExists ? 0.4 : 0) + (!sitemapExists ? 0.3 : 0) + (!sitemapRef && robotsExists ? 0.15 : 0) + (sitemapDuplicates > 0 ? 0.1 : 0)),
     issues_full: issues,
     columns: [{ key: "url", label: "URL", width: 60 }, { key: "reason", label: "Problème", width: 60 }],
     xlsx_sheet: "Robots & Sitemap",
@@ -128,13 +150,17 @@ function buildRobotsSitemap(
     section_id: "indexability_crawl",
     sub_id: "robots_sitemap",
     title: "Robots.txt & sitemap",
-    description: DESC.robots_sitemap,
+    description: DESC.robots_sitemap + (notFetched
+      ? "\n\n⚠️ L'analyse automatique du robots.txt et du sitemap.xml n'a pas pu s'effectuer (réseau, WAF, ou domaine non détecté à l'import). Vérifiez manuellement la présence de ces fichiers à la racine du site."
+      : ""),
     kpis,
     xlsx_sheet: issues.length > 0 ? sub.xlsx_sheet : undefined,
     issues_count: issues.length,
-    takeaway: !robotsExists || !sitemapExists
-      ? "⚠️ Fichier(s) critique(s) manquant(s) — à créer en priorité."
-      : (!sitemapRef ? "Référencer le sitemap dans le robots.txt — gain immédiat de découvrabilité." : "Fichiers en place ✓"),
+    takeaway: notFetched
+      ? "Analyse non disponible. Relancez l'import en vérifiant la connectivité au domaine."
+      : !robotsExists || !sitemapExists
+        ? "Fichier(s) critique(s) manquant(s) à créer en priorité."
+        : (!sitemapRef ? "Référencer le sitemap dans le robots.txt : gain immédiat de découvrabilité." : "Fichiers en place."),
   };
 
   return { sub, slide };
@@ -359,15 +385,20 @@ function buildIndexabilityCrawl(
   };
 
   // ----- Pages en noindex (from directives_noindex.csv)
+  // Important : on NE PÉNALISE PAS le score pour les pages noindex —
+  // c'est souvent volontaire (panier, compte client, page de remerciement,
+  // filtres facettes). Score figé à 100, sévérité "info". Seule la liste
+  // dans le XLSX a un sens, pour que le consultant repasse dessus et
+  // confirme manuellement quelles sont volontaires vs accidentelles.
   const noindexIssue = findIssue(issues, "directive_noindex");
-  const noindexRows = issueAsRows(noindexIssue, "high", (l) => ({
+  const noindexRows = issueAsRows(noindexIssue, "info", (l) => ({
     indexability_status: l.extras["statut d indexabilite"] || l.extras["statut d'indexabilite"] || "noindex",
     inlinks: l.extras["liens entrants"] || l.extras.inlinks || "",
   }));
   const subNoindex: AdvSubcategory = {
     id: "noindex_pages",
     label: "Pages en noindex",
-    score: scoreFromRatio(noindexRows.length / Math.max(html.length, 1)),
+    score: 100, // décorrélé : voir commentaire ci-dessus
     issues_full: noindexRows,
     columns: [
       { key: "indexability_status", label: "Raison", width: 35 },
@@ -381,26 +412,28 @@ function buildIndexabilityCrawl(
     section_id: "indexability_crawl",
     sub_id: "noindex_pages",
     title: "Pages en noindex",
-    description: "Les pages marquées en `noindex` ne sont pas indexées par Google. C'est parfois volontaire (panier, compte utilisateur, filtres), mais une page noindex qui reçoit des liens internes gaspille du budget crawl et du PageRank — soit la rendre indexable, soit retirer les liens internes pointant vers elle.",
+    description: "Les pages en noindex ne sont pas indexées par Google. C'est très fréquemment volontaire et parfaitement sain : panier, compte client, page de remerciement après formulaire, page de désabonnement, filtres facettes, résultats de recherche interne. Cette slide n'est PAS une liste d'erreurs : c'est une liste à parcourir pour confirmer que chaque page est bien noindex intentionnellement. Une page seulement devient un problème si elle reçoit des liens internes alors qu'elle ne devrait pas être noindex.",
     kpis: [
-      { label: "URLs en noindex", value: noindexRows.length, tone: noindexRows.length > 0 ? "warn" : "ok" },
-      { label: "% du site", value: html.length > 0 ? `${Math.round((noindexRows.length / html.length) * 100)} %` : "0 %", tone: noindexRows.length / Math.max(html.length, 1) > 0.05 ? "warn" : "ok" },
+      { label: "URLs en noindex", value: noindexRows.length, tone: "info" },
+      { label: "% du site", value: html.length > 0 ? `${Math.round((noindexRows.length / html.length) * 100)} %` : "0 %", tone: "info" },
     ],
     xlsx_sheet: noindexRows.length > 0 ? subNoindex.xlsx_sheet : undefined,
-    issues_count: noindexRows.length,
+    // issues_count est mis à 0 pour que le badge "X problèmes" en haut de
+    // la slide ne s'affiche pas : ce n'est pas un compteur d'erreurs.
+    issues_count: 0,
     takeaway: noindexRows.length === 0
-      ? "Aucune page noindex détectée ✓"
-      : `${noindexRows.length} page(s) noindex : vérifier qu'elles sont bien volontairement exclues.`,
+      ? "Aucune page noindex détectée."
+      : `${noindexRows.length} page(s) noindex à passer en revue manuellement pour confirmer qu'elles sont volontairement exclues.`,
   };
 
-  // (LLMS.txt slide moved to the GEO section — buildGeo() creates it now,
+  // (LLMS.txt slide moved to the GEO section : buildGeo() creates it now,
   //  which is where it belongs thematically.)
 
   // ----- Recommendations slide
   const slideReco: AdvSlide = {
     kind: "reco",
     section_id: "indexability_crawl",
-    title: "Recommandations — Indexabilité & crawl",
+    title: "Recommandations : Indexabilité & crawl",
     groups: recosForSection("indexability_crawl"),
   };
 
@@ -417,7 +450,7 @@ function buildIndexabilityCrawl(
 
   return {
     section,
-    // llms.txt was moved to the new GEO section — it sat awkwardly in
+    // llms.txt was moved to the new GEO section : it sat awkwardly in
     // "Indexabilité & crawl" because it's specifically an LLM signal, not a
     // search-engine indexation lever.
     slides: [cover, slideRobots, slideDepth, slideHttp, slideHreflang, slideCanonical, slideNoindex, slideReco],
@@ -496,7 +529,7 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
       heavyHtml.push(toRow(r.url, "medium", { html_size_kb: Math.round(kb) }));
     } else {
       over2m++;
-      heavyHtml.push(toRow(r.url, "critical", { html_size_kb: Math.round(kb), warning: "Au-delà de la limite Googlebot 2 Mo — risque de troncature" }));
+      heavyHtml.push(toRow(r.url, "critical", { html_size_kb: Math.round(kb), warning: "Au-delà de la limite Googlebot 2 Mo : risque de troncature" }));
     }
   }
   const subWeight: AdvSubcategory = {
@@ -535,7 +568,7 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
     xlsx_sheet: heavyHtml.length > 0 ? subWeight.xlsx_sheet : undefined,
     issues_count: heavyHtml.length,
     takeaway: over2m > 0
-      ? `${over2m} page(s) > 2 Mo : Googlebot risque de tronquer le contenu — à traiter en priorité.`
+      ? `${over2m} page(s) > 2 Mo : Googlebot risque de tronquer le contenu : à traiter en priorité.`
       : "Aucune page ne dépasse la limite Googlebot ✓",
   };
 
@@ -551,7 +584,7 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
   const reco: AdvSlide = {
     kind: "reco",
     section_id: "performance",
-    title: "Recommandations — Performance",
+    title: "Recommandations : Performance",
     groups: recosForSection("performance"),
   };
 
@@ -737,7 +770,7 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
   const reco: AdvSlide = {
     kind: "reco",
     section_id: "meta",
-    title: "Recommandations — Balises & métadonnées",
+    title: "Recommandations : Balises & métadonnées",
     groups: recosForSection("meta"),
   };
 
@@ -852,7 +885,7 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
   const reco: AdvSlide = {
     kind: "reco",
     section_id: "structure",
-    title: "Recommandations — Structure de contenu",
+    title: "Recommandations : Structure de contenu",
     groups: recosForSection("structure"),
   };
 
@@ -881,7 +914,7 @@ function buildLinking(
   // Internal linking overview.
   // When the inlinks file (liens_entrants_tous.csv) is available, we use
   // it to count CONTEXTUAL inlinks only (it's already filtered to body
-  // links — no nav, header, footer, menu). Otherwise we fall back to
+  // links : no nav, header, footer, menu). Otherwise we fall back to
   // interne_html.csv's raw inlinks column, which is the nav-polluted
   // version SF emits by default and is what was previously producing
   // "908 pages avec 10+ liens entrants" on sites with a fat footer.
@@ -918,11 +951,11 @@ function buildLinking(
   }
   const subOverview: AdvSubcategory = {
     id: "internal_linking_overview",
-    label: "Maillage — vue d'ensemble",
+    label: "Maillage : vue d'ensemble",
     score: scoreFromRatio((orphans + low * 0.5 + noOutlinks * 0.2) / Math.max(html.length, 1)),
     issues_full: [],
     columns: [],
-    xlsx_sheet: "Maillage — vue",
+    xlsx_sheet: "Maillage : vue",
   };
   const slideOverview: AdvSlide = {
     kind: "data",
@@ -950,11 +983,11 @@ function buildLinking(
     issues_count: 0,
   };
 
-  // Broken links — two complementary sources:
+  // Broken links : two complementary sources:
   // 1. The Bulk Issues ZIP (codes_de_reponse_* CSVs) which lists pages of
   //    the user's own site returning 4xx/5xx.
   // 2. The Inlinks export, which lists every <a href> with its destination
-  //    status code — catches both internal broken targets AND external
+  //    status code : catches both internal broken targets AND external
   //    URLs that the site links to that have died. This is the more
   //    reliable source because SF emits the file consistently in the FR
   //    locale where the Issues ZIP filenames vary.
@@ -972,7 +1005,7 @@ function buildLinking(
   // destination URL so we don't double-count the same broken target when
   // both sources report it. We also dedupe the per-category counters
   // separately so the KPIs ('Internes 4xx', 'Externes 4xx', 'Total')
-  // stay arithmetically consistent — the previous code counted raw
+  // stay arithmetically consistent : the previous code counted raw
   // occurrences in the per-category KPIs while only the Total was
   // dedupped, which surfaced as 'Externes 4xx: 3, Total: 1' in tests.
   const seenDest = new Set(brokenIssues.map((r) => r.url));
@@ -1106,7 +1139,7 @@ function buildLinking(
     issues_count: redirRows.length,
     takeaway: redirRows.length === 0
       ? "Aucun lien interne vers une page redirigée ✓"
-      : `${redirRows.length} liens internes pointent vers des pages en 301/302 — à mettre à jour pour pointer directement sur la cible finale.`,
+      : `${redirRows.length} liens internes pointent vers des pages en 301/302 : à mettre à jour pour pointer directement sur la cible finale.`,
   };
 
   // ----- Liens HTTP (mixed content) -----
@@ -1152,7 +1185,7 @@ function buildLinking(
     issues_count: httpRows.length,
     takeaway: httpRows.length === 0
       ? "Aucun lien interne en HTTP ✓"
-      : `${httpRows.length} liens internes encore en HTTP — à passer en HTTPS pour éviter l'alerte de contenu mixte.`,
+      : `${httpRows.length} liens internes encore en HTTP : à passer en HTTPS pour éviter l'alerte de contenu mixte.`,
   };
 
   // Orphans / under-linked
@@ -1187,7 +1220,7 @@ function buildLinking(
       : `${orphans + low} page(s) sous-maillée(s) à raccrocher au reste du site.`,
   };
 
-  // Anchor analysis — anchors file (liens_entrants_tous.csv) is required in
+  // Anchor analysis : anchors file (liens_entrants_tous.csv) is required in
   // the advanced flow; we still keep a placeholder branch for legacy audits
   // that pre-date this requirement.
   const slidesAnchor: AdvSlide[] = [];
@@ -1201,7 +1234,7 @@ function buildLinking(
       severity: r.is_empty ? "medium" : r.is_generic ? "low" : "info",
       source: r.source,
       anchor: r.anchor || "(vide)",
-      position: r.position || "—",
+      position: r.position || ",",
       is_generic: r.is_generic ? "✓" : "",
       is_empty: r.is_empty ? "✓" : "",
     } as AdvIssueRow));
@@ -1219,7 +1252,7 @@ function buildLinking(
         { key: "is_generic", label: "Ancre générique", width: 12 },
         { key: "is_empty", label: "Ancre vide", width: 10 },
       ],
-      xlsx_sheet: "Ancres — par lien",
+      xlsx_sheet: "Ancres : par lien",
     };
     const subAnchorsDest: AdvSubcategory = {
       id: "anchors_destinations",
@@ -1245,7 +1278,7 @@ function buildLinking(
         { key: "dominant_anchor_count", label: "Occurrences", width: 14 },
         { key: "dominant_anchor_pct", label: "% domination", width: 14 },
       ],
-      xlsx_sheet: "Ancres — par destination",
+      xlsx_sheet: "Ancres : par destination",
     };
     subAnchor.push(subAnchors, subAnchorsDest);
 
@@ -1253,7 +1286,7 @@ function buildLinking(
       kind: "anchor-bars",
       section_id: "linking",
       sub_id: "anchors_overview",
-      title: "Texte des ancres — ancres dominantes",
+      title: "Texte des ancres : ancres dominantes",
       description: DESC.anchor_bars,
       destinations: topConc.map((d) => {
         // For each destination, compute its top 5 anchors by re-aggregating
@@ -1269,7 +1302,7 @@ function buildLinking(
           .map(([text, count]) => ({ text, count }));
         return { destination: d.destination, anchors: top };
       }),
-      xlsx_sheet: "Ancres — par lien",
+      xlsx_sheet: "Ancres : par lien",
       issues_count: anchorAllRows.length,
     });
 
@@ -1277,10 +1310,10 @@ function buildLinking(
       kind: "anchor-table",
       section_id: "linking",
       sub_id: "anchors_diversity",
-      title: "Texte des ancres — score de diversité",
+      title: "Texte des ancres : score de diversité",
       description: DESC.anchor_table,
       rows: worst.slice(0, 8),
-      xlsx_sheet: "Ancres — par destination",
+      xlsx_sheet: "Ancres : par destination",
       issues_count: worst.length,
     });
   } else {
@@ -1310,7 +1343,7 @@ function buildLinking(
   const reco: AdvSlide = {
     kind: "reco",
     section_id: "linking",
-    title: "Recommandations — Maillage interne",
+    title: "Recommandations : Maillage interne",
     groups: recosForSection("linking"),
   };
 
@@ -1348,7 +1381,7 @@ function buildImages(
   const sizeMissing = findIssue(issues, "image_size_missing");
 
   // Some Screaming Frog Issues exports emit one row per (image URL × page
-  // that uses the image) pair instead of one row per unique image — so a
+  // that uses the image) pair instead of one row per unique image : so a
   // crawl with 36 unique images can yield 3 000+ rows for "missing alt"
   // or "missing width/height". Dedupe by URL so the slide counts match
   // the actual number of images to fix.
@@ -1403,7 +1436,7 @@ function buildImages(
     takeaway: altRows.length === 0
       ? "Toutes les images crawlées ont un attribut alt ✓"
       : altRows.length === 1 && altPagesAffected > 50
-        ? `1 image sans alt mais référencée sur ${altPagesAffected.toLocaleString("fr-FR")} pages — typiquement un visuel de template (logo, footer). Un seul fix corrige toutes les occurrences.`
+        ? `1 image sans alt mais référencée sur ${altPagesAffected.toLocaleString("fr-FR")} pages : typiquement un visuel de template (logo, footer). Un seul fix corrige toutes les occurrences.`
         : `${altRows.length} image(s) unique(s) sans alt sur ${altPagesAffected.toLocaleString("fr-FR")} page(s) cumulée(s).`,
   };
 
@@ -1413,7 +1446,7 @@ function buildImages(
   // (page × image) occurrence, with Source = the page, Destination = the
   // image URL. We already extract Destination as the row URL upstream, so
   // dedupByUrl gives us unique images. But the raw occurrence count and
-  // the distinct-pages-affected count are equally useful for the slide —
+  // the distinct-pages-affected count are equally useful for the slide ,
   // a single image present on 1 040 pages is one template fix, not 1 040
   // separate jobs.
   const sizeRawRows = sizeMissing?.rows || [];
@@ -1456,13 +1489,13 @@ function buildImages(
     takeaway: sizeAttrRows.length === 0
       ? "Toutes les images crawlées déclarent width/height ✓"
       : sizeAttrRows.length === 1 && sizeOccurrences > 50
-        ? `1 image unique mal balisée mais ${sizeOccurrences.toLocaleString("fr-FR")} occurrences — typiquement un visuel de template (footer, header). Un seul fix dans le template corrige tout.`
+        ? `1 image unique mal balisée mais ${sizeOccurrences.toLocaleString("fr-FR")} occurrences : typiquement un visuel de template (footer, header). Un seul fix dans le template corrige tout.`
         : sizeAttrRows.length < 10
-          ? `${sizeAttrRows.length} images uniques à corriger, présentes ${sizeOccurrences.toLocaleString("fr-FR")} fois — quelques fixes ciblés.`
-          : `${sizeAttrRows.length.toLocaleString("fr-FR")} images uniques sans width/height sur ${sizeUniquePages.toLocaleString("fr-FR")} pages — chantier transversal sur les templates de contenu.`,
+          ? `${sizeAttrRows.length} images uniques à corriger, présentes ${sizeOccurrences.toLocaleString("fr-FR")} fois : quelques fixes ciblés.`
+          : `${sizeAttrRows.length.toLocaleString("fr-FR")} images uniques sans width/height sur ${sizeUniquePages.toLocaleString("fr-FR")} pages : chantier transversal sur les templates de contenu.`,
   };
 
-  // Weight — driven by images_tous.csv when available (full distribution),
+  // Weight : driven by images_tous.csv when available (full distribution),
   // otherwise falls back to interne_html.csv image rows.
   let totalKb = 0;
   let under100 = 0;
@@ -1569,10 +1602,10 @@ function buildImages(
     },
     issues_count: 0,
     takeaway: modernPct === 0
-      ? `${legacyPct} % du parc en JPEG/PNG, WebP/AVIF quasi-absent — gros gain potentiel sur LCP en convertissant les visuels de dessus de page.`
+      ? `${legacyPct} % du parc en JPEG/PNG, WebP/AVIF quasi-absent : gros gain potentiel sur LCP en convertissant les visuels de dessus de page.`
       : modernPct >= 50
-        ? `${modernPct} % du parc déjà en formats modernes — bonne base, à étendre.`
-        : `${modernPct} % en formats modernes — la conversion progresse, à poursuivre sur les LP stratégiques.`,
+        ? `${modernPct} % du parc déjà en formats modernes : bonne base, à étendre.`
+        : `${modernPct} % en formats modernes : la conversion progresse, à poursuivre sur les LP stratégiques.`,
   };
 
   const cover: AdvSlide = {
@@ -1586,7 +1619,7 @@ function buildImages(
   const reco: AdvSlide = {
     kind: "reco",
     section_id: "images",
-    title: "Recommandations — Images",
+    title: "Recommandations : Images",
     groups: recosForSection("images"),
   };
 
@@ -1606,22 +1639,22 @@ function buildImages(
 // ---------- Données structurées section ------------------------------------
 
 // Schémas qu'on flag comme critiques pour une LP / un site e-commerce
-// classique. Order matters — the order here drives the "missing schemas"
+// classique. Order matters : the order here drives the "missing schemas"
 // list on the slide so the most impactful absences surface first.
 const CRITICAL_SCHEMAS: Array<{
   schema: string;
   label: string;
   blurb: string;
 }> = [
-  { schema: "Organization", label: "Organization", blurb: "Identité de l'entreprise (logo, contact, profils sociaux) — fondation du Knowledge Panel." },
-  { schema: "WebSite", label: "WebSite", blurb: "Déclaration du site (URL, nom, recherche interne) — signal de base attendu sur la home." },
-  { schema: "BreadcrumbList", label: "BreadcrumbList", blurb: "Fil d'Ariane affichable directement en SERP — gros gain de lisibilité." },
+  { schema: "Organization", label: "Organization", blurb: "Identité de l'entreprise (logo, contact, profils sociaux) : fondation du Knowledge Panel." },
+  { schema: "WebSite", label: "WebSite", blurb: "Déclaration du site (URL, nom, recherche interne) : signal de base attendu sur la home." },
+  { schema: "BreadcrumbList", label: "BreadcrumbList", blurb: "Fil d'Ariane affichable directement en SERP : gros gain de lisibilité." },
   { schema: "Product", label: "Product", blurb: "Pages produit : nom, image, marque, prix (avec Offer). Débloque les étoiles + prix en SERP." },
-  { schema: "Offer", label: "Offer", blurb: "Prix, disponibilité, devise — combiné à Product pour les rich results commerce." },
-  { schema: "AggregateRating", label: "AggregateRating", blurb: "Note moyenne + nombre d'avis — affiche les étoiles en SERP, +20-30 % de CTR." },
+  { schema: "Offer", label: "Offer", blurb: "Prix, disponibilité, devise : combiné à Product pour les rich results commerce." },
+  { schema: "AggregateRating", label: "AggregateRating", blurb: "Note moyenne + nombre d'avis : affiche les étoiles en SERP, +20-30 % de CTR." },
   { schema: "FAQPage", label: "FAQPage", blurb: "Questions-réponses : affichage déroulant en SERP, capture les People Also Ask." },
-  { schema: "Article", label: "Article", blurb: "Articles éditoriaux : auteur, date, image — éligible à Top Stories." },
-  { schema: "LocalBusiness", label: "LocalBusiness", blurb: "Si présence physique : adresse, horaires, géoloc — débloque le Local Pack." },
+  { schema: "Article", label: "Article", blurb: "Articles éditoriaux : auteur, date, image : éligible à Top Stories." },
+  { schema: "LocalBusiness", label: "LocalBusiness", blurb: "Si présence physique : adresse, horaires, géoloc : débloque le Local Pack." },
 ];
 
 function buildStructuredData(res: SiteResources | null): { section: AdvSection; slides: AdvSlide[] } {
@@ -1649,7 +1682,7 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
     bullets: SECTION_COVER.structured_data.bullets,
   };
 
-  // Slide 1 — JSON-LD détectées sur la home
+  // Slide 1 : JSON-LD détectées sur la home
   const slideDetected: AdvSlide = {
     kind: "data",
     section_id: "structured_data",
@@ -1668,12 +1701,12 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
       ? (schemasFound.size === 0
         ? "Aucun JSON-LD sur la home : c'est le premier signal manquant pour les rich snippets et les moteurs IA."
         : missing.length > 4
-          ? `${missing.length} schémas critiques absents sur ${CRITICAL_SCHEMAS.length} attendus — fort potentiel d'amélioration.`
-          : `${present.length}/${CRITICAL_SCHEMAS.length} schémas critiques présents — bonne base, à étendre.`)
+          ? `${missing.length} schémas critiques absents sur ${CRITICAL_SCHEMAS.length} attendus : fort potentiel d'amélioration.`
+          : `${present.length}/${CRITICAL_SCHEMAS.length} schémas critiques présents : bonne base, à étendre.`)
       : undefined,
   };
 
-  // Slide 2 — Schémas critiques absents (one per row)
+  // Slide 2 : Schémas critiques absents (one per row)
   const missingRows: AdvIssueRow[] = missing.map((m) => ({
     url: m.schema,
     severity: ["Organization", "WebSite", "Product"].includes(m.schema) ? "high" : "medium",
@@ -1704,7 +1737,7 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
   const slideReco: AdvSlide = {
     kind: "reco",
     section_id: "structured_data",
-    title: "Recommandations — Données structurées",
+    title: "Recommandations : Données structurées",
     groups: recosForSection("structured_data"),
   };
 
@@ -1782,10 +1815,10 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
     xlsx_sheet: subBots.issues_full.length > 0 ? subBots.xlsx_sheet : undefined,
     issues_count: subBots.issues_full.length,
     takeaway: blocked.length > 0
-      ? `${blocked.length} bot(s) IA explicitement bloqué(s) — votre contenu n'apparaît pas dans leurs réponses.`
+      ? `${blocked.length} bot(s) IA explicitement bloqué(s) : votre contenu n'apparaît pas dans leurs réponses.`
       : declared.length === 0
-        ? "Aucun bot IA explicitement déclaré — l'accès passe par la règle User-agent: *. Déclarer explicitement supprime tout risque d'ambiguïté."
-        : `${declared.length} bot(s) IA déclaré(s) explicitement — bonne posture GEO.`,
+        ? "Aucun bot IA explicitement déclaré : l'accès passe par la règle User-agent: *. Déclarer explicitement supprime tout risque d'ambiguïté."
+        : `${declared.length} bot(s) IA déclaré(s) explicitement : bonne posture GEO.`,
   };
 
   // ----- Slide 2: Fichier llms.txt -----
@@ -1810,21 +1843,22 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
   };
 
   // ----- Slide 3: Rendu sans JavaScript (informational) -----
+  // Pas de KPI, pas de grille de facts : c'est une slide pédagogique
+  // que le consultant complète manuellement avec une capture d'écran de
+  // son test avant/après désactivation du JavaScript. On laisse un
+  // emplacement screenshot vide à droite + un callout "Comment tester"
+  // en vouvoiement.
   const slideJs: AdvSlide = {
     kind: "info",
     section_id: "geo",
     sub_id: "js_rendering",
     title: "Rendu sans JavaScript",
     description: DESC_EXT.js_rendering,
-    facts: [
-      { label: "Bots IA exécutent JS ?", value: "Non" },
-      { label: "Googlebot exécute JS ?", value: "Oui (avec délai)" },
-      { label: "Méthode de test", value: "Cmd+U vs DOM final" },
-    ],
+    screenshot_placeholder: true,
     callout: {
       tone: "info",
       title: "Comment tester rapidement",
-      body: "Désactive JavaScript dans le navigateur (DevTools → Settings → Disable JavaScript) puis recharge la page. Tout ce qui disparaît est invisible pour les bots IA. À tester sur au moins une page de chaque template (home, fiche produit, article, FAQ, formulaire).",
+      body: "Désactivez JavaScript dans votre navigateur (DevTools → Settings → Disable JavaScript), puis rechargez la page. Tout ce qui disparaît est invisible pour les bots IA. À tester sur au moins une page de chaque template (accueil, fiche produit, article, FAQ, formulaire).",
     },
   };
 
@@ -1841,26 +1875,35 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
     columns: [],
     xlsx_sheet: "Headers HTTP",
   };
+  // Méthodologie : on échantillonne 5 URLs (page d'accueil + 4 URLs
+  // tirées du sitemap), on envoie une requête HEAD à chacune, on compte
+  // combien renvoient un header ETag et combien renvoient Last-Modified.
+  // Échantillon faible mais représentatif : si le serveur ne renvoie ces
+  // headers sur AUCUNE des 5 URLs testées, c'est qu'ils ne sont pas
+  // configurés au niveau du CDN ou du framework, et la conclusion vaut
+  // pour tout le site.
   const slideHeaders: AdvSlide = {
     kind: "data",
     section_id: "geo",
     sub_id: "http_headers",
     title: "Headers ETag & Last-Modified",
-    description: DESC_EXT.http_headers,
+    description: DESC_EXT.http_headers + `\n\nMéthode : nous envoyons 5 requêtes HEAD (page d'accueil + 4 URLs du sitemap) et comptons combien renvoient un ETag et un Last-Modified. Si le serveur ne les renvoie sur aucune des 5 URLs testées, la configuration manque au niveau CDN ou framework et la conclusion vaut pour l'ensemble du site.`,
     kpis: [
-      { label: "URLs échantillonnées", value: sampled, tone: "info" },
-      { label: "Avec ETag", value: withEtag, tone: sampled > 0 && withEtag === sampled ? "ok" : withEtag > 0 ? "warn" : "bad" },
-      { label: "Avec Last-Modified", value: withLm, tone: sampled > 0 && withLm === sampled ? "ok" : withLm > 0 ? "warn" : "bad" },
-      { label: "% couvertes", value: sampled > 0 ? `${Math.round(((withEtag + withLm) / (sampled * 2)) * 100)} %` : "—", tone: "info" },
+      { label: "URLs testées (HEAD)", value: sampled, tone: "info" },
+      { label: "Avec ETag", value: `${withEtag} / ${sampled}`, tone: sampled > 0 && withEtag === sampled ? "ok" : withEtag > 0 ? "warn" : "bad" },
+      { label: "Avec Last-Modified", value: `${withLm} / ${sampled}`, tone: sampled > 0 && withLm === sampled ? "ok" : withLm > 0 ? "warn" : "bad" },
+      { label: "Couverture globale", value: sampled > 0 ? `${Math.round(((withEtag + withLm) / (sampled * 2)) * 100)} %` : ", ", tone: "info" },
     ],
     issues_count: 0,
     takeaway: sampled === 0
-      ? "Échantillonnage indisponible — vérifie manuellement avec un curl -I sur quelques URLs."
+      ? "Échantillonnage indisponible. Vérifiez manuellement avec un curl -I sur quelques URLs."
       : withEtag === sampled && withLm === sampled
-        ? "Toutes les pages échantillonnées renvoient ETag et Last-Modified ✓"
-        : withEtag === 0
-          ? "Aucune des pages échantillonnées n'a d'ETag : chaque crawl re-télécharge tout."
-          : `${sampled - withEtag} page(s) sans ETag — pertes de budget de crawl côté Googlebot et bots IA.`,
+        ? `Toutes les ${sampled} pages testées renvoient ETag ET Last-Modified : configuration optimale pour le budget de crawl.`
+        : withEtag === 0 && withLm === 0
+          ? `Aucune des ${sampled} pages testées ne renvoie ni ETag ni Last-Modified. Chaque visite des crawlers (Google, GPTBot, ClaudeBot) re-télécharge intégralement le HTML, même quand le contenu n'a pas changé. Configuration à ajouter côté CDN ou serveur.`
+          : withEtag === 0
+            ? `Aucune des ${sampled} pages testées n'a d'ETag (mais ${withLm}/${sampled} ont Last-Modified). À compléter pour permettre les requêtes conditionnelles 304 Not Modified.`
+            : `${sampled - withEtag} page(s) sur ${sampled} sans ETag : pertes de budget de crawl côté Googlebot et bots IA.`,
   };
 
   // Section cover + reco
@@ -1875,7 +1918,7 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
   const slideReco: AdvSlide = {
     kind: "reco",
     section_id: "geo",
-    title: "Recommandations — Optimisation pour les IA (GEO)",
+    title: "Recommandations : Optimisation pour les IA (GEO)",
     groups: recosForSection("geo"),
   };
 
@@ -1952,12 +1995,32 @@ const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
   http_headers: "medium",
 };
 
+// Subcategories that are observational, not actionable issues. The
+// noindex list is a manual review item, not a fix to prioritise.
+// schemas_detected is the "present schemas" inventory (positive).
+// anchors_links / anchors_destinations are exposed as anchor slides but
+// don't belong in a priority ranking on their own — the actionable signal
+// is the over-optimisation pattern, surfaced visually on the slide.
+const INFORMATIONAL_SUB_IDS = new Set([
+  "noindex_pages",
+  "schemas_detected",
+  "anchors_links",
+  "anchors_destinations",
+]);
+
 function buildPriorities(sections: AdvSection[]): PriorityItem[] {
   const items: PriorityItem[] = [];
   for (const sec of sections) {
     const secWeight = SECTION_WEIGHT_FOR_PRIORITY[sec.id] || 1;
     for (const sub of sec.subcategories) {
       if (sub.issues_full.length === 0) continue;
+      if (INFORMATIONAL_SUB_IDS.has(sub.id)) continue;
+      // Skip subcategories whose only severity is "info" — those are
+      // observations, not fixes.
+      const hasActionableSev = sub.issues_full.some(
+        (r) => r.severity !== "info",
+      );
+      if (!hasActionableSev) continue;
       // Aggregate severity counts
       const sevCount = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
       for (const r of sub.issues_full) sevCount[r.severity]++;
@@ -1992,7 +2055,7 @@ function buildPriorities(sections: AdvSection[]): PriorityItem[] {
   }
   items.sort((a, b) => ((b as { _raw?: number })._raw ?? 0) - ((a as { _raw?: number })._raw ?? 0));
   items.forEach((it, i) => { it.rank = i + 1; delete (it as { _raw?: number })._raw; });
-  return items.slice(0, 12); // Top 12 priorities — fits in 1-2 slides cleanly
+  return items.slice(0, 12); // Top 12 priorities : fits in 1-2 slides cleanly
 }
 
 function buildRationale(label: string, affected: number, critical: number, high: number, effort: string, impact: string): string {
@@ -2030,8 +2093,8 @@ export function analyzeAdvanced(
   const { section: secLink, slides: slLink } = buildLinking(rows, issues, opts.anchors);
   const { section: secImg, slides: slImg } = buildImages(rows, issues, opts.images_all);
   // New sections inspired by the datashake / SEO-agency benchmark:
-  //  • Données structurées (JSON-LD) — analyses the homepage HTML
-  //  • Optimisation pour les IA (GEO) — bots IA in robots.txt, llms.txt,
+  //  • Données structurées (JSON-LD) : analyses the homepage HTML
+  //  • Optimisation pour les IA (GEO) : bots IA in robots.txt, llms.txt,
   //    JS rendering, ETag/Last-Modified headers
   const { section: secSD, slides: slSD } = buildStructuredData(opts.site_resources);
   const { section: secGeo, slides: slGeo } = buildGeo(rows, opts.site_resources);
