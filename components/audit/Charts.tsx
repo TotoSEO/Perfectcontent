@@ -103,7 +103,7 @@ export function BarChart({
 }) {
   const m = max ?? Math.max(1, ...bars.map((b) => b.value));
   return (
-    <div className="space-y-2 min-w-0">
+    <div className="space-y-2 min-w-0 w-full" style={{ maxWidth: width }}>
       {bars.map((b, i) => {
         // Clamp width to [0, 100] so a bar can never visually overflow its
         // container — values still print even when 0.
@@ -162,8 +162,8 @@ export function Histogram({
 }) {
   const m = Math.max(1, ...bins.map((b) => b.value));
   return (
-    <div className="space-y-2">
-      <div className="flex items-end gap-1.5" style={{ height }}>
+    <div className="space-y-2 w-full">
+      <div className="flex items-end gap-1.5 w-full" style={{ height }}>
         {bins.map((b, i) => {
           const h = (b.value / m) * (height - 28);
           const dn = parseInt(b.label.replace(/\D/g, ""), 10);

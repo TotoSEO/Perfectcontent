@@ -359,6 +359,21 @@ export default function NewAdvancedAuditPage() {
             <span className="text-emerald-400">✓ {issuesResult.matched_files.length}/{issuesResult.total_csv_files} CSV utilisés</span>
             {issuesResult.unknown_files.length > 0 && <span className="text-zinc-500"> · {issuesResult.unknown_files.length} ignorés</span>}
             {" · "}{(issuesFile.size / 1024 / 1024).toFixed(1)} MB
+            {issuesResult.unknown_files.length > 0 && (
+              <details className="text-[11px] text-zinc-500 mt-1.5">
+                <summary className="cursor-pointer hover:text-zinc-300">
+                  Voir les {issuesResult.unknown_files.length} fichiers non reconnus
+                </summary>
+                <div className="mt-1.5 p-2 bg-black/20 rounded font-mono text-[10px] break-all max-h-32 overflow-y-auto">
+                  {issuesResult.unknown_files.slice(0, 30).map((f, i) => (
+                    <div key={i}>{f.split("/").pop()}</div>
+                  ))}
+                  {issuesResult.unknown_files.length > 30 && (
+                    <div className="text-zinc-600 mt-1">… et {issuesResult.unknown_files.length - 30} autres</div>
+                  )}
+                </div>
+              </details>
+            )}
           </>
         )}
       />
