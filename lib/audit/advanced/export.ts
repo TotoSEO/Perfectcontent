@@ -224,6 +224,17 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
     for (const sub of sec.subcategories) {
       if (sub.issues_full.length === 0 || sub.columns.length === 0) continue;
       const sheetName = safeSheetName(sub.xlsx_sheet);
+
+      // Special case : the "Ancres vides" sheet uses a custom layout —
+      // rows are grouped by the `_group` field (target URL), each group
+      // gets its own header row + a coloured background that alternates
+      // between two soft tints so the boundary between two adjacent
+      // groups is always visible.
+      if (sub.id === "anchors_empty") {
+        renderEmptyAnchorsSheet(wb, sheetName, sub);
+        continue;
+      }
+
       // Sort issues by severity (critical first)
       const rows = [...sub.issues_full].sort(
         (a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9),
@@ -293,4 +304,116 @@ export function buildSheetMap(subs: AdvSubcategory[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of subs) out[s.id] = safeSheetName(s.xlsx_sheet);
   return out;
+}
+
+// ===========================================================================
+// "Ancres vides" sheet — custom rendering with group separators.
+//
+// Standard sheets are flat (one row per issue, coloured by severity). For
+// the empty anchors sheet the consultant needs to see WHICH target URLs
+// are affected and BY HOW MANY source URLs — flat severity rows would
+// obscure that. So we render each destination group as a banded block :
+//
+//    ┌────────────────────────────────────────────────────────┐
+//    │ ▶ https://target1.com/page-a   ·   12 liens vides     │  ← header row (terracotta band)
+//    ├────────────────────────────────────────────────────────┤
+//    │     https://source1.com/   →   https://target1.com/   │  ← detail rows
+//    │     https://source2.com/   →   https://target1.com/   │     (alternating tints)
+//    │     …                                                  │
+//    └────────────────────────────────────────────────────────┘
+//    ┌────────────────────────────────────────────────────────┐
+//    │ ▶ https://target2.com/page-b   ·   3 liens vides      │  ← next group
+//    └────────────────────────────────────────────────────────┘
+//
+// Each group alternates between two soft red/orange tints so adjacent
+// groups stay visually separated even at high zoom.
+// ===========================================================================
+
+const EMPTY_GROUP_HEADER_A = "FFFEE2E2"; // soft red
+const EMPTY_GROUP_HEADER_B = "FFFFEDD5"; // soft orange
+const EMPTY_GROUP_HEADER_FG_A = "FFB91C1C"; // strong red text
+const EMPTY_GROUP_HEADER_FG_B = "FF9A3412"; // strong orange text
+const EMPTY_GROUP_BODY_A = "FFFEF7F7";    // very-soft red row
+const EMPTY_GROUP_BODY_B = "FFFFF8F0";    // very-soft orange row
+const EMPTY_GROUP_EDGE_A = "FFFCA5A5";    // red border
+const EMPTY_GROUP_EDGE_B = "FFFDBA74";    // orange border
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderEmptyAnchorsSheet(wb: any, sheetName: string, sub: AdvSubcategory): void {
+  const ws = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
+
+  // Group rows by `_group` (= destination URL), preserving the input order.
+  const groupsMap = new Map<string, { destination: string; sources: string[] }>();
+  for (const r of sub.issues_full) {
+    const destKey = String(r._group ?? r.destination ?? "");
+    const source = String(r.url ?? "");
+    const destination = String(r.destination ?? destKey);
+    if (!groupsMap.has(destKey)) {
+      groupsMap.set(destKey, { destination, sources: [] });
+    }
+    groupsMap.get(destKey)!.sources.push(source);
+  }
+  // Sort groups by source count desc so the worst offenders appear first.
+  const groups = [...groupsMap.values()].sort((a, b) => b.sources.length - a.sources.length);
+
+  ws.columns = [
+    { header: "URL source du lien", key: "url", width: 70 },
+    { header: "URL cible", key: "destination", width: 70 },
+    { header: "Ancre", key: "anchor", width: 14 },
+  ];
+  styleHeader(ws.getRow(1));
+
+  groups.forEach((g, gi) => {
+    const tintIdx = gi % 2;
+    const headerBg = tintIdx === 0 ? EMPTY_GROUP_HEADER_A : EMPTY_GROUP_HEADER_B;
+    const headerFg = tintIdx === 0 ? EMPTY_GROUP_HEADER_FG_A : EMPTY_GROUP_HEADER_FG_B;
+    const bodyBg = tintIdx === 0 ? EMPTY_GROUP_BODY_A : EMPTY_GROUP_BODY_B;
+    const edge = tintIdx === 0 ? EMPTY_GROUP_EDGE_A : EMPTY_GROUP_EDGE_B;
+
+    // ---- Group header row : merged across the 3 columns ----
+    const headerLabel = `▶ ${g.destination}   ·   ${g.sources.length} lien${g.sources.length > 1 ? "s" : ""} avec ancre vide`;
+    const headerRow = ws.addRow([headerLabel, "", ""]);
+    headerRow.height = 22;
+    const startRow = ws.rowCount;
+    ws.mergeCells(`A${startRow}:C${startRow}`);
+    const hc = headerRow.getCell(1);
+    hc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerBg } };
+    hc.font = {
+      color: { argb: headerFg },
+      bold: true,
+      size: 11,
+      name: "Montserrat",
+    };
+    hc.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    hc.border = {
+      top: { style: "medium", color: { argb: edge } },
+      bottom: { style: "thin", color: { argb: edge } },
+    };
+
+    // ---- Detail rows : one per source URL ----
+    for (const src of g.sources) {
+      const wsRow = ws.addRow({
+        url: src,
+        destination: g.destination,
+        anchor: "(vide)",
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      wsRow.eachCell((cell: any) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bodyBg } };
+      });
+      for (const key of ["url", "destination"]) {
+        const cell = wsRow.getCell(key);
+        const v = cell.value as unknown;
+        if (typeof v === "string" && /^https?:\/\//.test(v)) {
+          cell.value = { text: v, hyperlink: v };
+          cell.font = { color: { argb: HYPERLINK_FG }, underline: true };
+        }
+      }
+      const anchorCell = wsRow.getCell("anchor");
+      anchorCell.font = { color: { argb: headerFg }, italic: true, bold: true };
+      anchorCell.alignment = { horizontal: "center" };
+    }
+  });
+
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: 3 } };
 }
