@@ -43,6 +43,11 @@ export const DESC = {
 
   anchor_table: `Le score de diversité d'ancres est le ratio entre le nombre d'ancres uniques et le nombre total de liens entrants internes par page de destination. Plus le ratio est proche de 1, plus la diversité est bonne ; proche de 0, c'est qu'une même ancre revient en boucle. Les pages avec un ratio faible ET un volume de liens entrants élevé sont les plus urgentes à corriger.`,
 
+  // ---- New anchor slides (replace anchor_bars / anchor_table copy) ----
+  anchor_low_diversity: `Une même page reçoit plusieurs liens internes contextuels avec systématiquement la même ancre exacte. Ce schéma envoie un signal sémantique pauvre à Google : la page n'est associée qu'à une seule expression, alors qu'un maillage diversifié transmettrait davantage de contexte et plusieurs intentions de recherche. Varier les ancres qui pointent vers une URL clé est l'un des leviers de ranking les plus directs sur les pages stratégiques.`,
+
+  anchor_empty: `Ces URLs reçoivent des liens internes contextuels dont le texte d'ancrage est totalement vide (ni Ancrage, ni Texte Alt). Cela peut arriver sur des liens posés autour d'éléments décoratifs vides, des balises <a> oubliées dans le markdown ou des templates mal corrigés. Une ancre vide ne transmet aucun signal sémantique : c'est un lien qui ne contribue ni au SEO ni à l'accessibilité, et qui doit être complété par un texte descriptif. Les liens images (dont le Texte Alt est rempli) sont exclus de cette analyse car ils transmettent un contexte via leur alt.`,
+
   images_alt: `L'attribut alt est le texte alternatif d'une image. Il permet à Google de comprendre le contenu de l'image, contribue au référencement dans Google Images, et est indispensable pour l'accessibilité (lecteurs d'écran). Une image sans attribut alt est une opportunité SEO manquée et un problème d'accessibilité.`,
 
   images_size_attr: `Les attributs width et height définissent les dimensions de l'image dans le code HTML. Sans eux, le navigateur ne connaît pas la taille de l'image avant de la charger, ce qui provoque des décalages visuels pendant le chargement. C'est l'une des principales causes d'un mauvais score CLS (Cumulative Layout Shift), un des Core Web Vitals mesurés par Google.`,

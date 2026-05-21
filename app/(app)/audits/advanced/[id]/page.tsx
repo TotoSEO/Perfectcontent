@@ -12,6 +12,8 @@ import {
   RecoSlideBody,
   AnchorBarsBody,
   AnchorTableBody,
+  AnchorLowDiversityBody,
+  AnchorEmptyBody,
   PrioritySlideBody,
 } from "@/components/audit/advanced/SlideContent";
 import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
@@ -432,6 +434,52 @@ export default function AdvancedAuditPage() {
                 footer={sec?.label}
               >
                 <AnchorTableBody slide={s} />
+              </AdvSlide>
+            );
+          }
+          if (s.kind === "anchor-low-diversity") {
+            const sec = audit.summary!.sections.find((x) => x.id === s.section_id);
+            const tone: "ok" | "warn" | "bad" =
+              s.total_concerned === 0 ? "ok" :
+              s.total_concerned > 50 ? "bad" : "warn";
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title={s.title}
+                subtitle={sec?.label}
+                rightHeader={
+                  s.total_concerned > 0
+                    ? <SectionPill tone={tone}>{s.total_concerned.toLocaleString("fr-FR")} URLs concernées</SectionPill>
+                    : <SectionPill tone="ok">Diversité OK</SectionPill>
+                }
+                footer={sec?.label}
+              >
+                <AnchorLowDiversityBody slide={s} />
+              </AdvSlide>
+            );
+          }
+          if (s.kind === "anchor-empty") {
+            const sec = audit.summary!.sections.find((x) => x.id === s.section_id);
+            const tone: "ok" | "warn" | "bad" =
+              s.total_empty_links === 0 ? "ok" :
+              s.total_empty_links > 100 ? "bad" : "warn";
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title={s.title}
+                subtitle={sec?.label}
+                rightHeader={
+                  s.total_empty_links > 0
+                    ? <SectionPill tone={tone}>{s.total_empty_links.toLocaleString("fr-FR")} liens vides</SectionPill>
+                    : <SectionPill tone="ok">Aucune ancre vide</SectionPill>
+                }
+                footer={sec?.label}
+              >
+                <AnchorEmptyBody slide={s} />
               </AdvSlide>
             );
           }

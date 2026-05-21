@@ -852,7 +852,527 @@ function RecoCard({
 }
 
 // ===========================================================================
-// ANCHOR BARS — horizontal bar chart (4.8)
+// ANCHOR : LOW DIVERSITY (URLs avec ancres pas assez variées)
+// Top 5 destination URLs whose inbound contextual links use the same anchor
+// over and over. Empty anchors are NOT in this slide.
+// ===========================================================================
+
+export function AnchorLowDiversityBody({
+  slide,
+}: {
+  slide: Extract<AdvSlide, { kind: "anchor-low-diversity" }>;
+}) {
+  const visible = slide.rows.slice(0, 5);
+  const extra = Math.max(0, slide.total_concerned - visible.length);
+
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
+      {/* LEFT : top 5 table */}
+      <div className="col-span-8 flex flex-col gap-3 min-w-0 min-h-0">
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div
+            className="uppercase flex items-center gap-2"
+            style={{
+              color: VBT.terracotta600,
+              fontWeight: 700,
+              fontSize: VBT_TYPO.micro,
+              letterSpacing: "0.18em",
+            }}
+          >
+            <span
+              className="inline-block rounded-full"
+              style={{ width: 6, height: 6, background: VBT.terracotta500 }}
+            />
+            Top 5 · ancres dominantes par page cible
+          </div>
+          {slide.xlsx_sheet && slide.issues_count > 0 && (
+            <XlsxRefBadge sheet={slide.xlsx_sheet} />
+          )}
+        </div>
+
+        {visible.length === 0 ? (
+          <NoIssuesBlock />
+        ) : (
+          <div
+            className="rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0"
+            style={{
+              border: `1px solid ${VBT.paperEdge}`,
+              background: VBT.paper,
+            }}
+          >
+            <table className="w-full" style={{ tableLayout: "fixed", fontSize: VBT_TYPO.bodySm }}>
+              <colgroup>
+                <col style={{ width: "44%" }} />
+                <col style={{ width: "28%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "16%" }} />
+              </colgroup>
+              <thead style={{ background: VBT.terracotta50 }}>
+                <tr>
+                  <Th>URL concernée</Th>
+                  <Th>Ancre</Th>
+                  <Th align="right">Occurrences</Th>
+                  <Th align="right">sur liens totaux</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r, i) => {
+                  const tone =
+                    r.ratio_pct >= 80 ? { bg: "#FEE2E2", fg: VBT.sigRed } :
+                    r.ratio_pct >= 60 ? { bg: "#FFEDD5", fg: VBT.sigOrange } :
+                    { bg: "#FEF3C7", fg: "#A16207" };
+                  return (
+                    <tr
+                      key={i}
+                      style={{
+                        borderTop: `1px solid ${VBT.paperEdge}`,
+                      }}
+                    >
+                      <td
+                        className="px-3 py-2.5"
+                        style={{
+                          color: VBT.ink,
+                          fontWeight: 500,
+                          // URL must remain visible in full — wrap on slashes.
+                          wordBreak: "break-all",
+                          fontSize: VBT_TYPO.caption + 1,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {r.destination}
+                      </td>
+                      <td
+                        className="px-3 py-2.5"
+                        style={{
+                          color: VBT.terracotta700,
+                          fontWeight: 600,
+                          fontSize: VBT_TYPO.bodySm,
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        « {r.anchor} »
+                      </td>
+                      <td
+                        className="px-3 py-2.5 tabular-nums text-right"
+                        style={{
+                          color: VBT.ink,
+                          fontWeight: 700,
+                          fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                          fontSize: VBT_TYPO.body,
+                        }}
+                      >
+                        {r.occurrences}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <span
+                            className="tabular-nums"
+                            style={{
+                              color: VBT.inkSoft,
+                              fontWeight: 600,
+                              fontSize: VBT_TYPO.bodySm,
+                            }}
+                          >
+                            / {r.total_inlinks}
+                          </span>
+                          <span
+                            className="tabular-nums inline-flex items-center px-2 py-0.5 rounded"
+                            style={{
+                              background: tone.bg,
+                              color: tone.fg,
+                              fontWeight: 700,
+                              fontSize: VBT_TYPO.micro,
+                              letterSpacing: "0.02em",
+                            }}
+                          >
+                            {r.ratio_pct.toFixed(0)}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {extra > 0 && (
+              <div
+                className="px-3 py-2.5 flex items-center gap-2"
+                style={{
+                  background: VBT.terracotta50,
+                  borderTop: `1px solid ${VBT.terracotta100}`,
+                  color: VBT.terracotta700,
+                  fontWeight: 600,
+                  fontSize: VBT_TYPO.bodySm,
+                }}
+              >
+                <ArrowRightIcon size={12} color={VBT.terracotta600} />
+                <span>+ {extra.toLocaleString("fr-FR")} URLs concernées par le même problème</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div
+          style={{
+            color: VBT.zinc,
+            fontSize: VBT_TYPO.micro,
+            fontWeight: 500,
+            lineHeight: 1.4,
+          }}
+        >
+          Le pourcentage indique la part des liens contextuels qui utilisent la même ancre vers la page cible. Les ancres vides ne sont pas comptabilisées ici.
+        </div>
+      </div>
+
+      {/* RIGHT : explanatory text + key takeaway */}
+      <div className="col-span-4 flex flex-col gap-3 min-w-0 min-h-0">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+          }}
+        >
+          <span
+            className="inline-block rounded-full"
+            style={{ width: 6, height: 6, background: VBT.terracotta500 }}
+          />
+          Pourquoi diversifier ses ancres
+        </div>
+        <div
+          className="flex-1 rounded-xl overflow-y-auto min-h-0"
+          style={{
+            background: VBT.paper,
+            border: `1px solid ${VBT.paperEdge}`,
+            padding: "16px 18px",
+            color: VBT.inkSoft,
+            fontSize: VBT_TYPO.bodySm,
+            lineHeight: 1.55,
+          }}
+        >
+          <DescriptionBlock text={slide.description} maxLines={16} size={VBT_TYPO.bodySm} />
+        </div>
+        <div
+          className="rounded-xl flex items-start gap-2.5"
+          style={{
+            background: "#FFEDD5",
+            border: "1px solid #FDBA74",
+            padding: "12px 14px",
+          }}
+        >
+          <span className="shrink-0 mt-0.5">
+            <AlertTriangleIcon size={15} color={VBT.sigOrange} />
+          </span>
+          <div
+            style={{
+              color: VBT.sigOrange,
+              fontSize: VBT_TYPO.bodySm - 1,
+              lineHeight: 1.5,
+              fontWeight: 600,
+            }}
+          >
+            Une ancre qui revient à plus de 60 % vers la même URL doit être variée : reformule contextuellement dans chaque page source.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Th({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
+  return (
+    <th
+      className="px-3 py-2.5 uppercase"
+      style={{
+        color: VBT.terracotta700,
+        fontWeight: 800,
+        fontSize: VBT_TYPO.micro,
+        letterSpacing: "0.12em",
+        textAlign: align,
+        fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+// ===========================================================================
+// ANCHOR : EMPTY (URLs recevant trop d'ancres vides)
+// Lists target URLs that receive contextual links with NO anchor and NO alt.
+// Image-wrapping links are EXCLUDED. Groups are visually separated.
+// ===========================================================================
+
+export function AnchorEmptyBody({
+  slide,
+}: {
+  slide: Extract<AdvSlide, { kind: "anchor-empty" }>;
+}) {
+  const visibleGroups = slide.groups.slice(0, 6);
+  const extraGroups = Math.max(0, slide.total_groups - visibleGroups.length);
+
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
+      {/* LEFT : grouped table */}
+      <div className="col-span-8 flex flex-col gap-3 min-w-0 min-h-0">
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div
+            className="uppercase flex items-center gap-2"
+            style={{
+              color: VBT.terracotta600,
+              fontWeight: 700,
+              fontSize: VBT_TYPO.micro,
+              letterSpacing: "0.18em",
+            }}
+          >
+            <span
+              className="inline-block rounded-full"
+              style={{ width: 6, height: 6, background: VBT.sigRed }}
+            />
+            URLs cibles · {slide.total_empty_links.toLocaleString("fr-FR")} liens vides détectés
+          </div>
+          {slide.xlsx_sheet && slide.issues_count > 0 && (
+            <XlsxRefBadge sheet={slide.xlsx_sheet} />
+          )}
+        </div>
+
+        {visibleGroups.length === 0 ? (
+          <NoIssuesBlock />
+        ) : (
+          <div
+            className="flex-1 rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0"
+            style={{
+              border: `1px solid ${VBT.paperEdge}`,
+              background: VBT.paper,
+            }}
+          >
+            <div
+              className="overflow-y-auto"
+              style={{ flex: 1 }}
+            >
+              {visibleGroups.map((g, gi) => (
+                <EmptyAnchorGroup
+                  key={gi}
+                  destination={g.destination}
+                  sources={g.sources}
+                  index={gi}
+                />
+              ))}
+            </div>
+            {extraGroups > 0 && (
+              <div
+                className="px-3 py-2.5 flex items-center gap-2"
+                style={{
+                  background: "#FEE2E2",
+                  borderTop: `1px solid #FCA5A5`,
+                  color: VBT.sigRed,
+                  fontWeight: 600,
+                  fontSize: VBT_TYPO.bodySm,
+                }}
+              >
+                <ArrowRightIcon size={12} color={VBT.sigRed} />
+                <span>+ {extraGroups.toLocaleString("fr-FR")} URLs cibles concernées (voir XLSX)</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT : explanation */}
+      <div className="col-span-4 flex flex-col gap-3 min-w-0 min-h-0">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+          }}
+        >
+          <span
+            className="inline-block rounded-full"
+            style={{ width: 6, height: 6, background: VBT.terracotta500 }}
+          />
+          Pourquoi corriger ces ancres
+        </div>
+        <div
+          className="flex-1 rounded-xl overflow-y-auto min-h-0"
+          style={{
+            background: VBT.paper,
+            border: `1px solid ${VBT.paperEdge}`,
+            padding: "16px 18px",
+            color: VBT.inkSoft,
+            fontSize: VBT_TYPO.bodySm,
+            lineHeight: 1.55,
+          }}
+        >
+          <DescriptionBlock text={slide.description} maxLines={16} size={VBT_TYPO.bodySm} />
+        </div>
+        <div
+          className="rounded-xl flex items-start gap-2.5"
+          style={{
+            background: "#FEE2E2",
+            border: "1px solid #FCA5A5",
+            padding: "12px 14px",
+          }}
+        >
+          <span className="shrink-0 mt-0.5">
+            <AlertTriangleIcon size={15} color={VBT.sigRed} />
+          </span>
+          <div
+            style={{
+              color: VBT.sigRed,
+              fontSize: VBT_TYPO.bodySm - 1,
+              lineHeight: 1.5,
+              fontWeight: 600,
+            }}
+          >
+            Les liens-images (alt rempli) ne sont pas comptés ici : seuls les liens contextuels textuels sans aucune ancre.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// One destination group : a coloured header row with the target URL +
+// the count of empty inbound links, followed by indented source URLs.
+// Groups alternate between two soft tints so the boundary between two
+// adjacent groups is always visible.
+function EmptyAnchorGroup({
+  destination,
+  sources,
+  index,
+}: {
+  destination: string;
+  sources: string[];
+  index: number;
+}) {
+  const tint = index % 2 === 0
+    ? { headerBg: "#FEE2E2", headerEdge: "#FCA5A5", headerFg: VBT.sigRed, bodyBg: "#FEF7F7" }
+    : { headerBg: "#FFEDD5", headerEdge: "#FDBA74", headerFg: VBT.sigOrange, bodyBg: "#FFF8F0" };
+  // Cap source URLs displayed inline to keep slides readable; the rest live
+  // in the XLSX.
+  const visibleSources = sources.slice(0, 4);
+  const extraSources = sources.length - visibleSources.length;
+
+  return (
+    <div style={{ borderBottom: `2px solid ${tint.headerEdge}` }}>
+      {/* Group header — target URL + count */}
+      <div
+        className="flex items-start gap-2.5"
+        style={{
+          background: tint.headerBg,
+          padding: "9px 14px",
+          borderBottom: `1px solid ${tint.headerEdge}`,
+        }}
+      >
+        <span className="shrink-0 mt-1">
+          <ArrowRightIcon size={11} color={tint.headerFg} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div
+            style={{
+              color: tint.headerFg,
+              fontWeight: 800,
+              fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+              fontSize: VBT_TYPO.bodySm,
+              wordBreak: "break-all",
+              lineHeight: 1.35,
+              letterSpacing: "-0.005em",
+            }}
+            title={destination}
+          >
+            {destination}
+          </div>
+        </div>
+        <span
+          className="shrink-0 inline-flex items-center justify-center rounded-full tabular-nums"
+          style={{
+            background: tint.headerFg,
+            color: VBT.paper,
+            minWidth: 32,
+            height: 22,
+            fontSize: VBT_TYPO.micro,
+            fontWeight: 800,
+            padding: "0 8px",
+            marginTop: 1,
+          }}
+        >
+          {sources.length}
+        </span>
+      </div>
+
+      {/* Source URLs in the group */}
+      <div
+        style={{
+          background: tint.bodyBg,
+          padding: "6px 14px 8px 30px",
+        }}
+      >
+        {visibleSources.map((src, i) => (
+          <div
+            key={i}
+            className="flex items-start gap-2"
+            style={{
+              padding: "2px 0",
+              color: VBT.inkSoft,
+              fontSize: VBT_TYPO.micro + 1,
+              lineHeight: 1.45,
+              wordBreak: "break-all",
+            }}
+          >
+            <span
+              className="shrink-0 mt-1.5 inline-block"
+              style={{
+                width: 4,
+                height: 4,
+                background: tint.headerEdge,
+                borderRadius: "50%",
+              }}
+            />
+            <span style={{ flex: 1, minWidth: 0 }} title={src}>{src}</span>
+            <span
+              className="shrink-0 inline-flex items-center rounded uppercase tabular-nums"
+              style={{
+                color: tint.headerFg,
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                padding: "1px 6px",
+                background: tint.headerBg,
+                marginLeft: 6,
+              }}
+            >
+              ancre vide
+            </span>
+          </div>
+        ))}
+        {extraSources > 0 && (
+          <div
+            className="mt-1"
+            style={{
+              color: tint.headerFg,
+              fontSize: VBT_TYPO.micro,
+              fontWeight: 700,
+              fontStyle: "italic",
+              paddingLeft: 8,
+            }}
+          >
+            + {extraSources} autre{extraSources > 1 ? "s" : ""} page{extraSources > 1 ? "s" : ""} source · voir XLSX
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// LEGACY anchor renderers (anchor-bars / anchor-table) — kept so audits
+// generated before this refactor still load, but new audits don't produce
+// these kinds.
 // ===========================================================================
 
 export function AnchorBarsBody({ slide }: { slide: Extract<AdvSlide, { kind: "anchor-bars" }> }) {

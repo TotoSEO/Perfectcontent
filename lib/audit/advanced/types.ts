@@ -125,6 +125,51 @@ export type AdvSlide =
       xlsx_sheet?: string;
       issues_count: number;
     }
+  // ---- New anchor slides (replace anchor-bars / anchor-table) ----
+  | {
+      // Top URLs whose dominant anchor over-represents their inlinks.
+      // Each row : a single (destination, anchor) pair with its occurrence
+      // count and the total number of contextual inlinks that page receives.
+      // Empty anchors are NOT in this slide (those go to anchor-empty).
+      kind: "anchor-low-diversity";
+      section_id: string;
+      sub_id: string;
+      title: string;
+      description: string;
+      rows: {
+        destination: string;
+        anchor: string;
+        occurrences: number;       // count of that exact anchor pointing to the dest
+        total_inlinks: number;     // total contextual inlinks toward the dest
+        ratio_pct: number;         // occurrences / total * 100 (rounded to 0.1)
+      }[];
+      // Total number of destinations matching the under-diversified criterion.
+      // The slide table shows the top 5; this is used by the "+ X URLs
+      // concernées" footnote when the total exceeds the table.
+      total_concerned: number;
+      xlsx_sheet?: string;
+      issues_count: number;
+    }
+  | {
+      // URLs receiving inbound links with an empty anchor in the body
+      // (Ancrage AND Texte Alt both empty). Image-wrapping links, template
+      // CTAs, card-like and button-like paths are excluded.
+      // The slide groups rows by destination so the consultant can see
+      // exactly which target pages are affected and from where.
+      kind: "anchor-empty";
+      section_id: string;
+      sub_id: string;
+      title: string;
+      description: string;
+      groups: {
+        destination: string;
+        sources: string[];  // every source URL with an empty editorial anchor toward this dest
+      }[];
+      total_groups: number;       // total destinations affected
+      total_empty_links: number;  // total empty editorial inbound links
+      xlsx_sheet?: string;
+      issues_count: number;
+    }
   | {
       kind: "reco";
       section_id: string;

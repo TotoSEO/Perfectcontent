@@ -20,14 +20,9 @@ import type {
   AdvSubcategory,
   AdvReport,
   AdvIssueRow,
-  AnchorDestinationSummary,
   PriorityItem,
 } from "./types";
-import {
-  pickWorstDestinations,
-  pickTopConcentratedDestinations,
-  type AnchorsParseResult,
-} from "./parse-anchors";
+import type { AnchorsParseResult } from "./parse-anchors";
 import type { ImagesAllParseResult } from "./parse-images-all";
 
 const COLORS = {
@@ -85,30 +80,6 @@ function issueAsRows(issue: ParsedIssue | null, severity: Severity, extractor?: 
     const extras = extractor ? extractor(line) : {};
     return toRow(line.url, severity, extras);
   });
-}
-
-// Build the row set for the diversity scatter plot (4.9). The N worst
-// destinations come first (so the slide's "Top 3 à corriger" widget reads
-// the right ones from rows[0..2]), then a broader sample of the rest of
-// the destinations so the plot itself shows a real distribution.
-function sampleForScatter(
-  byDest: Map<string, AnchorDestinationSummary>,
-  worst: AnchorDestinationSummary[],
-  cap = 120,
-): AnchorDestinationSummary[] {
-  const seen = new Set(worst.map((w) => w.destination));
-  const others = [...byDest.values()].filter(
-    (d) => !seen.has(d.destination) && d.inlinks_count >= 2,
-  );
-  // Even-stride sample so we don't bias toward the most-linked pages.
-  const remaining = Math.max(0, cap - worst.length);
-  if (others.length <= remaining) return [...worst, ...others];
-  const step = others.length / remaining;
-  const picked: AnchorDestinationSummary[] = [];
-  for (let i = 0; i < remaining; i++) {
-    picked.push(others[Math.floor(i * step)]);
-  }
-  return [...worst, ...picked];
 }
 
 // ---------- Site resources (robots / sitemap / llms) -----------------------
@@ -1293,100 +1264,146 @@ function buildLinking(
   const slidesAnchor: AdvSlide[] = [];
   const subAnchor: AdvSubcategory[] = [];
   if (anchors) {
-    const topConc = pickTopConcentratedDestinations(anchors.by_destination, 5, 6);
-    // Pull a wider sample of destinations for the diversity scatter plot
-    // (4.9) so the chart shows a real distribution and not just 8 points.
-    // The 15 worst still come first in the array — the "Top 3 à corriger"
-    // widget on the slide reads from the beginning.
-    const worst = pickWorstDestinations(anchors.by_destination, 10, 15);
-    const scatterSample = sampleForScatter(anchors.by_destination, worst, 120);
-    // Build anchor rows for XLSX (one row per link)
-    const anchorAllRows: AdvIssueRow[] = anchors.rows.map((r) => ({
-      url: r.destination,
-      severity: r.is_empty ? "medium" : r.is_generic ? "low" : "info",
-      source: r.source,
-      anchor: r.anchor || "(vide)",
-      position: r.position || ",",
-      is_generic: r.is_generic ? "✓" : "",
-      is_empty: r.is_empty ? "✓" : "",
-    } as AdvIssueRow));
+    // ---- (A) Low-diversity destinations -----------------------------------
+    // For each destination, look at the most-used anchor and ratio it to the
+    // total contextual inlinks. We surface destinations where one anchor
+    // dominates and the destination has substantial inlinks. Empty anchors
+    // are NOT in this slide (they go to "anchor-empty"). The aggregator in
+    // parse-anchors.ts already excludes templates / image links / cards /
+    // buttons, so by_destination is already editorial-only.
+    const lowDivCandidates = [...anchors.by_destination.values()]
+      .filter((d) => {
+        // Only meaningful with at least 3 inlinks. With less than 3, a
+        // 100% dominance is trivially "always the same anchor".
+        if (d.inlinks_count < 3) return false;
+        // Skip rows where the dominant anchor is empty — those belong to
+        // the next slide. Empty anchors shouldn't drive a "diversity"
+        // recommendation.
+        if (!d.dominant_anchor || d.dominant_anchor === "(vide)") return false;
+        // Real over-concentration : either >= 60% of inlinks share the
+        // same anchor, OR overall diversity is below 0.5 (less than one
+        // unique anchor per two inlinks).
+        return d.dominant_anchor_pct >= 60 || d.diversity_ratio < 0.5;
+      })
+      .sort((a, b) => {
+        // Worst-first : highest dominance pct, tiebreak on inlinks count.
+        if (b.dominant_anchor_pct !== a.dominant_anchor_pct) {
+          return b.dominant_anchor_pct - a.dominant_anchor_pct;
+        }
+        return b.inlinks_count - a.inlinks_count;
+      });
 
-    const subAnchors: AdvSubcategory = {
-      id: "anchors_links",
-      label: "Texte des ancres (par lien)",
-      score: 100, // Reported as data, score driven by overview/diversity below
-      issues_full: anchorAllRows,
-      columns: [
-        { key: "source", label: "Page source", width: 60 },
-        { key: "url", label: "Page de destination", width: 60 },
-        { key: "anchor", label: "Texte de l'ancre", width: 40 },
-        { key: "position", label: "Élément HTML", width: 14 },
-        { key: "is_generic", label: "Ancre générique", width: 12 },
-        { key: "is_empty", label: "Ancre vide", width: 10 },
-      ],
-      xlsx_sheet: "Ancres : par lien",
-    };
-    const subAnchorsDest: AdvSubcategory = {
-      id: "anchors_destinations",
-      label: "Texte des ancres (par destination)",
-      score: 100,
-      issues_full: worst.map((w) => ({
-        url: w.destination,
-        severity: w.diversity_ratio < 0.2 && w.inlinks_count >= 15 ? "high"
-          : w.diversity_ratio < 0.4 ? "medium" : "low",
-        inlinks_count: w.inlinks_count,
-        unique_anchors: w.unique_anchors,
-        diversity_ratio: w.diversity_ratio,
-        dominant_anchor: w.dominant_anchor,
-        dominant_anchor_count: w.dominant_anchor_count,
-        dominant_anchor_pct: `${w.dominant_anchor_pct}%`,
+    const lowDivRows = lowDivCandidates.map((d) => ({
+      destination: d.destination,
+      anchor: d.dominant_anchor,
+      occurrences: d.dominant_anchor_count,
+      total_inlinks: d.inlinks_count,
+      ratio_pct: d.dominant_anchor_pct,
+    }));
+
+    const subAnchorsLowDiv: AdvSubcategory = {
+      id: "anchors_low_diversity",
+      label: "URLs avec ancres peu variées",
+      score: scoreFromRatio(Math.min(1, lowDivRows.length / Math.max(anchors.by_destination.size, 1))),
+      issues_full: lowDivRows.map((r) => ({
+        url: r.destination,
+        severity: r.ratio_pct >= 80 ? "high" : r.ratio_pct >= 60 ? "medium" : "low",
+        anchor: r.anchor,
+        occurrences: r.occurrences,
+        total_inlinks: r.total_inlinks,
+        ratio_pct: `${r.ratio_pct.toFixed(1)} %`,
       } as AdvIssueRow)),
       columns: [
-        { key: "url", label: "Page de destination", width: 60 },
-        { key: "inlinks_count", label: "Liens entrants", width: 16 },
-        { key: "unique_anchors", label: "Ancres uniques", width: 14 },
-        { key: "diversity_ratio", label: "Diversité", width: 12 },
-        { key: "dominant_anchor", label: "Ancre dominante", width: 40 },
-        { key: "dominant_anchor_count", label: "Occurrences", width: 14 },
-        { key: "dominant_anchor_pct", label: "% domination", width: 14 },
+        { key: "url", label: "URL concernée", width: 70 },
+        { key: "anchor", label: "Ancre dominante", width: 40 },
+        { key: "occurrences", label: "Occurrences", width: 14 },
+        { key: "total_inlinks", label: "Liens contextuels totaux", width: 22 },
+        { key: "ratio_pct", label: "Ratio de domination", width: 20 },
       ],
-      xlsx_sheet: "Ancres : par destination",
+      xlsx_sheet: "Ancres peu variees",
     };
-    subAnchor.push(subAnchors, subAnchorsDest);
 
+    // ---- (B) Empty editorial anchors --------------------------------------
+    // Empty = both Ancrage and Texte Alt empty. Exclude image-wrapping
+    // (alt is filled), templates, cards, buttons. Group by destination so
+    // the consultant sees each target URL with all its empty-anchor sources.
+    // Each (source, destination) pair is counted once even if the source
+    // page has multiple empty <a> tags to the same target — what matters
+    // for the consultant is the unique pairs to investigate / patch.
+    const emptyByDest = new Map<string, Set<string>>();
+    for (const r of anchors.rows) {
+      // Image links have a filled alt -> they're NOT in this slide.
+      if (r.is_image_link) continue;
+      // Skip templates / cards / buttons.
+      if (r.is_template_cta || r.is_card_like || r.is_button_like) continue;
+      // Only true empty (Ancrage AND Texte Alt empty).
+      if (!r.is_empty) continue;
+      if (!emptyByDest.has(r.destination)) emptyByDest.set(r.destination, new Set());
+      emptyByDest.get(r.destination)!.add(r.source);
+    }
+    // Sort groups : destinations with the most empty links first.
+    const emptyGroups = [...emptyByDest.entries()]
+      .map(([destination, sources]) => ({
+        destination,
+        sources: [...sources].sort(),
+      }))
+      .sort((a, b) => b.sources.length - a.sources.length);
+    const totalEmptyLinks = emptyGroups.reduce((s, g) => s + g.sources.length, 0);
+
+    // XLSX rows : one per (source, destination) pair, with a group_key so
+    // the exporter can render visual separators between groups.
+    const emptyXlsxRows: AdvIssueRow[] = [];
+    for (const g of emptyGroups) {
+      for (const src of g.sources) {
+        emptyXlsxRows.push({
+          url: src,
+          severity: g.sources.length >= 5 ? "high" : g.sources.length >= 2 ? "medium" : "low",
+          destination: g.destination,
+          anchor: "(vide)",
+          _group: g.destination,
+        } as AdvIssueRow);
+      }
+    }
+    const subAnchorsEmpty: AdvSubcategory = {
+      id: "anchors_empty",
+      label: "URLs recevant des ancres vides",
+      score: scoreStrict(totalEmptyLinks / Math.max(anchors.total_editorial_links, 1), 0.05),
+      issues_full: emptyXlsxRows,
+      columns: [
+        { key: "url", label: "URL source du lien", width: 70 },
+        { key: "destination", label: "URL cible", width: 70 },
+        { key: "anchor", label: "Ancre", width: 14 },
+      ],
+      xlsx_sheet: "Ancres vides",
+    };
+
+    subAnchor.push(subAnchorsLowDiv, subAnchorsEmpty);
+
+    // Slide A : low diversity
     slidesAnchor.push({
-      kind: "anchor-bars",
+      kind: "anchor-low-diversity",
       section_id: "linking",
-      sub_id: "anchors_overview",
-      title: "Texte des ancres : ancres dominantes",
-      description: DESC.anchor_bars,
-      destinations: topConc.map((d) => {
-        // For each destination, compute its top 5 anchors by re-aggregating
-        const anchorCounts = new Map<string, number>();
-        for (const a of anchors.rows) {
-          if (a.destination !== d.destination) continue;
-          const k = a.anchor || "(vide)";
-          anchorCounts.set(k, (anchorCounts.get(k) || 0) + 1);
-        }
-        const top = [...anchorCounts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([text, count]) => ({ text, count }));
-        return { destination: d.destination, anchors: top };
-      }),
-      xlsx_sheet: "Ancres : par lien",
-      issues_count: anchorAllRows.length,
+      sub_id: "anchors_low_diversity",
+      title: "URLs avec ancres de lien pas assez variées",
+      description: DESC.anchor_low_diversity,
+      rows: lowDivRows.slice(0, 5),
+      total_concerned: lowDivRows.length,
+      xlsx_sheet: lowDivRows.length > 0 ? "Ancres peu variees" : undefined,
+      issues_count: lowDivRows.length,
     });
 
+    // Slide B : empty anchors
     slidesAnchor.push({
-      kind: "anchor-table",
+      kind: "anchor-empty",
       section_id: "linking",
-      sub_id: "anchors_diversity",
-      title: "Texte des ancres : score de diversité",
-      description: DESC.anchor_table,
-      rows: scatterSample,
-      xlsx_sheet: "Ancres : par destination",
-      issues_count: worst.length,
+      sub_id: "anchors_empty",
+      title: "URLs recevant trop d'ancres vides",
+      description: DESC.anchor_empty,
+      groups: emptyGroups.slice(0, 6),
+      total_groups: emptyGroups.length,
+      total_empty_links: totalEmptyLinks,
+      xlsx_sheet: emptyXlsxRows.length > 0 ? "Ancres vides" : undefined,
+      issues_count: emptyXlsxRows.length,
     });
   } else {
     // Placeholder slide explaining that liens_entrants_tous.csv is needed
@@ -2055,8 +2072,8 @@ const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
   internal_redirects: "quick-win",
   http_mixed_content: "quick-win",
   orphan_pages: "medium",
-  anchors_links: "deep",
-  anchors_destinations: "deep",
+  anchors_low_diversity: "deep",
+  anchors_empty: "quick-win",
   image_alt: "medium",
   image_size_attr: "quick-win",
   image_weight: "medium",
@@ -2070,14 +2087,9 @@ const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
 // Subcategories that are observational, not actionable issues. The
 // noindex list is a manual review item, not a fix to prioritise.
 // schemas_detected is the "present schemas" inventory (positive).
-// anchors_links / anchors_destinations are exposed as anchor slides but
-// don't belong in a priority ranking on their own — the actionable signal
-// is the over-optimisation pattern, surfaced visually on the slide.
 const INFORMATIONAL_SUB_IDS = new Set([
   "noindex_pages",
   "schemas_detected",
-  "anchors_links",
-  "anchors_destinations",
 ]);
 
 function buildPriorities(sections: AdvSection[]): PriorityItem[] {
