@@ -63,14 +63,14 @@ const COL_ALIASES: Record<keyof UrlRow, string[]> = {
   ],
   indexability_status:     [
     "indexability status",
-    // FR — apostrophe variations: ' ’ ´
+    // FR : apostrophe variations: ' ’ ´
     "statut d indexabilite", "statut d'indexabilite", "statut d’indexabilite",
     "statut d indexabilité", "statut d'indexabilité", "statut d’indexabilité",
     "statut de l indexabilite", "statut de l'indexabilite",
   ],
   title:                   [
     "title 1", "title", "page title", "title tag",
-    // FR — Screaming Frog FR keeps the column name "title 1"
+    // FR : Screaming Frog FR keeps the column name "title 1"
     "balise title 1", "balise title",
   ],
   title_length:            [
@@ -168,7 +168,7 @@ const URL_HEADERS = new Set(["address", "url", "uri", "page", "page url", "adres
 
 function normalizeKey(s: string): string {
   // Lower-case, strip BOM, strip diacritics, normalize apostrophe-like
-  // characters and collapse whitespace — so "Indexabilité" and "indexabilite"
+  // characters and collapse whitespace : so "Indexabilité" and "indexabilite"
   // both resolve to "indexabilite".
   return s
     .toLowerCase()
@@ -184,13 +184,13 @@ function pick(rec: Record<string, string>, aliases: string[]): string | null {
   for (const a of aliases) {
     const key = normalizeKey(a);
     const v = rec[key];
-    if (v !== undefined && v !== "" && v !== "—") return v;
+    if (v !== undefined && v !== "" && v !== "-") return v;
   }
   return null;
 }
 
 function num(s: string | null): number | null {
-  if (s === null || s === "" || s === "—") return null;
+  if (s === null || s === "" || s === "-") return null;
   const v = Number(String(s).replace(/[^\d.\-]/g, ""));
   return Number.isFinite(v) ? v : null;
 }

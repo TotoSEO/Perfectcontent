@@ -15,6 +15,11 @@ import {
   AnchorLowDiversityBody,
   AnchorEmptyBody,
   PrioritySlideBody,
+  SynthesisRadarBody,
+  RobotsCurrentBody,
+  RobotsImprovedBody,
+  SitemapOverviewBody,
+  SitemapGapsBody,
 } from "@/components/audit/advanced/SlideContent";
 import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
 import { DownloadIcon, PrinterIcon } from "@/components/audit/advanced/Icons";
@@ -53,19 +58,109 @@ export default function AdvancedAuditPage() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiErr, setAiErr] = useState<string | null>(null);
+  // Per-slide AI state for the new synthesis / robots / sitemap slides.
+  // Each is lazy: the user clicks "Générer" on the slide, the call goes
+  // out, and the slide swaps from skeleton to filled in place.
+  const [synthBusy, setSynthBusy] = useState(false);
+  const [synthAi, setSynthAi] = useState<{ intro: string; best: string[]; worst: string[] } | null>(null);
+  const [synthErr, setSynthErr] = useState<string | null>(null);
+  const [robotsBusy, setRobotsBusy] = useState(false);
+  const [robotsAi, setRobotsAi] = useState<{
+    is_good: boolean;
+    current_analysis: string;
+    issues: string[];
+    improved_content: string | null;
+    improvements: string[];
+  } | null>(null);
+  const [robotsErr, setRobotsErr] = useState<string | null>(null);
+  const [sitemapBusy, setSitemapBusy] = useState(false);
+  const [sitemapAi, setSitemapAi] = useState<{
+    fetched: boolean;
+    sitemap_url_count: number;
+    indexable_count: number;
+    missing_count: number;
+    overview: string;
+    gaps_summary: string | null;
+    gap_breakdown: { label: string; count: number }[];
+    last_modified: string | null;
+    error: string | null;
+  } | null>(null);
+  const [sitemapErr, setSitemapErr] = useState<string | null>(null);
 
   const isAdvanced = audit?.summary?.audit_type === "advanced";
 
-  // Pre-process slides: stitch the audit name into the cover and the AI
-  // summary into the priority slide.
+  // Pre-process slides: stitch the audit name into the cover, the AI
+  // narrative into the priority slide, and the on-demand AI fields into
+  // each of the synthesis / robots / sitemap slides.
   const slides = useMemo<AdvSlideType[]>(() => {
     if (!audit?.summary?.slides) return [];
-    return audit.summary.slides.map((s) => {
-      if (s.kind === "cover") return { ...s, audit_name: audit.name };
-      if (s.kind === "priority") return { ...s, ai_summary: aiSummary ?? s.ai_summary, ai_summary_error: aiErr };
-      return s;
-    });
-  }, [audit, aiSummary, aiErr]);
+    const out: AdvSlideType[] = [];
+    for (const s of audit.summary.slides) {
+      if (s.kind === "cover") {
+        out.push({ ...s, audit_name: audit.name });
+        continue;
+      }
+      if (s.kind === "priority") {
+        out.push({ ...s, ai_summary: aiSummary ?? s.ai_summary, ai_summary_error: aiErr });
+        continue;
+      }
+      if (s.kind === "synthesis-radar") {
+        out.push({
+          ...s,
+          ai_intro: synthAi?.intro ?? s.ai_intro,
+          ai_best: synthAi?.best ?? s.ai_best,
+          ai_worst: synthAi?.worst ?? s.ai_worst,
+          ai_intro_error: synthErr,
+        });
+        continue;
+      }
+      if (s.kind === "robots-current") {
+        out.push({
+          ...s,
+          ai_overview: robotsAi?.current_analysis ?? s.ai_overview,
+          ai_issues: robotsAi?.issues ?? s.ai_issues,
+          ai_is_good: robotsAi?.is_good ?? s.ai_is_good,
+          ai_error: robotsErr,
+        });
+        continue;
+      }
+      if (s.kind === "robots-improved") {
+        // Drop this slide if the AI marks the file as already good.
+        if (robotsAi?.is_good) continue;
+        out.push({
+          ...s,
+          improved_content: robotsAi?.improved_content ?? s.improved_content,
+          ai_improvements: robotsAi?.improvements ?? s.ai_improvements,
+        });
+        continue;
+      }
+      if (s.kind === "sitemap-overview") {
+        out.push({
+          ...s,
+          ai_overview: sitemapAi?.overview ?? s.ai_overview,
+          url_count: sitemapAi?.sitemap_url_count ?? s.url_count,
+          indexable_count: sitemapAi?.indexable_count ?? s.indexable_count,
+          missing_count: sitemapAi?.missing_count ?? s.missing_count,
+          last_modified: sitemapAi?.last_modified ?? s.last_modified,
+          ai_error: sitemapErr || sitemapAi?.error || null,
+        });
+        continue;
+      }
+      if (s.kind === "sitemap-gaps") {
+        // Drop the gaps slide if nothing is missing.
+        if ((sitemapAi?.missing_count ?? s.missing_count) === 0) continue;
+        out.push({
+          ...s,
+          missing_count: sitemapAi?.missing_count ?? s.missing_count,
+          ai_gaps_summary: sitemapAi?.gaps_summary ?? s.ai_gaps_summary,
+          breakdown: sitemapAi?.gap_breakdown ?? s.breakdown,
+        });
+        continue;
+      }
+      out.push(s);
+    }
+    return out;
+  }, [audit, aiSummary, aiErr, synthAi, synthErr, robotsAi, robotsErr, sitemapAi, sitemapErr]);
   const total = slides.length;
 
   const totalIssues = useMemo(() => {
@@ -103,6 +198,96 @@ export default function AdvancedAuditPage() {
     }
   }
 
+  async function generateSynthesis() {
+    if (!audit?.summary) return;
+    setSynthBusy(true);
+    setSynthErr(null);
+    try {
+      const res = await api<{ intro: string; best: string[]; worst: string[] }>("/srv/audits/synthesis-overview", {
+        method: "POST",
+        json: {
+          audit_name: audit.name,
+          domain: audit.summary.domain,
+          global_score: Number(audit.score || 0),
+          sections: audit.summary.sections.map((s) => ({ label: s.label, score: s.score, weight: s.weight })),
+        },
+        timeoutMs: 45_000,
+      });
+      setSynthAi({ intro: res.intro, best: res.best, worst: res.worst });
+    } catch (e) {
+      setSynthErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSynthBusy(false);
+    }
+  }
+
+  async function generateRobotsAnalysis() {
+    if (!audit?.summary?.robots_txt_pasted) return;
+    setRobotsBusy(true);
+    setRobotsErr(null);
+    try {
+      const res = await api<{
+        is_good: boolean;
+        current_analysis: string;
+        issues: string[];
+        improved_content: string | null;
+        improvements: string[];
+      }>("/srv/audits/robots-analysis", {
+        method: "POST",
+        json: {
+          domain: audit.summary.domain,
+          content: audit.summary.robots_txt_pasted,
+        },
+        timeoutMs: 90_000,
+      });
+      setRobotsAi(res);
+    } catch (e) {
+      setRobotsErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRobotsBusy(false);
+    }
+  }
+
+  async function generateSitemapAnalysis() {
+    if (!audit?.summary?.sitemap_url) return;
+    setSitemapBusy(true);
+    setSitemapErr(null);
+    try {
+      // Pull the indexable URLs from the saved issues table (perimeter
+      // comparison). They're not in the summary so we read the audit's
+      // /issues partition lazily here.
+      // For simplicity, we send no URLs and rely on the backend's path
+      // grouping when missing > 0. (Full URL list would balloon the
+      // payload past Vercel's 4.5MB limit.) Instead, we send the count
+      // and a sampled set of indexables when available.
+      const indexable = collectIndexableUrls(audit);
+      const res = await api<{
+        fetched: boolean;
+        sitemap_url_count: number;
+        indexable_count: number;
+        missing_count: number;
+        overview: string;
+        gaps_summary: string | null;
+        gap_breakdown: { label: string; count: number }[];
+        last_modified: string | null;
+        error: string | null;
+      }>("/srv/audits/sitemap-analysis", {
+        method: "POST",
+        json: {
+          domain: audit.summary.domain,
+          sitemap_url: audit.summary.sitemap_url,
+          indexable_urls: indexable,
+        },
+        timeoutMs: 90_000,
+      });
+      setSitemapAi(res);
+    } catch (e) {
+      setSitemapErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSitemapBusy(false);
+    }
+  }
+
   async function exportXlsx() {
     if (!audit?.issues || !audit.summary) return;
     setExporting(true);
@@ -120,8 +305,7 @@ export default function AdvancedAuditPage() {
         ...audit.summary,
         sections: fullSections,
         slides: audit.summary.slides,
-        // Legacy audits saved before the diagnostics field was added —
-        // give the exporter a safe default so the Exclusions sheet
+        // Legacy audits saved before the diagnostics field was added :         // give the exporter a safe default so the Exclusions sheet
         // still renders with zeros instead of crashing.
         diagnostics: audit.summary.diagnostics || {
           pagination_excluded_count: 0,
@@ -176,7 +360,7 @@ export default function AdvancedAuditPage() {
     return (
       <div className="page-shell page-shell-mid">
         <div className="card p-6 text-sm text-amber-300">
-          Cet audit a été créé en mode "classique" — il est visible sur la page <a href={`/audits/${audit.id}`} className="underline">audit technique</a>.
+          Cet audit a été créé en mode "classique" : il est visible sur la page <a href={`/audits/${audit.id}`} className="underline">audit technique</a>.
         </div>
       </div>
     );
@@ -238,7 +422,7 @@ export default function AdvancedAuditPage() {
       )}
 
       <p className="text-xs text-zinc-500">
-        💡 Chaque slide est en 16:9 — capture-la et colle-la directement dans tes Google Slides client.
+        💡 Chaque slide est en 16:9 : capture-la et colle-la directement dans tes Google Slides client.
       </p>
 
       {/* data-deck-root is the anchor the PDF exporter walks to find every
@@ -331,6 +515,7 @@ export default function AdvancedAuditPage() {
             );
           }
           if (s.kind === "summary") {
+            // Legacy slide (older audits). Newer audits emit synthesis-radar.
             const pillTone: "ok" | "warn" | "bad" =
               s.global_score >= 80 ? "ok" :
               s.global_score >= 50 ? "warn" : "bad";
@@ -339,7 +524,7 @@ export default function AdvancedAuditPage() {
                 key={i}
                 index={i}
                 total={total}
-                title="Synthèse — score par catégorie"
+                title="Synthèse : score par catégorie"
                 rightHeader={
                   <SectionPill tone={pillTone}>
                     Score global {s.global_score}/100
@@ -355,6 +540,103 @@ export default function AdvancedAuditPage() {
               </AdvSlide>
             );
           }
+          if (s.kind === "synthesis-radar") {
+            const pillTone: "ok" | "warn" | "bad" =
+              s.global_score >= 80 ? "ok" :
+              s.global_score >= 50 ? "warn" : "bad";
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="Synthèse de l&rsquo;audit"
+                rightHeader={
+                  <SectionPill tone={pillTone}>
+                    Score global {s.global_score}/100
+                  </SectionPill>
+                }
+                footer={`${audit.url_count.toLocaleString("fr-FR")} URLs · ${totalIssues.toLocaleString("fr-FR")} problèmes`}
+              >
+                <SynthesisRadarBody slide={s} onRequestAi={generateSynthesis} busy={synthBusy} />
+              </AdvSlide>
+            );
+          }
+          if (s.kind === "robots-current") {
+            const tone: "ok" | "warn" | "bad" = s.ai_is_good ? "ok" : "warn";
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="Robots.txt"
+                subtitle="Indexabilité & crawl"
+                rightHeader={
+                  <SectionPill tone={tone}>
+                    {s.ai_is_good ? "Fichier propre" : "À nettoyer"}
+                  </SectionPill>
+                }
+                footer="Indexabilité & crawl"
+              >
+                <RobotsCurrentBody slide={s} onRequestAi={generateRobotsAnalysis} busy={robotsBusy} />
+              </AdvSlide>
+            );
+          }
+          if (s.kind === "robots-improved") {
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="Robots.txt recommandé"
+                subtitle="Indexabilité & crawl"
+                rightHeader={<SectionPill tone="ok">Reco IA</SectionPill>}
+                footer="Indexabilité & crawl"
+              >
+                <RobotsImprovedBody slide={s} />
+              </AdvSlide>
+            );
+          }
+          if (s.kind === "sitemap-overview") {
+            const tone: "ok" | "warn" | "bad" =
+              s.missing_count === 0 ? "ok" :
+              s.missing_count > 200 ? "bad" : "warn";
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="Sitemap.xml"
+                subtitle="Indexabilité & crawl"
+                rightHeader={
+                  <SectionPill tone={tone}>
+                    {s.url_count > 0 ? `${s.url_count.toLocaleString("fr-FR")} URLs` : "À analyser"}
+                  </SectionPill>
+                }
+                footer="Indexabilité & crawl"
+              >
+                <SitemapOverviewBody slide={s} onRequestAi={generateSitemapAnalysis} busy={sitemapBusy} />
+              </AdvSlide>
+            );
+          }
+          if (s.kind === "sitemap-gaps") {
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="Sitemap.xml : pages absentes"
+                subtitle="Indexabilité & crawl"
+                rightHeader={
+                  <SectionPill tone="bad">
+                    {s.missing_count.toLocaleString("fr-FR")} URLs
+                  </SectionPill>
+                }
+                footer="Indexabilité & crawl"
+              >
+                <SitemapGapsBody slide={s} />
+              </AdvSlide>
+            );
+          }
           if (s.kind === "section-cover") {
             const sectionIndex = audit.summary!.sections.findIndex((x) => x.id === s.section_id);
             const part = `Partie ${sectionIndex + 1} sur ${audit.summary!.sections.length}`;
@@ -367,7 +649,7 @@ export default function AdvancedAuditPage() {
                 footer="Couverture de partie"
               >
                 {/* The "Partie X sur N" line appears once on the section
-                    cover (4.3) — the body renders it inside the eyebrow
+                    cover (4.3) : the body renders it inside the eyebrow
                     lockup, the footer carries only the generic label. */}
                 <SectionCoverBody slide={s} partOf={part} />
               </AdvSlide>
@@ -500,7 +782,7 @@ export default function AdvancedAuditPage() {
                 total={total}
                 variant="reco"
                 title={s.title}
-                subtitle={`${sec?.label} — Recommandations`}
+                subtitle={`${sec?.label} : Recommandations`}
                 rightHeader={<SectionPill>Recommandations</SectionPill>}
                 footer={sec?.label}
               >
@@ -529,6 +811,33 @@ export default function AdvancedAuditPage() {
       </div>
     </div>
   );
+}
+
+// Pull indexable URLs from the saved issues table. We use the canonical
+// subcategory (which records the "Sans canonical" + "Cross-canonical"
+// signals on the HTML perimeter) as a proxy for "every HTML page we know
+// about". Capped to 5 000 to keep the sitemap-analysis payload tractable.
+function collectIndexableUrls(audit: AuditOut): string[] {
+  const out = new Set<string>();
+  if (!audit?.issues?.categories) return [];
+  // Any category that contains URLs we crawled qualifies — we just need
+  // a snapshot of the crawl. We pull from a few high-coverage categories.
+  const sources = [
+    "canonical",
+    "depth",
+    "titles_meta_basic",
+    "internal_linking_overview",
+    "orphan_pages",
+  ];
+  for (const k of sources) {
+    const rows = audit.issues.categories[k] || [];
+    for (const r of rows) {
+      const u = r?.url;
+      if (typeof u === "string" && u.startsWith("http")) out.add(u);
+      if (out.size >= 5000) return Array.from(out);
+    }
+  }
+  return Array.from(out);
 }
 
 function BigStat({ label, value }: { label: string; value: string | number }) {

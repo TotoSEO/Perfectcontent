@@ -68,7 +68,7 @@ const GENERIC_ANCHORS = new Set([
   "retour a l accueil", "retour a l'accueil",
 ]);
 
-// Templated CTA labels — these repeat across the site as part of layout
+// Templated CTA labels : these repeat across the site as part of layout
 // templates (footer CTAs, blog/article boxes, lead magnets). They're
 // emitted as a true <a> hyperlink in body content but they're NOT
 // editorial anchors. We exclude them from the diversity score so a
@@ -168,7 +168,7 @@ function isTemplateCta(anchor: string): boolean {
 }
 
 // True when the link wraps an image and has no own text content.
-// Detected via Texte Alt being present while Ancrage is empty — that's
+// Detected via Texte Alt being present while Ancrage is empty : that's
 // how SF FR represents <a><img alt="…"></a>. Such links are NOT
 // editorial anchors so we exclude them from the diversity calc and from
 // the 'empty anchors are bad' signal.
@@ -177,7 +177,7 @@ function isImageWrappingLink(rawAnchor: string, altText: string): boolean {
 }
 
 // True when the Chemin du lien (XPath selector) points to a templated
-// card / button — listing tiles, CTA buttons, etc. — rather than to a
+// card / button : listing tiles, CTA buttons, etc. : rather than to a
 // genuine in-body anchor. We use this to keep only editorial links in
 // the diversity ranking.
 function isCardLikePath(path: string): boolean {
@@ -336,7 +336,7 @@ function streamAndFilter(
         //   • rawAnchor present : real editorial anchor
         //   • rawAnchor empty AND altText present : image-wrapping link
         //     (NOT counted as 'empty contextual anchor')
-        //   • rawAnchor empty AND altText empty : truly empty link — a
+        //   • rawAnchor empty AND altText empty : truly empty link : a
         //     genuine accessibility/SEO problem
         const rawAnchor = pick(data, ANCHOR_KEYS) || "";
         const altText = pick(data, ALT_KEYS) || "";
@@ -399,7 +399,7 @@ function streamAndFilter(
           breakdown.non_200++;
           return;
         }
-        // Templated CTA labels — keep them in the parser output but flag
+        // Templated CTA labels : keep them in the parser output but flag
         // them so the diversity calc can exclude them. We don't drop the
         // row outright because the empty-anchor signal in the rest of
         // the analyzer still needs visibility into them.

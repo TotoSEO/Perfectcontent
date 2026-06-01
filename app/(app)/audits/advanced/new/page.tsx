@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api, fetcher } from "@/lib/api";
@@ -22,7 +22,7 @@ type Stage =
   | "analyzing"
   | "saving";
 
-// No artificial row cap any more — the XLSX is a client deliverable and
+// No artificial row cap any more : the XLSX is a client deliverable and
 // must carry every row. Vercel function bodies are capped at ~4.5 MB, so
 // we still apply a very-high safety ceiling per subcategory to avoid
 // catastrophic 413s on edge-case audits; 50 000 rows × ~250 B ≈ 12.5 MB
@@ -58,7 +58,7 @@ const UPLOAD_GUIDE: Array<{
     num: 4,
     filename: "images_tous.csv",
     source: "Onglet Images → filtre Tous → Exporter",
-    purpose: "Toutes les images crawlées avec leur poids, dimensions et nombre de pages référençantes — utilisé pour la slide de poids des images (distribution complète, pas uniquement > 100 Ko).",
+    purpose: "Toutes les images crawlées avec leur poids, dimensions et nombre de pages référençantes : utilisé pour la slide de poids des images (distribution complète, pas uniquement > 100 Ko).",
   },
 ];
 
@@ -82,6 +82,13 @@ export default function NewAdvancedAuditPage() {
   const [name, setName] = useState("");
   const [folderId, setFolderId] = useState("");
 
+  // User-provided fields for the dedicated AI-driven robots.txt and
+  // sitemap.xml slides. Pasting the content here is much more reliable than
+  // fetching it through a server proxy (handles auth, staging URLs, WAF).
+  const [hasRobots, setHasRobots] = useState<"yes" | "no" | null>(null);
+  const [robotsContent, setRobotsContent] = useState("");
+  const [sitemapUrl, setSitemapUrl] = useState("");
+
   const [stage, setStage] = useState<Stage>("idle");
   const [err, setErr] = useState<string | null>(null);
 
@@ -93,7 +100,7 @@ export default function NewAdvancedAuditPage() {
 
   const allReady = !!(internalRows && issuesResult && anchorsResult && imagesResult);
 
-  // Re-run analyze whenever inputs change — only fire when we have at least
+  // Re-run analyze whenever inputs change : only fire when we have at least
   // file 1 + file 2 (the minimum to produce a meaningful report).
   const reanalyze = useCallback(
     (
@@ -115,11 +122,24 @@ export default function NewAdvancedAuditPage() {
         anchors,
         images_all: images,
         pagination_excluded: internalStats?.pagination_skipped ?? 0,
+        robots_txt_pasted: hasRobots === "yes" ? robotsContent.trim() || null : null,
+        sitemap_url: sitemapUrl.trim() || null,
       });
       setReport(r);
     },
-    [internalFile],
+    [internalFile, internalStats, hasRobots, robotsContent, sitemapUrl],
   );
+
+  // Re-run the analyzer whenever the robots / sitemap user-provided fields
+  // change but everything else is already loaded. (The file pickers each
+  // re-analyze when they finish ; this handles the case where the user
+  // fills the new fields *after* the files.)
+  useEffect(() => {
+    if (internalRows && issuesResult) {
+      reanalyze(internalRows, issuesResult, anchorsResult, imagesResult, siteResources);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRobots, robotsContent, sitemapUrl]);
 
   // File 1
   const onPickInternal = useCallback(async (f: File) => {
@@ -247,6 +267,8 @@ export default function NewAdvancedAuditPage() {
         domain: report.domain,
         diagnostics: report.diagnostics,
         site_resources: report.site_resources,
+        robots_txt_pasted: report.robots_txt_pasted,
+        sitemap_url: report.sitemap_url,
         priorities: report.priorities,
         sections: report.sections.map((s) => ({
           id: s.id,
@@ -294,7 +316,7 @@ export default function NewAdvancedAuditPage() {
         <div className="label mb-1.5 text-accent-300">Audit technique avancé</div>
         <h1 className="text-[28px] font-semibold tracking-tight">Importer un crawl complet</h1>
         <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
-          4 exports Screaming Frog à uploader (en français — l'outil détecte automatiquement les colonnes FR).
+          4 exports Screaming Frog à uploader (en français : l'outil détecte automatiquement les colonnes FR).
           Tout est traité dans ton navigateur. Le robots.txt / sitemap.xml / llms.txt sont fetchés automatiquement
           depuis le domaine détecté.
         </p>
@@ -328,7 +350,7 @@ export default function NewAdvancedAuditPage() {
                 <div className="min-w-0">
                   <div className="text-[13px] text-zinc-200 font-medium leading-snug">
                     <code className="text-accent-200 font-mono text-[12px] bg-[#1c1c20] px-1.5 py-0.5 rounded">{g.filename}</code>
-                    <span className="text-zinc-500 ml-2 text-xs font-normal">— {g.source}</span>
+                    <span className="text-zinc-500 ml-2 text-xs font-normal">- {g.source}</span>
                   </div>
                   <div className="text-xs text-zinc-500 mt-1 leading-relaxed">{g.purpose}</div>
                 </div>
@@ -439,6 +461,81 @@ export default function NewAdvancedAuditPage() {
         )}
       />
 
+      {/* === Robots.txt & sitemap.xml inputs (drive the dedicated AI slides) === */}
+      <section className="card p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="label">🤖 Robots.txt & sitemap.xml</h2>
+            <p className="text-xs text-zinc-500 mt-1 leading-relaxed max-w-2xl">
+              Colle le contenu et l&apos;URL pour que l&apos;IA produise une analyse pointue
+              et une version améliorée. Beaucoup plus fiable qu&apos;un fetch (WAF, staging, auth).
+            </p>
+          </div>
+        </div>
+
+        {/* Robots.txt section */}
+        <div className="space-y-2">
+          <span className="label">Le site dispose-t-il d&apos;un robots.txt ?</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setHasRobots("yes")}
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                hasRobots === "yes"
+                  ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-200"
+                  : "bg-[#1c1c20] border border-zinc-700 text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Oui, le voici
+            </button>
+            <button
+              type="button"
+              onClick={() => { setHasRobots("no"); setRobotsContent(""); }}
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                hasRobots === "no"
+                  ? "bg-red-500/20 border border-red-500/40 text-red-200"
+                  : "bg-[#1c1c20] border border-zinc-700 text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Non / je ne sais pas
+            </button>
+          </div>
+          {hasRobots === "yes" && (
+            <textarea
+              value={robotsContent}
+              onChange={(e) => setRobotsContent(e.target.value)}
+              placeholder={"User-agent: *\nDisallow: /admin/\nSitemap: https://example.com/sitemap.xml\n…"}
+              className="input font-mono text-[12px] leading-relaxed min-h-[140px] w-full"
+              rows={8}
+              spellCheck={false}
+            />
+          )}
+          {hasRobots === "yes" && robotsContent.trim().length > 0 && (
+            <div className="text-[11px] text-emerald-400">
+              ✓ {robotsContent.trim().split("\n").length} lignes ({robotsContent.length.toLocaleString("fr-FR")} caractères)
+            </div>
+          )}
+        </div>
+
+        {/* Sitemap URL */}
+        <div className="space-y-1.5">
+          <label className="block space-y-1.5">
+            <span className="label">URL du sitemap.xml (optionnel)</span>
+            <input
+              type="url"
+              value={sitemapUrl}
+              onChange={(e) => setSitemapUrl(e.target.value)}
+              placeholder="https://example.com/sitemap.xml"
+              className="input"
+            />
+          </label>
+          <p className="text-[11px] text-zinc-500">
+            L&apos;extracteur déplie automatiquement les sitemap-index. Compare aux URLs indexables
+            du crawl pour repérer les pages absentes.
+          </p>
+        </div>
+      </section>
+
       {busy && (
         <div className="card p-4 text-sm text-zinc-300 flex items-center gap-3">
           <div className="w-3 h-3 rounded-full bg-accent-500 animate-pulse" />
@@ -459,7 +556,7 @@ export default function NewAdvancedAuditPage() {
           {internalStats && internalStats.headers.length > 0 && (
             <details className="text-xs text-red-100/80 mt-2">
               <summary className="cursor-pointer hover:text-white">
-                Diagnostic — {internalStats.headers.length} colonnes lues, séparateur "{internalStats.delimiter}"
+                Diagnostic : {internalStats.headers.length} colonnes lues, séparateur "{internalStats.delimiter}"
               </summary>
               <div className="mt-2 p-3 bg-black/20 rounded font-mono text-[11px] break-all">
                 {internalStats.headers.join(" · ")}
@@ -484,7 +581,7 @@ export default function NewAdvancedAuditPage() {
                     robots.txt <span className={report.site_resources.robots_txt.fetched ? "text-emerald-400" : "text-red-400"}>{report.site_resources.robots_txt.fetched ? "✓" : "✗"}</span>
                     {" · "}sitemap <span className={report.site_resources.sitemap_xml.fetched ? "text-emerald-400" : "text-red-400"}>{report.site_resources.sitemap_xml.fetched ? "✓" : "✗"}</span>
                     {report.site_resources.sitemap_xml.url_count != null && <> ({report.site_resources.sitemap_xml.url_count} URLs)</>}
-                    {" · "}llms.txt <span className={report.site_resources.llms_txt.fetched ? "text-emerald-400" : "text-zinc-500"}>{report.site_resources.llms_txt.fetched ? "✓" : "—"}</span>
+                    {" · "}llms.txt <span className={report.site_resources.llms_txt.fetched ? "text-emerald-400" : "text-zinc-500"}>{report.site_resources.llms_txt.fetched ? "✓" : "-"}</span>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-zinc-500 mt-2">
@@ -517,7 +614,7 @@ export default function NewAdvancedAuditPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="ex : visibilitea.fr — mai 2026"
+                  placeholder="ex : visibilitea.fr : mai 2026"
                   className="input"
                 />
               </label>

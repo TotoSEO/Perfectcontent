@@ -3,7 +3,7 @@
 // slide size and prints crisp without shipping a binary asset.
 
 export function VbtMarkOnly({ size = 64, className = "" }: { size?: number; className?: string }) {
-  // A small "tea leaf with steam curl" mark — clean, on-brand, neutral
+  // A small "tea leaf with steam curl" mark : clean, on-brand, neutral
   // enough to drop in the corner of any slide without competing with the
   // wordmark.
   const id = `vbt-leaf-${Math.random().toString(36).slice(2, 7)}`;

@@ -125,7 +125,7 @@ export function BarChart({
 }: {
   bars: { label: string; value: number; color?: string }[];
   max?: number;
-  // `width` is intentionally dropped — the chart fills its container.
+  // `width` is intentionally dropped : the chart fills its container.
   width?: number;
   barHeight?: number;
   gap?: number;

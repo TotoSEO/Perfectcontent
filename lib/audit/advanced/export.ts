@@ -110,7 +110,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
   const synthHeader = writeContextBanner(
     synth,
     6,
-    `Audit technique SEO — ${auditName}`,
+    `Audit technique SEO : ${auditName}`,
     "Score global pondéré par l'importance SEO de chaque catégorie. Plus un score est bas, plus la catégorie est prioritaire à traiter.",
     "Chaque catégorie ci-dessous dispose d'un ou plusieurs onglets de détail (en bas de la fenêtre) listant les URLs concernées, le problème et comment le corriger.",
   );
@@ -197,11 +197,11 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
     if (d.anchor_filter_breakdown) {
       const b = d.anchor_filter_breakdown;
       lines.push(
-        { label: "  · CTAs templatés exclus du calcul de diversité", count: b.template_cta, why: 'Ancres dans la liste noire ("Nous contacter", "Demander une démo", "S\'inscrire", etc.) — ce sont des boutons de template, pas des ancres éditoriales.' },
-        { label: "  · Liens-images exclus", count: b.image_wrapping, why: "Liens dont Ancrage est vide mais Texte Alt est renseigné — ce sont des images cliquables, pas des ancres rédactionnelles." },
+        { label: "  · CTAs templatés exclus du calcul de diversité", count: b.template_cta, why: 'Ancres dans la liste noire ("Nous contacter", "Demander une démo", "S\'inscrire", etc.) : ce sont des boutons de template, pas des ancres éditoriales.' },
+        { label: "  · Liens-images exclus", count: b.image_wrapping, why: "Liens dont Ancrage est vide mais Texte Alt est renseigné : ce sont des images cliquables, pas des ancres rédactionnelles." },
         { label: "  · Blocs articles / cards exclus", count: b.card_path, why: "Chemin du lien contenant article, card, post, blog-item, etc. : des cartes de listing cliquables, pas des ancres dans le corps de texte." },
         { label: "  · Boutons / CTAs templatés (par chemin) exclus", count: b.button_path, why: "Chemin du lien contenant button, btn, cta, call-to-action : éléments de design, pas des ancres rédactionnelles." },
-        { label: "  · Destinations vers une page de pagination exclues", count: b.pagination_dest, why: "Liens internes pointant vers /page/N, ?page=N etc. — doublons de canonique, ne polluent plus le calcul de diversité." },
+        { label: "  · Destinations vers une page de pagination exclues", count: b.pagination_dest, why: "Liens internes pointant vers /page/N, ?page=N etc. : doublons de canonique, ne polluent plus le calcul de diversité." },
       );
     }
     for (const row of lines) {
@@ -255,8 +255,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
       if (sub.issues_full.length === 0 || sub.columns.length === 0) continue;
       const sheetName = safeSheetName(sub.xlsx_sheet);
 
-      // Special case : the "Ancres vides" sheet uses a custom layout —
-      // rows are grouped by the `_group` field (target URL), each group
+      // Special case : the "Ancres vides" sheet uses a custom layout :       // rows are grouped by the `_group` field (target URL), each group
       // gets its own header row + a coloured background that alternates
       // between two soft tints so the boundary between two adjacent
       // groups is always visible.
@@ -414,11 +413,11 @@ export function buildSheetMap(subs: AdvSubcategory[]): Record<string, string> {
 }
 
 // ===========================================================================
-// "Ancres vides" sheet — custom rendering with group separators.
+// "Ancres vides" sheet : custom rendering with group separators.
 //
 // Standard sheets are flat (one row per issue, coloured by severity). For
 // the empty anchors sheet the consultant needs to see WHICH target URLs
-// are affected and BY HOW MANY source URLs — flat severity rows would
+// are affected and BY HOW MANY source URLs : flat severity rows would
 // obscure that. So we render each destination group as a banded block :
 //
 //    ┌────────────────────────────────────────────────────────┐

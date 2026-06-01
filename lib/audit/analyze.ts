@@ -682,7 +682,7 @@ function extractFormat(url: string, contentType: string | null): string {
     if (m) return m[1].toLowerCase();
   }
   const ext = url.split("?")[0].split("#")[0].split(".").pop() || "";
-  return ext.length <= 5 ? ext.toLowerCase() : "—";
+  return ext.length <= 5 ? ext.toLowerCase() : "-";
 }
 
 
