@@ -339,7 +339,7 @@ function buildIndexabilityCrawl(
   // ----- URLs without canonical (computed from interne_html.csv)
   // Perimeter = ALL HTML pages (hors pagination), not just indexable.
   // A page without a canonical tag is a problem regardless of its
-  // indexability — Google may pick a different URL as canonical, and
+  // indexability : Google may pick a different URL as canonical, and
   // a noindex page without canonical can still appear in the index
   // if Google chooses to ignore the noindex.
   let missingCanon = 0, selfCanon = 0, crossCanon = 0;
@@ -395,8 +395,7 @@ function buildIndexabilityCrawl(
   };
 
   // ----- Pages en noindex (from directives_noindex.csv)
-  // Important : on NE PÉNALISE PAS le score pour les pages noindex —
-  // c'est souvent volontaire (panier, compte client, page de remerciement,
+  // Important : on NE PÉNALISE PAS le score pour les pages noindex :   // c'est souvent volontaire (panier, compte client, page de remerciement,
   // filtres facettes). Score figé à 100, sévérité "info". Seule la liste
   // dans le XLSX a un sens, pour que le consultant repasse dessus et
   // confirme manuellement quelles sont volontaires vs accidentelles.
@@ -616,15 +615,15 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
 function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSection; slides: AdvSlide[] } {
   // Perimeter for title/meta/H1 checks = ALL HTML pages (not just
   // indexable). A title missing on a noindex page is still a title
-  // missing — the client needs to see it to validate that the noindex
+  // missing : the client needs to see it to validate that the noindex
   // is intentional. Restricting to indexable previously hid real issues.
   const html = rows.filter(isHtml);
-  // Indexable HTML — used for the *duplicate* counts (duplicates on
+  // Indexable HTML : used for the *duplicate* counts (duplicates on
   // noindex pages are rarely actionable since the pages aren't in
   // search).
   const htmlIndexable = html.filter(isIndexable);
 
-  // Compute basic counts on the spot (lengths, missing) — on the full HTML
+  // Compute basic counts on the spot (lengths, missing) : on the full HTML
   // perimeter, not just indexable.
   let titleMissing = 0, metaMissing = 0, h1Missing = 0;
   let titleShort = 0, titleLong = 0, metaShort = 0, metaLong = 0;
@@ -1276,7 +1275,7 @@ function buildLinking(
         // Only meaningful with at least 3 inlinks. With less than 3, a
         // 100% dominance is trivially "always the same anchor".
         if (d.inlinks_count < 3) return false;
-        // Skip rows where the dominant anchor is empty — those belong to
+        // Skip rows where the dominant anchor is empty : those belong to
         // the next slide. Empty anchors shouldn't drive a "diversity"
         // recommendation.
         if (!d.dominant_anchor || d.dominant_anchor === "(vide)") return false;
@@ -1328,7 +1327,7 @@ function buildLinking(
     // (alt is filled), templates, cards, buttons. Group by destination so
     // the consultant sees each target URL with all its empty-anchor sources.
     // Each (source, destination) pair is counted once even if the source
-    // page has multiple empty <a> tags to the same target — what matters
+    // page has multiple empty <a> tags to the same target : what matters
     // for the consultant is the unique pairs to investigate / patch.
     const emptyByDest = new Map<string, Set<string>>();
     for (const r of anchors.rows) {
@@ -2099,7 +2098,7 @@ function buildPriorities(sections: AdvSection[]): PriorityItem[] {
     for (const sub of sec.subcategories) {
       if (sub.issues_full.length === 0) continue;
       if (INFORMATIONAL_SUB_IDS.has(sub.id)) continue;
-      // Skip subcategories whose only severity is "info" — those are
+      // Skip subcategories whose only severity is "info" : those are
       // observations, not fixes.
       const hasActionableSev = sub.issues_full.some(
         (r) => r.severity !== "info",
@@ -2283,6 +2282,10 @@ export type AdvancedAnalyzeOpts = {
   // parse time. Threaded through into report.diagnostics for the
   // Exclusions sheet in the XLSX.
   pagination_excluded?: number;
+  // User-provided at import time. Drives the dedicated robots.txt /
+  // sitemap.xml AI-analysis slides.
+  robots_txt_pasted?: string | null;
+  sitemap_url?: string | null;
 };
 
 export function analyzeAdvanced(
@@ -2340,17 +2343,66 @@ export function analyzeAdvanced(
     generated_at: new Date().toISOString(),
   };
 
-  const summarySlide: AdvSlide = {
-    kind: "summary",
+  const synthesisSlide: AdvSlide = {
+    kind: "synthesis-radar",
     sections: sections.map((s) => ({
       id: s.id,
       label: s.label,
       score: s.score,
       weight: s.weight,
-      summary: s.summary,
     })),
     global_score,
+    ai_intro: null,
+    ai_intro_error: null,
+    ai_best: [],
+    ai_worst: [],
   };
+
+  // Robots.txt / sitemap.xml slides : only included when the user pasted
+  // content / a URL at import. The AI fields stay null at create-time and
+  // are populated in the viewer page (a button triggers the call).
+  const robotsSlides: AdvSlide[] = [];
+  const rtxt = (opts.robots_txt_pasted || "").trim();
+  if (rtxt) {
+    robotsSlides.push({
+      kind: "robots-current",
+      domain: opts.domain,
+      raw_content: rtxt,
+      ai_overview: null,
+      ai_issues: [],
+      ai_is_good: false,
+      ai_error: null,
+    });
+    // The "improved" slide is also pushed up-front; the viewer will hide
+    // it if the AI marks the file as already good (ai_is_good = true).
+    robotsSlides.push({
+      kind: "robots-improved",
+      domain: opts.domain,
+      improved_content: "",
+      ai_improvements: [],
+    });
+  }
+
+  const sitemapSlides: AdvSlide[] = [];
+  const smUrl = (opts.sitemap_url || "").trim();
+  if (smUrl) {
+    sitemapSlides.push({
+      kind: "sitemap-overview",
+      sitemap_url: smUrl,
+      ai_overview: null,
+      url_count: 0,
+      indexable_count: 0,
+      missing_count: 0,
+      last_modified: null,
+      ai_error: null,
+    });
+    sitemapSlides.push({
+      kind: "sitemap-gaps",
+      missing_count: 0,
+      ai_gaps_summary: null,
+      breakdown: [],
+    });
+  }
 
   const prioritySlide: AdvSlide = {
     kind: "priority",
@@ -2362,7 +2414,11 @@ export function analyzeAdvanced(
 
   const slides: AdvSlide[] = [
     coverSlide,
-    summarySlide,
+    synthesisSlide,
+    // Robots / sitemap slides slot just BEFORE the Indexabilité & crawl
+    // section so they read naturally with the rest of the indexation block.
+    ...robotsSlides,
+    ...sitemapSlides,
     ...slIdx,
     ...slPerf,
     ...slMeta,
@@ -2403,6 +2459,8 @@ export function analyzeAdvanced(
     global_score,
     diagnostics,
     site_resources: opts.site_resources,
+    robots_txt_pasted: opts.robots_txt_pasted || null,
+    sitemap_url: opts.sitemap_url || null,
     sections,
     priorities,
     ai_summary: null,

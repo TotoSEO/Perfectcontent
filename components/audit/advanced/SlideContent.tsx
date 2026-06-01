@@ -4,6 +4,7 @@ import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
 import { BarChart, DonutChart, Histogram } from "../Charts";
 import { SectionPill } from "./AdvSlide";
 import { RecoIcon, iconForReco } from "./RecoIcons";
+import { RadarChart } from "./RadarChart";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
@@ -75,7 +76,7 @@ export function AdvKpiTile({ kpi, size = "md" }: { kpi: AdvKPI; size?: "sm" | "m
 }
 
 // ---------------------------------------------------------------------------
-// "Voir l'onglet …" badge — replaces the unicode ⎘ with a real Lucide-style
+// "Voir l'onglet …" badge : replaces the unicode ⎘ with a real Lucide-style
 // spreadsheet icon (4.2).
 // ---------------------------------------------------------------------------
 
@@ -150,7 +151,7 @@ export function DescriptionBlock({ text, maxLines = 6, size }: { text: string; m
   );
 }
 
-// "Takeaway" block — replaces the ► glyph with a ChevronRight icon (4.2).
+// "Takeaway" block : replaces the ► glyph with a ChevronRight icon (4.2).
 function TakeawayBlock({ text }: { text: string }) {
   return (
     <div
@@ -261,7 +262,7 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
           gridTemplateColumns: hasChart ? "minmax(0, 4fr) minmax(0, 6fr)" : "1fr",
         }}
       >
-        {/* Left column — KPIs (2 hero tiles when chart present).
+        {/* Left column : KPIs (2 hero tiles when chart present).
             Vertically centered so a short stack reads as deliberate balance
             against the chart instead of leaving a void at the bottom. */}
         <div className={`flex flex-col gap-4 min-w-0 ${hasChart ? "justify-center" : "justify-center"}`}>
@@ -283,7 +284,7 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
           {slide.takeaway && !hasChart && <TakeawayBlock text={slide.takeaway} />}
         </div>
 
-        {/* Right column — chart + takeaway, vertically centered to match. */}
+        {/* Right column : chart + takeaway, vertically centered to match. */}
         {hasChart && (
           <div className="flex flex-col gap-3 min-w-0 min-h-0 justify-center">
             <ChartContainer maxWidth="100%" caption={chartCaption(slide.chart!.type)}>
@@ -624,7 +625,7 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
             <RecoIcon name={slide.icon} size={36} />
           </span>
           <div>
-            {/* Single "Partie X sur N" lockup (4.3, 4.4) — uses the live
+            {/* Single "Partie X sur N" lockup (4.3, 4.4) : uses the live
                 computed value, not the stale stored eyebrow, so the
                 count matches the actual number of sections. */}
             <div
@@ -740,7 +741,7 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
 }
 
 // ===========================================================================
-// RECOMMENDATIONS SLIDE — visual card grid (4.11)
+// RECOMMENDATIONS SLIDE : visual card grid (4.11)
 // ===========================================================================
 
 export function RecoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "reco" }> }) {
@@ -935,7 +936,7 @@ export function AnchorLowDiversityBody({
                         style={{
                           color: VBT.ink,
                           fontWeight: 500,
-                          // URL must remain visible in full — wrap on slashes.
+                          // URL must remain visible in full : wrap on slashes.
                           wordBreak: "break-all",
                           fontSize: VBT_TYPO.caption + 1,
                           lineHeight: 1.4,
@@ -1265,7 +1266,7 @@ function EmptyAnchorGroup({
 
   return (
     <div style={{ borderBottom: `2px solid ${tint.headerEdge}` }}>
-      {/* Group header — target URL + count */}
+      {/* Group header : target URL + count */}
       <div
         className="flex items-start gap-2.5"
         style={{
@@ -1375,7 +1376,7 @@ function EmptyAnchorGroup({
 }
 
 // ===========================================================================
-// LEGACY anchor renderers (anchor-bars / anchor-table) — kept so audits
+// LEGACY anchor renderers (anchor-bars / anchor-table) : kept so audits
 // generated before this refactor still load, but new audits don't produce
 // these kinds.
 // ===========================================================================
@@ -1609,7 +1610,7 @@ export function AnchorTableBody({ slide }: { slide: Extract<AdvSlide, { kind: "a
             <ReadingGuideCard
               tone="warn"
               title="Zone à surveiller (rouge)"
-              body="En bas à droite : pages très linkées (>10 inlinks) avec une diversité < 0,3. Le signal sémantique transmis est faible — variez vos ancres contextuelles."
+              body="En bas à droite : pages très linkées (>10 inlinks) avec une diversité < 0,3. Le signal sémantique transmis est faible : variez vos ancres contextuelles."
             />
             <div
               className="rounded-xl"
@@ -1863,7 +1864,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 }
 
 // ===========================================================================
-// PRIORITY SLIDE — Kanban-style lanes by urgency (4.10)
+// PRIORITY SLIDE : Kanban-style lanes by urgency (4.10)
 // ===========================================================================
 
 const URGENCY_LABEL: Record<PriorityItem["urgency"], string> = {
@@ -1886,6 +1887,705 @@ const URGENCY_PALETTE: Record<PriorityItem["urgency"], { fg: string; soft: strin
   medium:   { fg: "#CA8A04",     soft: "#FEF3C7", edge: "#FDE68A", label: "#A16207" },
   low:      { fg: VBT.sigBlue,   soft: "#DBEAFE", edge: "#93C5FD", label: VBT.sigBlue },
 };
+
+// ===========================================================================
+// SYNTHESIS RADAR — left : short AI intro + best/worst list ; right : radar.
+// AI intro and best/worst lists are generated by the viewer page calling
+// /srv/audits/synthesis-overview. When still null, a "Générer" button shows.
+// All text is clipped to keep the slide tight (no overflow).
+// ===========================================================================
+
+export function SynthesisRadarBody({
+  slide,
+  onRequestAi,
+  busy,
+}: {
+  slide: Extract<AdvSlide, { kind: "synthesis-radar" }>;
+  onRequestAi: () => void;
+  busy: boolean;
+}) {
+  const axes = slide.sections.map((s) => s.label);
+  const series = slide.sections.map((s) => s.score);
+  const hasAi = !!slide.ai_intro;
+
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      {/* LEFT — intro + best/worst */}
+      <div className="col-span-6 flex flex-col gap-4 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <SparklesIcon size={12} color={VBT.terracotta500} />
+          Synthèse de l&apos;audit
+        </div>
+
+        {hasAi ? (
+          <>
+            {/* Intro paragraph — clamp at 6 lines so it never overflows */}
+            <div
+              style={{
+                color: VBT.ink,
+                fontFamily: VBT_FONT.body,
+                fontSize: VBT_TYPO.body,
+                lineHeight: 1.55,
+                display: "-webkit-box",
+                WebkitLineClamp: 6,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {slide.ai_intro}
+            </div>
+
+            {slide.ai_best.length > 0 && (
+              <BestWorstBlock
+                title="Les points les moins critiques du site"
+                items={slide.ai_best}
+                tone="ok"
+              />
+            )}
+            {slide.ai_worst.length > 0 && (
+              <BestWorstBlock
+                title="Les points les plus problématiques concernent"
+                items={slide.ai_worst}
+                tone="bad"
+              />
+            )}
+          </>
+        ) : slide.ai_intro_error ? (
+          <div
+            style={{
+              color: VBT.sigRed,
+              fontSize: VBT_TYPO.bodySm,
+              lineHeight: 1.55,
+            }}
+          >
+            Échec de la génération IA : {slide.ai_intro_error}
+            <div className="mt-2">
+              <button
+                onClick={onRequestAi}
+                disabled={busy}
+                className="rounded-lg"
+                style={{
+                  background: VBT.terracotta500,
+                  color: VBT.paper,
+                  fontWeight: 600,
+                  fontSize: VBT_TYPO.caption,
+                  padding: "8px 14px",
+                  cursor: busy ? "wait" : "pointer",
+                }}
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col gap-3 justify-center">
+            <p style={{ color: VBT.inkSoft, fontSize: VBT_TYPO.bodySm, lineHeight: 1.55 }}>
+              Une synthèse rédigée par IA (Claude Haiku) résumera ici la posture SEO du site
+              en quelques phrases, et listera les catégories les plus solides et les plus
+              problématiques.
+            </p>
+            <button
+              onClick={onRequestAi}
+              disabled={busy}
+              className="rounded-lg self-start"
+              style={{
+                background: VBT.terracotta500,
+                color: VBT.paper,
+                fontWeight: 600,
+                fontSize: VBT_TYPO.caption,
+                padding: "10px 16px",
+                cursor: busy ? "wait" : "pointer",
+                opacity: busy ? 0.7 : 1,
+              }}
+            >
+              {busy ? "Génération en cours…" : "Générer la synthèse"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT — radar chart, fills its column */}
+      <div className="col-span-6 min-w-0 min-h-0 flex items-center justify-center">
+        <div className="w-full h-full" style={{ maxHeight: "100%" }}>
+          <RadarChart axes={axes} series={series} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BestWorstBlock({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: "ok" | "bad";
+}) {
+  const palette =
+    tone === "ok"
+      ? { fg: VBT.sigGreen, bg: "#E6F4EA", edge: "#B3DDC2" }
+      : { fg: VBT.sigRed, bg: "#FEE2E2", edge: "#FCA5A5" };
+  return (
+    <div
+      className="rounded-xl"
+      style={{
+        background: palette.bg,
+        border: `1px solid ${palette.edge}`,
+        padding: "10px 14px",
+      }}
+    >
+      <div
+        className="uppercase mb-1.5"
+        style={{
+          color: palette.fg,
+          fontWeight: 700,
+          fontSize: VBT_TYPO.micro,
+          letterSpacing: "0.16em",
+          fontFamily: VBT_FONT.mono,
+        }}
+      >
+        {title}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {items.map((item, i) => (
+          <span
+            key={i}
+            style={{
+              color: VBT.ink,
+              fontWeight: 600,
+              fontSize: VBT_TYPO.bodySm,
+              fontFamily: VBT_FONT.title,
+            }}
+          >
+            {item}
+            {i < items.length - 1 && (
+              <span className="ml-3" style={{ color: palette.fg, opacity: 0.5 }}>·</span>
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// ROBOTS.TXT current/improved — text left + raw file panel right
+// ===========================================================================
+
+function FilePanel({ raw, label }: { raw: string; label: string }) {
+  // Render the raw robots.txt content in a mono "code" panel. The user can
+  // also paste a real screenshot in the slide before exporting (the panel
+  // lives in a slot the consultant can manually replace if needed).
+  // Long files clip with overflow-y so the slide never grows.
+  return (
+    <div
+      className="rounded-xl flex flex-col min-w-0 min-h-0 overflow-hidden"
+      style={{
+        background: VBT.paper,
+        border: `1px solid ${VBT.paperEdge}`,
+        boxShadow: "0 6px 18px -12px rgba(36,23,18,0.18)",
+      }}
+    >
+      <div
+        className="flex items-center gap-2"
+        style={{
+          padding: "8px 14px",
+          borderBottom: `1px solid ${VBT.paperEdge}`,
+          background: VBT.terracotta50,
+        }}
+      >
+        <span
+          className="inline-block rounded-full"
+          style={{ width: 7, height: 7, background: VBT.terracotta500 }}
+        />
+        <span
+          className="uppercase"
+          style={{
+            color: VBT.terracotta700,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.16em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          {label}
+        </span>
+      </div>
+      <pre
+        className="flex-1 min-h-0 overflow-y-auto whitespace-pre-wrap"
+        style={{
+          margin: 0,
+          padding: "14px 16px",
+          fontFamily: VBT_FONT.mono,
+          fontSize: 11,
+          lineHeight: 1.5,
+          color: VBT.ink,
+          background: "#FFFCF7",
+        }}
+      >
+        {raw}
+      </pre>
+    </div>
+  );
+}
+
+function AiBulletList({
+  title,
+  items,
+  tone = "warn",
+}: {
+  title: string;
+  items: string[];
+  tone?: "warn" | "ok";
+}) {
+  const palette =
+    tone === "ok"
+      ? { fg: VBT.sigGreen, edge: "#B3DDC2" }
+      : { fg: VBT.sigRed, edge: "#FCA5A5" };
+  return (
+    <div className="min-w-0">
+      <div
+        className="uppercase mb-2"
+        style={{
+          color: palette.fg,
+          fontWeight: 700,
+          fontSize: VBT_TYPO.micro,
+          letterSpacing: "0.18em",
+          fontFamily: VBT_FONT.mono,
+        }}
+      >
+        {title}
+      </div>
+      <ul className="space-y-1.5">
+        {items.slice(0, 6).map((it, i) => (
+          <li
+            key={i}
+            className="flex items-start gap-2"
+            style={{
+              color: VBT.ink,
+              fontSize: VBT_TYPO.bodySm,
+              lineHeight: 1.5,
+              fontFamily: VBT_FONT.body,
+            }}
+          >
+            <span className="shrink-0 mt-1" style={{ color: palette.fg }}>
+              <ChevronRightIcon size={11} color={palette.fg} />
+            </span>
+            <span>{it}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function RobotsCurrentBody({
+  slide,
+  onRequestAi,
+  busy,
+}: {
+  slide: Extract<AdvSlide, { kind: "robots-current" }>;
+  onRequestAi: () => void;
+  busy: boolean;
+}) {
+  const hasAi = !!slide.ai_overview;
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      {/* LEFT — AI analysis */}
+      <div className="col-span-7 flex flex-col gap-4 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <SparklesIcon size={12} color={VBT.terracotta500} />
+          Analyse du robots.txt actuel
+        </div>
+
+        {hasAi ? (
+          <>
+            <div
+              style={{
+                color: VBT.ink,
+                fontFamily: VBT_FONT.body,
+                fontSize: VBT_TYPO.body,
+                lineHeight: 1.55,
+                display: "-webkit-box",
+                WebkitLineClamp: 8,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {slide.ai_overview}
+            </div>
+            {slide.ai_issues.length > 0 && (
+              <AiBulletList title="Points bloquants" items={slide.ai_issues} tone="warn" />
+            )}
+          </>
+        ) : slide.ai_error ? (
+          <div style={{ color: VBT.sigRed, fontSize: VBT_TYPO.bodySm }}>
+            Échec de l&apos;analyse : {slide.ai_error}
+            <div className="mt-2">
+              <button
+                onClick={onRequestAi}
+                disabled={busy}
+                className="rounded-lg"
+                style={{
+                  background: VBT.terracotta500,
+                  color: VBT.paper,
+                  fontWeight: 600,
+                  fontSize: VBT_TYPO.caption,
+                  padding: "8px 14px",
+                  cursor: busy ? "wait" : "pointer",
+                }}
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col gap-3 justify-center">
+            <p style={{ color: VBT.inkSoft, fontSize: VBT_TYPO.bodySm, lineHeight: 1.55 }}>
+              L&apos;analyse IA va passer le robots.txt en revue : héritages anciens (Umbraco,
+              Wordfence), règles inutiles, manquements GEO, et recommandera un fichier propre.
+            </p>
+            <button
+              onClick={onRequestAi}
+              disabled={busy}
+              className="rounded-lg self-start"
+              style={{
+                background: VBT.terracotta500,
+                color: VBT.paper,
+                fontWeight: 600,
+                fontSize: VBT_TYPO.caption,
+                padding: "10px 16px",
+                cursor: busy ? "wait" : "pointer",
+                opacity: busy ? 0.7 : 1,
+              }}
+            >
+              {busy ? "Analyse en cours…" : "Lancer l'analyse IA"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT — raw robots.txt panel */}
+      <div className="col-span-5 min-w-0 min-h-0 flex">
+        <FilePanel raw={slide.raw_content} label="robots.txt actuel" />
+      </div>
+    </div>
+  );
+}
+
+export function RobotsImprovedBody({
+  slide,
+}: {
+  slide: Extract<AdvSlide, { kind: "robots-improved" }>;
+}) {
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      <div className="col-span-7 flex flex-col gap-4 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.sigGreen,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <SparklesIcon size={12} color={VBT.sigGreen} />
+          Robots.txt recommandé
+        </div>
+        <div
+          style={{
+            color: VBT.ink,
+            fontFamily: VBT_FONT.body,
+            fontSize: VBT_TYPO.body,
+            lineHeight: 1.55,
+          }}
+        >
+          Le nouveau fichier est plus court, lisible et maintenable. Voici les changements clés
+          apportés par rapport à la version actuelle.
+        </div>
+        {slide.ai_improvements.length > 0 && (
+          <AiBulletList title="Améliorations clés" items={slide.ai_improvements} tone="ok" />
+        )}
+      </div>
+      <div className="col-span-5 min-w-0 min-h-0 flex">
+        <FilePanel raw={slide.improved_content || "(en attente de génération)"} label="robots.txt recommandé" />
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// SITEMAP — overview + gaps (two slides)
+// ===========================================================================
+
+export function SitemapOverviewBody({
+  slide,
+  onRequestAi,
+  busy,
+}: {
+  slide: Extract<AdvSlide, { kind: "sitemap-overview" }>;
+  onRequestAi: () => void;
+  busy: boolean;
+}) {
+  const hasAi = !!slide.ai_overview;
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      <div className="col-span-7 flex flex-col gap-4 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <SparklesIcon size={12} color={VBT.terracotta500} />
+          Analyse du sitemap.xml
+        </div>
+
+        {hasAi ? (
+          <>
+            <div
+              style={{
+                color: VBT.ink,
+                fontFamily: VBT_FONT.body,
+                fontSize: VBT_TYPO.body,
+                lineHeight: 1.55,
+                display: "-webkit-box",
+                WebkitLineClamp: 9,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {slide.ai_overview}
+            </div>
+            <div className="grid grid-cols-3 gap-3 mt-1">
+              <MiniStat label="URLs dans le sitemap" value={slide.url_count.toLocaleString("fr-FR")} tone="info" />
+              <MiniStat label="Indexables (crawl)" value={slide.indexable_count.toLocaleString("fr-FR")} tone="ok" />
+              <MiniStat
+                label="Absentes du sitemap"
+                value={slide.missing_count.toLocaleString("fr-FR")}
+                tone={slide.missing_count > 0 ? "bad" : "ok"}
+              />
+            </div>
+          </>
+        ) : slide.ai_error ? (
+          <div style={{ color: VBT.sigRed, fontSize: VBT_TYPO.bodySm }}>
+            Échec de l&apos;analyse : {slide.ai_error}
+            <div className="mt-2">
+              <button
+                onClick={onRequestAi}
+                disabled={busy}
+                className="rounded-lg"
+                style={{ background: VBT.terracotta500, color: VBT.paper, padding: "8px 14px", fontWeight: 600, fontSize: VBT_TYPO.caption, cursor: busy ? "wait" : "pointer" }}
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col gap-3 justify-center">
+            <p style={{ color: VBT.inkSoft, fontSize: VBT_TYPO.bodySm, lineHeight: 1.55 }}>
+              L&apos;analyse va récupérer le sitemap (incluant les sitemap-index), recompter ses
+              URLs, et identifier les pages indexables du crawl qui n&apos;y figurent pas.
+            </p>
+            <button
+              onClick={onRequestAi}
+              disabled={busy}
+              className="rounded-lg self-start"
+              style={{ background: VBT.terracotta500, color: VBT.paper, padding: "10px 16px", fontWeight: 600, fontSize: VBT_TYPO.caption, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}
+            >
+              {busy ? "Analyse en cours…" : "Lancer l'analyse IA"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="col-span-5 min-w-0 min-h-0 flex">
+        <FilePanel
+          raw={`URL : ${slide.sitemap_url}\n${slide.last_modified ? `Last-Modified : ${slide.last_modified}\n` : ""}\nTotal URLs : ${slide.url_count.toLocaleString("fr-FR")}\nIndexables crawl : ${slide.indexable_count.toLocaleString("fr-FR")}\nAbsentes du sitemap : ${slide.missing_count.toLocaleString("fr-FR")}`}
+          label="sitemap.xml"
+        />
+      </div>
+    </div>
+  );
+}
+
+export function SitemapGapsBody({
+  slide,
+}: {
+  slide: Extract<AdvSlide, { kind: "sitemap-gaps" }>;
+}) {
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      <div className="col-span-7 flex flex-col gap-4 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.sigRed,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <AlertTriangleIcon size={12} color={VBT.sigRed} />
+          {slide.missing_count.toLocaleString("fr-FR")} URLs indexables absentes du sitemap
+        </div>
+
+        {slide.ai_gaps_summary && (
+          <div
+            style={{
+              color: VBT.ink,
+              fontFamily: VBT_FONT.body,
+              fontSize: VBT_TYPO.body,
+              lineHeight: 1.55,
+              display: "-webkit-box",
+              WebkitLineClamp: 8,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {slide.ai_gaps_summary}
+          </div>
+        )}
+      </div>
+
+      <div className="col-span-5 min-w-0 min-h-0 flex flex-col gap-2">
+        <div
+          className="uppercase"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          Répartition des absences
+        </div>
+        <div
+          className="rounded-xl flex-1 min-h-0 overflow-y-auto"
+          style={{
+            background: VBT.paper,
+            border: `1px solid ${VBT.paperEdge}`,
+            padding: "10px 12px",
+          }}
+        >
+          {slide.breakdown.length === 0 ? (
+            <div style={{ color: VBT.zinc, fontSize: VBT_TYPO.bodySm, fontStyle: "italic" }}>
+              Aucune absence détectée.
+            </div>
+          ) : (
+            <ul className="space-y-1.5">
+              {slide.breakdown.slice(0, 12).map((b, i) => (
+                <li
+                  key={i}
+                  className="flex items-center gap-3 min-w-0"
+                  style={{ fontSize: VBT_TYPO.bodySm, color: VBT.ink, fontFamily: VBT_FONT.body }}
+                >
+                  <code
+                    className="truncate flex-1 min-w-0"
+                    style={{ color: VBT.terracotta700, fontFamily: VBT_FONT.mono, fontSize: VBT_TYPO.bodySm - 1 }}
+                  >
+                    {b.label}
+                  </code>
+                  <span
+                    className="tabular-nums shrink-0"
+                    style={{
+                      color: VBT.ink,
+                      fontWeight: 700,
+                      fontFamily: VBT_FONT.title,
+                      fontSize: VBT_TYPO.bodySm,
+                    }}
+                  >
+                    {b.count.toLocaleString("fr-FR")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "ok" | "warn" | "bad" | "info";
+}) {
+  const palette =
+    tone === "ok" ? { fg: VBT.sigGreen, bg: "#E6F4EA", edge: "#B3DDC2" } :
+    tone === "warn" ? { fg: VBT.sigOrange, bg: "#FFEDD5", edge: "#FDBA74" } :
+    tone === "bad" ? { fg: VBT.sigRed, bg: "#FEE2E2", edge: "#FCA5A5" } :
+    { fg: VBT.sigBlue, bg: "#DBEAFE", edge: "#93C5FD" };
+  return (
+    <div
+      className="rounded-xl min-w-0"
+      style={{
+        background: palette.bg,
+        border: `1px solid ${palette.edge}`,
+        padding: "10px 12px",
+      }}
+    >
+      <div
+        className="tabular-nums truncate"
+        style={{
+          color: palette.fg,
+          fontFamily: VBT_FONT.display,
+          fontWeight: 400,
+          fontSize: 26,
+          letterSpacing: "-0.01em",
+          lineHeight: 1.05,
+        }}
+      >
+        {value}
+      </div>
+      <div
+        className="uppercase truncate mt-1"
+        style={{
+          color: VBT.inkSoft,
+          fontWeight: 700,
+          fontSize: VBT_TYPO.micro,
+          letterSpacing: "0.14em",
+          fontFamily: VBT_FONT.mono,
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
 
 export function PrioritySlideBody({
   slide,

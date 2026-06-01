@@ -1,4 +1,4 @@
-// Visibili'tea brand tokens — derived from the logo (terracotta, amber, brick).
+// Visibili'tea brand tokens : derived from the logo (terracotta, amber, brick).
 // Used by the audit slide viewer + Excel export so the deliverable looks
 // native to the consultant's brand.
 
@@ -69,7 +69,7 @@ export const VBT_TYPO = {
 } as const;
 
 export const VBT_SPACING = {
-  slidePadX: 80,    // 4.14 — horizontal breathing room (cover/section)
+  slidePadX: 80,    // 4.14 : horizontal breathing room (cover/section)
   slidePadXTight: 56, // for data slides where we need slightly more space for charts
   slidePadY: 48,    // vertical padding
 } as const;
@@ -79,17 +79,17 @@ export const VBT_NAME = "Visibili'tea";
 // Font-family stacks (editorial tri-stack). Reference these instead of
 // hard-coding the CSS-var + fallback string in every component.
 export const VBT_FONT = {
-  // Warm display serif — hero numbers, cover + section titles, slide H2.
+  // Warm display serif : hero numbers, cover + section titles, slide H2.
   display: "var(--font-vbt-display), 'Calistoga', Georgia, 'Times New Roman', serif",
-  // Geometric sans — precise tabular data, KPI values, numeric emphasis.
+  // Geometric sans : precise tabular data, KPI values, numeric emphasis.
   title: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-  // Humanist sans — body copy, descriptions, table cells.
+  // Humanist sans : body copy, descriptions, table cells.
   body: "var(--font-vbt-body), 'Poppins', system-ui, sans-serif",
-  // Technical mono — uppercase micro-labels, kickers, badges, axis labels.
+  // Technical mono : uppercase micro-labels, kickers, badges, axis labels.
   mono: "var(--font-vbt-mono), 'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
 } as const;
 
-// Severity → palette (background, foreground, fill for Excel — argb)
+// Severity → palette (background, foreground, fill for Excel : argb)
 export const SEVERITY = {
   critical: { bg: "#F8E4E0", fg: "#642720", argbBg: "FFF8E4E0", argbFg: "FF642720" },
   high:     { bg: "#FBE9D6", fg: "#7E411A", argbBg: "FFFBE9D6", argbFg: "FF7E411A" },

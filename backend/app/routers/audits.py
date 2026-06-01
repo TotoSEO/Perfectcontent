@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -151,7 +151,7 @@ def _normalise_origin(value: str) -> str:
     parsed = urlparse(v)
     if not parsed.netloc:
         raise HTTPException(400, "invalid origin")
-    # Restrict to http/https — never let the caller force file://, ftp://, etc.
+    # Restrict to http/https : never let the caller force file://, ftp://, etc.
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(400, "only http/https origins are allowed")
     return f"{parsed.scheme}://{parsed.netloc}"
@@ -210,7 +210,7 @@ async def _expand_sitemap(client: httpx.AsyncClient, url: str, depth: int = 0, m
 _IA_BOTS = [
     "gptbot",            # OpenAI training crawler (ChatGPT)
     "chatgpt-user",      # ChatGPT browse-with-bing real-time fetches
-    "ccbot",             # Common Crawl — used by many LLMs as training source
+    "ccbot",             # Common Crawl : used by many LLMs as training source
     "google-extended",   # Gemini + Google AI Overviews training opt-out token
     "claudebot",         # Anthropic Claude crawler
     "anthropic-ai",      # Anthropic (legacy / browse fetch)
@@ -297,8 +297,7 @@ def _extract_jsonld_types(html: str) -> tuple[list[str], int, str | None]:
         try:
             data = _json.loads(blob.strip())
         except Exception:  # noqa: BLE001
-            # Some sites wrap JSON-LD with CDATA or have invalid JSON —
-            # still count the block but skip parsing.
+            # Some sites wrap JSON-LD with CDATA or have invalid JSON :             # still count the block but skip parsing.
             if first_preview is None:
                 first_preview = blob.strip()[:300]
             continue
@@ -373,7 +372,7 @@ async def _sample_etag_headers(origin: str, sitemap_url_candidates: list[str]) -
 async def site_resources(payload: SiteResourcesIn) -> SiteResourcesOut:
     """Fetch robots.txt + sitemap.xml + llms.txt for the given origin.
 
-    Used by the advanced audit creation flow — the frontend can't fetch these
+    Used by the advanced audit creation flow : the frontend can't fetch these
     cross-origin from the browser due to CORS, so we proxy the GETs here.
     Every individual fetch is independent: a failure on one doesn't block the
     others; the corresponding `fetched` flag is set to false.
@@ -471,7 +470,7 @@ async def site_resources(payload: SiteResourcesIn) -> SiteResourcesOut:
         # Powers the new "Données structurées" section. We grab the raw HTML
         # of the origin, regex out every <script type="application/ld+json">
         # block, and pull the @type values. Best-effort: a single GET, no
-        # parsing of nested pages — enough for the slide to say "Organization
+        # parsing of nested pages : enough for the slide to say "Organization
         # is on the home, but Product/FAQPage are nowhere".
         try:
             r = await client.get(origin, timeout=15)
@@ -523,8 +522,7 @@ class PriorityOut(BaseModel):
 async def priority_summary(payload: PriorityIn) -> PriorityOut:
     """Generate a short consultant-style narrative of the priority list.
 
-    Costs ~0.002 $ per call (Haiku 4.5). We send numbers + labels only —
-    never URLs — to keep the prompt small and the input fully anonymous.
+    Costs ~0.002 $ per call (Haiku 4.5). We send numbers + labels only :     never URLs : to keep the prompt small and the input fully anonymous.
     """
     from app.services.llm import HAIKU, complete
 
@@ -533,7 +531,7 @@ async def priority_summary(payload: PriorityIn) -> PriorityOut:
         for s in payload.section_summaries
     )
     prio_txt = "\n".join(
-        f"{p['rank']}. {p['title']} — urgence {p['urgency']}, {p['affected']} URLs, effort {p['effort']}, impact {p['impact']}. ({p['rationale']})"
+        f"{p['rank']}. {p['title']} : urgence {p['urgency']}, {p['affected']} URLs, effort {p['effort']}, impact {p['impact']}. ({p['rationale']})"
         for p in payload.priorities[:12]
     )
 
@@ -546,7 +544,7 @@ async def priority_summary(payload: PriorityIn) -> PriorityOut:
         "Tu écris du texte brut destiné à être affiché tel quel sur une slide : "
         "n'utilise AUCUNE syntaxe Markdown. Pas d'astérisques (*texte* ou **texte**) pour le gras ou l'italique, "
         "pas de backticks pour les citations, pas de tirets pour faire des listes, pas de dièses pour des titres. "
-        "Pas de tirets cadratins ( — ) non plus : utilise « : », une virgule ou un point. "
+        "Pas de tirets cadratins ( : ) non plus : utilise « : », une virgule ou un point. "
         "Pas de termes anglais : écris « actions rapides » au lieu de « quick wins », "
         "« liens entrants » au lieu de « inlinks », « balise title » au lieu de « title tag ». "
         "ATTENTION : les pages en noindex ne sont PAS une erreur. C'est la plupart du temps volontaire "
@@ -577,3 +575,311 @@ Rédige le paragraphe de synthèse pour la slide "Priorisation des corrections".
         return PriorityOut(summary=resp.text.strip(), cost_usd=resp.cost)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"AI summary failed: {exc}")
+
+
+# =========================================================================
+# Advanced audit AI v2 : synthesis intro, robots.txt analysis,
+# sitemap deep-scan + analysis. Each endpoint sticks to short output
+# (capped tokens) so the slide content never overflows its box.
+# =========================================================================
+
+
+class SynthesisIn(BaseModel):
+    audit_name: str
+    domain: str | None = None
+    global_score: int
+    sections: list[dict]  # [{label, score, weight}]
+
+
+class SynthesisOut(BaseModel):
+    intro: str            # 2-3 short sentences, no lists
+    best: list[str]       # top 3 categories "Web performance (90%)"
+    worst: list[str]      # bottom 3 categories same format
+
+
+@router.post("/synthesis-overview", response_model=SynthesisOut)
+async def synthesis_overview(payload: SynthesisIn) -> SynthesisOut:
+    """Short editorial intro for the synthesis slide + best/worst categories.
+
+    The frontend renders the radar chart on the right and the intro + lists
+    on the left, so we keep the LLM output strictly to a short paragraph.
+    Costs ~0.001 $ per call (Haiku 4.5).
+    """
+    from app.services.llm import HAIKU, complete
+    import json as _json
+
+    sorted_secs = sorted(payload.sections, key=lambda s: int(s.get("score", 0)))
+    worst3 = sorted_secs[:3]
+    best3 = list(reversed(sorted_secs[-3:]))
+
+    def _fmt(s: dict) -> str:
+        return f'{s["label"]} ({int(s["score"])}%)'
+
+    best = [_fmt(s) for s in best3]
+    worst = [_fmt(s) for s in worst3]
+
+    system = (
+        "Tu es un consultant SEO senior français. Tu rédiges l'introduction d'une slide de synthèse d'audit technique. "
+        "TROIS phrases courtes maximum, 50 à 70 mots au total. Aucune liste, aucun titre, aucun Markdown, aucune asterisque. "
+        "Pas de tirets cadratins, pas de termes anglais. "
+        "Style : factuel, posé, professionnel. Phrase 1 : situer le score global de manière nuancée. "
+        "Phrase 2 : ce qui est solide. Phrase 3 : ce qui reste à activer. "
+        "Tu écris du texte brut destiné à être affiché tel quel sur la slide."
+    )
+    user = (
+        f"Audit : {payload.audit_name}{f' ({payload.domain})' if payload.domain else ''}\n"
+        f"Score global : {payload.global_score}/100\n"
+        f"Catégories les mieux notées : {', '.join(best)}\n"
+        f"Catégories les plus faibles : {', '.join(worst)}\n\n"
+        "Rédige l'introduction de la slide de synthèse."
+    )
+    try:
+        resp = await complete(system=system, user=user, model=HAIKU, max_tokens=250, temperature=0.3)
+        return SynthesisOut(intro=resp.text.strip(), best=best, worst=worst)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"AI synthesis failed: {exc}")
+
+
+class RobotsAnalysisIn(BaseModel):
+    domain: str | None = None
+    # The pasted robots.txt content (raw). Capped here so we never blow the
+    # context window on a 50 KB file (Wordfence-polluted robots.txt can be
+    # massive). 30 000 chars is plenty for a real one.
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def _cap(cls, v: str) -> str:
+        return (v or "")[:30_000]
+
+
+class RobotsAnalysisOut(BaseModel):
+    is_good: bool                       # if False, frontend shows the "improved" slide
+    current_analysis: str               # 4-6 short paragraph-bullets describing the current state
+    issues: list[str]                   # 3 to 6 concrete pain points
+    improved_content: str | None        # the recommended rewritten robots.txt (when not is_good)
+    improvements: list[str]             # 3 to 6 changes between current and improved
+
+
+@router.post("/robots-analysis", response_model=RobotsAnalysisOut)
+async def robots_analysis(payload: RobotsAnalysisIn) -> RobotsAnalysisOut:
+    """AI analysis of the client's robots.txt.
+
+    Returns:
+      • a 4-line description of the current state (what it does, where it
+        comes from based on signals like Wordfence rules / Umbraco
+        leftovers / .htaccess blocks)
+      • a list of concrete issues
+      • whether the file is already good (one slide) or improvable (two slides)
+      • when improvable, a fully rewritten clean robots.txt + the list of
+        improvements
+
+    Costs ~0.005 $ per call.
+    """
+    from app.services.llm import HAIKU, complete
+    import json as _json
+
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(400, "robots.txt content is empty")
+
+    system = (
+        "Tu es un consultant SEO senior français spécialiste du robots.txt. "
+        "Tu reçois le contenu brut du robots.txt d'un client et tu le diagnostiques. "
+        "Tu retournes UNIQUEMENT un objet JSON, sans Markdown autour, sans commentaire avant ni après. "
+        "Schéma attendu :\n"
+        "{\n"
+        '  "is_good": bool,                   // true SEULEMENT si le fichier est déjà propre et complet (rare)\n'
+        '  "current_analysis": "string",      // 3 à 5 phrases courtes décrivant ce que fait le fichier et d\'où il vient (signaux : Wordfence, Umbraco, .htaccess hérités, etc.)\n'
+        '  "issues": ["string", ...],          // 3 à 6 points bloquants concrets, phrases courtes\n'
+        '  "improved_content": "string|null", // robots.txt nettoyé recommandé (null si is_good=true)\n'
+        '  "improvements": ["string", ...]     // 3 à 6 changements clés (vide si is_good=true)\n'
+        "}\n"
+        "Règles éditoriales : pas de tirets cadratins, pas d'anglais (utilise « bots IA » au lieu de « AI bots »), "
+        "pas d'asterisques Markdown. Limite chaque phrase à 25 mots. Le improved_content doit être un robots.txt complet et fonctionnel : User-agent, Allow/Disallow, Sitemap. "
+        "Pour les bots IA, déclare explicitement GPTBot, ChatGPT-User, CCBot, Google-Extended, ClaudeBot, PerplexityBot avec Allow: /."
+    )
+    user_msg = f"Domaine : {payload.domain or 'inconnu'}\n\nrobots.txt actuel :\n```\n{content}\n```"
+
+    try:
+        resp = await complete(system=system, user=user_msg, model=HAIKU, max_tokens=2000, temperature=0.2)
+        # Parse JSON (the model occasionally wraps in ```json fences; strip them)
+        txt = resp.text.strip()
+        if txt.startswith("```"):
+            txt = txt.strip("`").lstrip("json").strip()
+        data = _json.loads(txt)
+        return RobotsAnalysisOut(
+            is_good=bool(data.get("is_good", False)),
+            current_analysis=str(data.get("current_analysis", "")).strip(),
+            issues=[str(x).strip() for x in (data.get("issues") or [])][:8],
+            improved_content=(str(data.get("improved_content") or "").strip() or None) if not data.get("is_good") else None,
+            improvements=[str(x).strip() for x in (data.get("improvements") or [])][:8],
+        )
+    except _json.JSONDecodeError as exc:
+        raise HTTPException(500, f"AI returned invalid JSON: {exc}")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"AI robots analysis failed: {exc}")
+
+
+class SitemapAnalysisIn(BaseModel):
+    domain: str | None = None
+    sitemap_url: str                    # https://example.com/sitemap.xml
+    indexable_urls: list[str] = []      # all indexable URLs from interne_html.csv
+
+    @field_validator("indexable_urls")
+    @classmethod
+    def _cap_urls(cls, v: list[str]) -> list[str]:
+        # Cap at 5 000 URLs to keep the prompt size sane. We only send these
+        # to the LLM as a SAMPLE + counts; the gap analysis is done in code
+        # before we even call the model.
+        return v[:5_000]
+
+
+class SitemapAnalysisOut(BaseModel):
+    fetched: bool
+    sitemap_url_count: int              # total URLs found in the sitemap (index expansion done server-side)
+    indexable_count: int                # # of indexable URLs from the crawl
+    missing_count: int                  # # of indexable URLs NOT in the sitemap
+    overview: str                       # 3-5 short sentences about the sitemap structure
+    gaps_summary: str | None            # 3-5 short sentences about what's missing (null when nothing's missing)
+    gap_breakdown: list[dict] = []      # [{label, count}] counts of missing URLs grouped by URL pattern
+    last_modified: str | None = None    # ISO date from the sitemap Last-Modified header / lastmod
+    error: str | None = None            # populated on fetch failure
+
+
+def _path_pattern(url: str) -> str:
+    """Group URLs by their first significant path segment for the gap report."""
+    try:
+        p = urlparse(url)
+        parts = [s for s in p.path.split("/") if s]
+        return f"/{parts[0]}/" if parts else "/ (racine)"
+    except Exception:
+        return "(non parseable)"
+
+
+@router.post("/sitemap-analysis", response_model=SitemapAnalysisOut)
+async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
+    """Fetch the sitemap, count URLs, compute the gap vs the indexable crawl,
+    and ask the LLM to write a short readable analysis.
+
+    Robust to sitemap-indexes (expanded recursively, same logic as
+    _expand_sitemap above).
+    """
+    from app.services.llm import HAIKU, complete
+
+    sm_url = payload.sitemap_url.strip()
+    if not sm_url:
+        raise HTTPException(400, "sitemap_url is empty")
+    if not sm_url.startswith(("http://", "https://")):
+        sm_url = "https://" + sm_url.lstrip("/")
+
+    # Fetch + expand
+    last_modified: str | None = None
+    sitemap_urls: list[str] = []
+    try:
+        async with httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            headers={"User-Agent": "PerfectContent/1.0 (+seo audit)"},
+        ) as client:
+            head_resp = None
+            try:
+                head_resp = await client.head(sm_url)
+            except Exception:
+                head_resp = None
+            if head_resp is not None and "last-modified" in head_resp.headers:
+                last_modified = head_resp.headers["last-modified"]
+            urls, _depth = await _expand_sitemap(client, sm_url)
+            sitemap_urls = urls
+    except Exception as exc:
+        return SitemapAnalysisOut(
+            fetched=False,
+            sitemap_url_count=0,
+            indexable_count=len(payload.indexable_urls),
+            missing_count=0,
+            overview="",
+            gaps_summary=None,
+            gap_breakdown=[],
+            error=f"Échec du fetch : {exc}",
+        )
+
+    # Gap analysis : indexable URLs not present in sitemap (case-insensitive on host).
+    def _norm(u: str) -> str:
+        return u.strip().rstrip("/").lower()
+
+    sm_set = {_norm(u) for u in sitemap_urls}
+    indexable = [u for u in payload.indexable_urls if u]
+    missing = [u for u in indexable if _norm(u) not in sm_set]
+
+    # Group missing URLs by first path segment
+    groups: dict[str, int] = {}
+    for u in missing:
+        groups[_path_pattern(u)] = groups.get(_path_pattern(u), 0) + 1
+    gap_breakdown = sorted(
+        ({"label": k, "count": v} for k, v in groups.items()),
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:8]
+
+    # LLM step : ask for the editorial overview + a gap summary
+    # Pre-aggregate so the prompt stays small.
+    sm_groups: dict[str, int] = {}
+    for u in sitemap_urls:
+        sm_groups[_path_pattern(u)] = sm_groups.get(_path_pattern(u), 0) + 1
+    sm_breakdown = sorted(sm_groups.items(), key=lambda kv: kv[1], reverse=True)[:8]
+
+    sm_breakdown_txt = ", ".join(f"{lbl}: {n}" for lbl, n in sm_breakdown) or "(vide)"
+    gap_txt = ", ".join(f"{g['label']}: {g['count']}" for g in gap_breakdown[:6]) or "(aucun)"
+
+    system = (
+        "Tu es un consultant SEO senior français. Tu rédiges l'analyse d'un sitemap.xml pour une slide d'audit. "
+        "Tu retournes UNIQUEMENT un objet JSON sans Markdown autour. Schéma :\n"
+        "{\n"
+        '  "overview": "string",     // 3 à 5 phrases courtes décrivant la structure (nombre d\'URLs, typologies dominantes, structure ou non en sitemap-index, recommandation de structure)\n'
+        '  "gaps_summary": "string"   // 3 à 5 phrases si missing_count > 0 décrivant les sections absentes ; sinon null\n'
+        "}\n"
+        "Règles : pas de Markdown, pas de tirets cadratins, pas d'asterisques, pas d'anglais, phrases courtes, 25 mots maximum chacune."
+    )
+    user_msg = (
+        f"Domaine : {payload.domain or 'inconnu'}\n"
+        f"Sitemap URL : {sm_url}\n"
+        f"Nombre total d'URLs dans le sitemap : {len(sitemap_urls)}\n"
+        f"Répartition par section (top 8) : {sm_breakdown_txt}\n"
+        f"Dernière modification : {last_modified or 'inconnue'}\n"
+        f"URLs indexables (crawl) : {len(indexable)}\n"
+        f"URLs indexables ABSENTES du sitemap : {len(missing)}\n"
+        f"Répartition des absences (top 6) : {gap_txt}\n"
+    )
+    overview = ""
+    gaps_summary: str | None = None
+    try:
+        resp = await complete(system=system, user=user_msg, model=HAIKU, max_tokens=600, temperature=0.2)
+        import json as _json
+        txt = resp.text.strip()
+        if txt.startswith("```"):
+            txt = txt.strip("`").lstrip("json").strip()
+        data = _json.loads(txt)
+        overview = str(data.get("overview", "")).strip()
+        gaps_summary = str(data.get("gaps_summary") or "").strip() or None
+    except Exception:
+        # Graceful fallback : present the raw stats without AI commentary.
+        overview = (
+            f"Le sitemap contient {len(sitemap_urls)} URLs, réparties principalement sur {sm_breakdown_txt}. "
+            f"Dernière modification : {last_modified or 'non communiquée'}."
+        )
+        gaps_summary = (
+            f"{len(missing)} URLs indexables du crawl ne figurent pas dans le sitemap. "
+            f"Sections principalement absentes : {gap_txt}."
+            if missing else None
+        )
+
+    return SitemapAnalysisOut(
+        fetched=True,
+        sitemap_url_count=len(sitemap_urls),
+        indexable_count=len(indexable),
+        missing_count=len(missing),
+        overview=overview,
+        gaps_summary=gaps_summary,
+        gap_breakdown=gap_breakdown,
+        last_modified=last_modified,
+    )

@@ -613,7 +613,7 @@ export async function parseIssuesZip(file: File): Promise<IssuesParseResult> {
       if (bytes instanceof Uint8Array) {
         return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
       }
-      // Fallback for the typing — should never hit in browser.
+      // Fallback for the typing : should never hit in browser.
       return String(bytes);
     },
   });

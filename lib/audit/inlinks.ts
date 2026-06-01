@@ -1,8 +1,7 @@
 // Optional second SF export: `all_inlinks.csv` (Bulk Export > Links >
 // All Inlinks). Contains one row per (source, destination) link pair plus
 // a "Link Position" column with values like Header / Body / Footer /
-// Navigation / Sidebar. Used to compute *contextual* inlinks per page —
-// i.e. only links from the article body, ignoring the boilerplate that
+// Navigation / Sidebar. Used to compute *contextual* inlinks per page : // i.e. only links from the article body, ignoring the boilerplate that
 // every page on the site emits.
 
 import Papa from "papaparse";
@@ -85,7 +84,7 @@ export function parseInlinksCsvText(textRaw: string, filename: string | null): I
     const dest = pick(rec, DEST_KEYS);
     if (!dest || !/^https?:\/\//i.test(dest)) continue;
     total++;
-    // Skip non-200 inlinks (broken / redirected) — they don't count as real inlinks.
+    // Skip non-200 inlinks (broken / redirected) : they don't count as real inlinks.
     const sc = pick(rec, STATUS_KEYS);
     const code = sc ? parseInt(sc, 10) : 200;
     if (code >= 300) continue;

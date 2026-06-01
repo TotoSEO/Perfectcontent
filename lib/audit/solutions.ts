@@ -12,7 +12,7 @@ function pillarHttp(row: IssueRow): string {
   if (code >= 500) return "Erreur serveur. Vérifier les logs applicatifs / hébergeur, corriger l'origine et purger la page de tout maillage interne tant qu'elle ne répond pas.";
   if (code === 404) return "Page introuvable. Soit la republier, soit poser une redirection 301 vers la page la plus pertinente, et retirer les liens internes pointant vers cette URL.";
   if (code === 410) return "Page volontairement supprimée. Confirmer le statut ou rediriger en 301 si une page successeur existe.";
-  if (code === 403) return "Accès refusé. Vérifier les règles d'authentification / pare-feu — Googlebot doit pouvoir crawler l'URL.";
+  if (code === 403) return "Accès refusé. Vérifier les règles d'authentification / pare-feu : Googlebot doit pouvoir crawler l'URL.";
   if (code === 302) return "Remplacer la 302 (temporaire) par une 301 (permanente) pour transmettre le PageRank correctement.";
   if (code >= 300 && code < 400) return "Mettre à jour les liens internes pour pointer directement vers l'URL finale ; retirer la chaîne de redirection.";
   return HTTP.default;
@@ -35,7 +35,7 @@ function titlesIssue(row: IssueRow): string {
   const reason = String(row.reason || "").toLowerCase();
   if (reason.includes("manquant")) return "Ajouter un title unique de 50-60 caractères, mot-clé principal en début, ton clair sans clickbait.";
   if (reason.includes("duplique") || reason.includes("dupliqu")) return "Réécrire le title pour qu'il soit unique sur le site. Chaque page mérite un angle distinct.";
-  if (reason.includes("trop long")) return "Raccourcir à 50-60 caractères. Au-delà, Google tronque dans les SERP — l'info clé doit être dans les 60 premiers caractères.";
+  if (reason.includes("trop long")) return "Raccourcir à 50-60 caractères. Au-delà, Google tronque dans les SERP : l'info clé doit être dans les 60 premiers caractères.";
   if (reason.includes("trop court")) return "Étoffer le title à 50-60 caractères pour mieux ressortir en SERP. Ajouter le bénéfice principal ou un qualificatif différenciant.";
   return "Optimiser le title (50-60 caractères, mot-clé en début, unique).";
 }

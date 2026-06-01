@@ -238,7 +238,7 @@ export function parseInterneHtmlCsvText(textRaw: string, filename: string | null
 }
 
 // Pagination URLs (?page=2, ?p=3, /page/4/, /p/4, ?paged=N…) inflate the
-// URL count and pollute every distribution downstream — same template,
+// URL count and pollute every distribution downstream : same template,
 // same content, same internal links. Reference page (page 1, no
 // parameter) is always kept; only the deeper paginated copies are
 // filtered out at parse time.

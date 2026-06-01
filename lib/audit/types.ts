@@ -1,6 +1,6 @@
 // Types shared between the parser, analyzer, viewer and Excel exporter.
 // The full report (Report) is what gets POSTed to /srv/audits and rendered by
-// /audits/[id]. Keep this stable — changing it requires a schema migration in
+// /audits/[id]. Keep this stable : changing it requires a schema migration in
 // the DB JSONB columns.
 
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
@@ -15,7 +15,7 @@ export type IssueRow = {
 export type CategoryReport = {
   id: string;        // stable category id ("http", "titles", "h1", ...)
   label: string;     // human label
-  score: number;     // 0..100 — higher is better
+  score: number;     // 0..100 : higher is better
   weight: number;    // contribution to the global score
   kpis: { label: string; value: number | string; tone?: "ok" | "warn" | "bad" }[];
   // Optional bar/donut/histogram data the slide viewer renders directly:

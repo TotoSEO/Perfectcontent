@@ -77,7 +77,7 @@ export function AdvSlide({
             }}
           >
             <div className="min-w-0 flex-1">
-              {/* Mono kicker with a leading rule — editorial section marker */}
+              {/* Mono kicker with a leading rule : editorial section marker */}
               <div className="flex items-center gap-2.5">
                 <span
                   aria-hidden
@@ -135,7 +135,7 @@ export function AdvSlide({
           {children}
         </main>
 
-        {/* Single brand lockup (4.5) — Visibili'tea + slide N/M in the
+        {/* Single brand lockup (4.5) : Visibili'tea + slide N/M in the
             footer only. No duplicate logo in headers. */}
         <footer
           className="flex items-center justify-between"
