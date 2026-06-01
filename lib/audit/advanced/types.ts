@@ -210,6 +210,13 @@ export type AdvSubcategory = {
   columns: { key: string; label: string; width?: number }[];
   // The XLSX tab name (kept stable across the slide + export).
   xlsx_sheet: string;
+  // Client-facing guidance rendered as a context block at the top of each
+  // XLSX sheet, so the file is self-explanatory without the slides:
+  //   why       — why this is a problem (1 sentence)
+  //   how_to_fix — concrete remediation steps (1-2 sentences)
+  // Populated centrally in the orchestrator from SUB_GUIDE.
+  why?: string;
+  how_to_fix?: string;
 };
 
 export type AdvSection = {

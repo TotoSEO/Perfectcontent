@@ -45,6 +45,28 @@ const SEVERITY_RANK: Record<string, number> = {
   critical: 0, high: 1, medium: 2, low: 3, info: 4,
 };
 
+// French labels so the client never sees raw enum values (critical/high…).
+const SEVERITY_LABEL_FR: Record<string, string> = {
+  critical: "Critique",
+  high: "Élevée",
+  medium: "Moyenne",
+  low: "Faible",
+  info: "Info",
+};
+const URGENCY_LABEL_FR: Record<string, string> = {
+  critical: "Critique",
+  high: "Haute",
+  medium: "Moyenne",
+  low: "Basse",
+};
+
+// Context-block colours (the "what / why / how to fix" banner atop sheets).
+const CTX_TITLE_BG = "FF7E411A";   // terracotta 700
+const CTX_WHY_BG = "FFFBF4DE";     // amber 50
+const CTX_FIX_BG = "FFEAF2E0";     // sage 50
+const CTX_WHY_FG = "FF7C621A";
+const CTX_FIX_FG = "FF3F6336";
+
 function safeSheetName(s: string): string {
   // Excel forbids :\\/?*[] and caps at 31 chars
   return s.replace(/[\\/:*?\[\]]/g, "_").slice(0, 31);
@@ -76,7 +98,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
   wb.created = new Date();
 
   // ===== Synthèse sheet =====
-  const synth = wb.addWorksheet("Synthèse", { views: [{ state: "frozen", ySplit: 1 }] });
+  const synth = wb.addWorksheet("Synthèse");
   synth.columns = [
     { header: "Catégorie",         key: "label",     width: 30 },
     { header: "Score /100",        key: "score",     width: 12 },
@@ -85,7 +107,15 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
     { header: "# Problèmes",       key: "issues",    width: 14 },
     { header: "Résumé",            key: "summary",   width: 80 },
   ];
-  styleHeader(synth.getRow(1));
+  const synthHeader = writeContextBanner(
+    synth,
+    6,
+    `Audit technique SEO — ${auditName}`,
+    "Score global pondéré par l'importance SEO de chaque catégorie. Plus un score est bas, plus la catégorie est prioritaire à traiter.",
+    "Chaque catégorie ci-dessous dispose d'un ou plusieurs onglets de détail (en bas de la fenêtre) listant les URLs concernées, le problème et comment le corriger.",
+  );
+  styleHeader(synth.getRow(synthHeader));
+  synth.views = [{ state: "frozen", ySplit: synthHeader }];
   for (const sec of report.sections) {
     const totalIssues = sec.subcategories.reduce((s, sub) => s + sub.issues_full.length, 0);
     const row = synth.addRow({
@@ -117,7 +147,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
     label: "TOTAL", score: report.global_score, weight: 100, subs: report.sections.reduce((s, sec) => s + sec.subcategories.length, 0), issues: grandTotal, summary: "",
   });
   totalRow.font = { bold: true };
-  synth.autoFilter = { from: "A1", to: `F${synth.rowCount}` };
+  synth.autoFilter = { from: `A${synthHeader}`, to: `F${synth.rowCount}` };
 
   // ===== Exclusions sheet =====
   // Transparency : exactly what was filtered out at parse time and why.
@@ -201,7 +231,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
       const sec = report.sections.find((s) => s.id === p.section_id);
       const wsRow = prio.addRow({
         rank: p.rank,
-        urgency: p.urgency,
+        urgency: URGENCY_LABEL_FR[p.urgency] || p.urgency,
         section: sec?.label || p.section_id,
         title: p.title,
         affected: p.affected,
@@ -239,7 +269,6 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
       const rows = [...sub.issues_full].sort(
         (a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9),
       );
-      const ws = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
       const cols = [
         { header: "Sévérité", key: "severity", width: 12 },
         ...sub.columns.map((col) => ({
@@ -248,10 +277,17 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
           width: col.width ?? (col.key === "url" || col.key.includes("anchor") || col.key === "source" ? 60 : 18),
         })),
       ];
+      const ws = wb.addWorksheet(sheetName);
       ws.columns = cols;
-      styleHeader(ws.getRow(1));
+      // Insert the self-explanatory "what / why / how to fix" banner above
+      // the header so the client understands the sheet without the slides.
+      // headerRow = the row index where the column header now lives.
+      const headerRow = writeContextBanner(ws, cols.length, sub.label, sub.why, sub.how_to_fix);
+      styleHeader(ws.getRow(headerRow));
+      ws.views = [{ state: "frozen", ySplit: headerRow }];
+
       for (const r of rows) {
-        const data: Record<string, unknown> = { severity: r.severity };
+        const data: Record<string, unknown> = { severity: SEVERITY_LABEL_FR[r.severity] || r.severity };
         for (const col of sub.columns) {
           const v = r[col.key];
           data[col.key] = v == null ? "" : v;
@@ -284,7 +320,7 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
           }
         }
       }
-      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: ws.columnCount } };
+      ws.autoFilter = { from: { row: headerRow, column: 1 }, to: { row: ws.rowCount, column: ws.columnCount } };
     }
   }
 
@@ -295,6 +331,77 @@ export async function exportAdvancedToXlsx(report: AdvReport, auditName: string)
   const safeName = auditName.replace(/[^\w-]+/g, "-").toLowerCase();
   const date = new Date().toISOString().slice(0, 10);
   downloadBlob(blob, `audit-avance-${safeName || "seo"}-${date}.xlsx`);
+}
+
+function colLetter(n: number): string {
+  // 1 -> A, 2 -> B … (sheets here never exceed ~8 columns).
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s || "A";
+}
+
+// Inserts a self-explanatory banner ABOVE the column header of an issue
+// sheet: a title row, a "why it's a problem" row, a "how to fix" row and a
+// spacer. ws.columns must already be set (header sitting at row 1). Returns
+// the new row index of the column header so the caller can style / freeze /
+// autofilter from there. If there's no guidance, returns 1 (no banner).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function writeContextBanner(ws: any, colCount: number, title: string, why?: string, fix?: string): number {
+  if (!why && !fix) return 1;
+  const last = colLetter(colCount);
+
+  // Rows to insert above the header: title, [why], [fix], spacer.
+  const inserts: unknown[][] = [[title]];
+  if (why) inserts.push([why]);
+  if (fix) inserts.push([fix]);
+  inserts.push([""]); // spacer
+  ws.spliceRows(1, 0, ...inserts);
+
+  let r = 1;
+  // Title row
+  ws.mergeCells(`A${r}:${last}${r}`);
+  const tCell = ws.getCell(`A${r}`);
+  tCell.value = title;
+  tCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: CTX_TITLE_BG } };
+  tCell.font = { color: { argb: "FFFFFCF7" }, bold: true, size: 13, name: "Montserrat" };
+  tCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+  ws.getRow(r).height = 26;
+  r++;
+
+  if (why) {
+    ws.mergeCells(`A${r}:${last}${r}`);
+    const c = ws.getCell(`A${r}`);
+    c.value = {
+      richText: [
+        { font: { bold: true, color: { argb: CTX_WHY_FG } }, text: "Pourquoi c'est un problème :  " },
+        { font: { color: { argb: CTX_WHY_FG } }, text: why },
+      ],
+    };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: CTX_WHY_BG } };
+    c.alignment = { vertical: "middle", horizontal: "left", wrapText: true, indent: 1 };
+    ws.getRow(r).height = 30;
+    r++;
+  }
+  if (fix) {
+    ws.mergeCells(`A${r}:${last}${r}`);
+    const c = ws.getCell(`A${r}`);
+    c.value = {
+      richText: [
+        { font: { bold: true, color: { argb: CTX_FIX_FG } }, text: "Comment corriger :  " },
+        { font: { color: { argb: CTX_FIX_FG } }, text: fix },
+      ],
+    };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: CTX_FIX_BG } };
+    c.alignment = { vertical: "middle", horizontal: "left", wrapText: true, indent: 1 };
+    ws.getRow(r).height = 30;
+    r++;
+  }
+  // Spacer row (r) stays blank → header is at r+1.
+  return r + 1;
 }
 
 // Build a flat list of (sub_id → xlsx sheet name) so we can render the
@@ -340,7 +447,7 @@ const EMPTY_GROUP_EDGE_B = "FFFDBA74";    // orange border
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function renderEmptyAnchorsSheet(wb: any, sheetName: string, sub: AdvSubcategory): void {
-  const ws = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
+  const ws = wb.addWorksheet(sheetName);
 
   // Group rows by `_group` (= destination URL), preserving the input order.
   const groupsMap = new Map<string, { destination: string; sources: string[] }>();
@@ -361,7 +468,10 @@ function renderEmptyAnchorsSheet(wb: any, sheetName: string, sub: AdvSubcategory
     { header: "URL cible", key: "destination", width: 70 },
     { header: "Ancre", key: "anchor", width: 14 },
   ];
-  styleHeader(ws.getRow(1));
+  // Self-explanatory banner above the header (why + how to fix).
+  const headerRow = writeContextBanner(ws, 3, sub.label, sub.why, sub.how_to_fix);
+  styleHeader(ws.getRow(headerRow));
+  ws.views = [{ state: "frozen", ySplit: headerRow }];
 
   groups.forEach((g, gi) => {
     const tintIdx = gi % 2;
@@ -415,5 +525,5 @@ function renderEmptyAnchorsSheet(wb: any, sheetName: string, sub: AdvSubcategory
     }
   });
 
-  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: 3 } };
+  ws.autoFilter = { from: { row: headerRow, column: 1 }, to: { row: ws.rowCount, column: 3 } };
 }

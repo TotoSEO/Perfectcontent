@@ -18,7 +18,7 @@ import {
 } from "@/components/audit/advanced/SlideContent";
 import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
 import { DownloadIcon, PrinterIcon } from "@/components/audit/advanced/Icons";
-import { VBT, VBT_TYPO } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
 import type { AdvReport, AdvSlide as AdvSlideType, AdvSubcategory } from "@/lib/audit/advanced/types";
 
 type AuditOut = {
@@ -260,25 +260,32 @@ export default function AdvancedAuditPage() {
                 footer={audit.source_filename ? `Source : ${audit.source_filename}` : "Audit technique avancé SEO"}
               >
                 <div className="flex-1 grid grid-cols-12 gap-10 min-h-0 items-center">
-                  <div className="col-span-7 min-w-0 space-y-7">
-                    <div
-                      className="uppercase"
-                      style={{
-                        color: VBT.terracotta600,
-                        fontWeight: 700,
-                        fontSize: VBT_TYPO.caption,
-                        letterSpacing: "0.32em",
-                      }}
-                    >
-                      Audit technique SEO · Édition avancée
+                  <div className="col-span-7 min-w-0 space-y-6">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        aria-hidden
+                        style={{ width: 26, height: 2, background: VBT.terracotta500, borderRadius: 2 }}
+                      />
+                      <span
+                        className="uppercase"
+                        style={{
+                          color: VBT.terracotta600,
+                          fontWeight: 600,
+                          fontSize: VBT_TYPO.caption,
+                          letterSpacing: "0.28em",
+                          fontFamily: VBT_FONT.mono,
+                        }}
+                      >
+                        Audit technique SEO · Édition avancée
+                      </span>
                     </div>
                     <h1
-                      className="leading-[1.02]"
+                      className="leading-[1.0]"
                       style={{
-                        fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-                        fontWeight: 800,
-                        fontSize: 64,
-                        letterSpacing: "-0.03em",
+                        fontFamily: VBT_FONT.display,
+                        fontWeight: 400,
+                        fontSize: 66,
+                        letterSpacing: "-0.015em",
                         color: VBT.ink,
                         wordBreak: "break-word",
                       }}
@@ -297,6 +304,7 @@ export default function AdvancedAuditPage() {
                         color: VBT.inkSoft,
                         fontWeight: 500,
                         fontSize: VBT_TYPO.body + 1,
+                        fontFamily: VBT_FONT.body,
                       }}
                     >
                       Préparé le {generatedDate}
@@ -307,7 +315,7 @@ export default function AdvancedAuditPage() {
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-4 gap-6 pt-3">
+                    <div className="grid grid-cols-4 gap-5 pt-3">
                       <BigStat label="URLs analysées" value={s.url_count.toLocaleString("fr-FR")} />
                       <BigStat label="Catégories" value={s.sections_count} />
                       <BigStat label="Problèmes" value={totalIssues.toLocaleString("fr-FR")} />
@@ -527,29 +535,30 @@ function BigStat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="min-w-0">
       <div
-        className="uppercase truncate"
-        style={{
-          color: VBT.zinc,
-          fontWeight: 700,
-          fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.2em",
-        }}
-        title={label}
-      >
-        {label}
-      </div>
-      <div
-        className="tabular-nums mt-2"
+        className="tabular-nums"
         style={{
           color: VBT.terracotta700,
-          fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-          fontSize: 44,
-          fontWeight: 800,
-          letterSpacing: "-0.03em",
+          fontFamily: VBT_FONT.display,
+          fontSize: 42,
+          fontWeight: 400,
+          letterSpacing: "-0.01em",
           lineHeight: 1,
         }}
       >
         {value}
+      </div>
+      <div
+        className="uppercase truncate mt-1.5"
+        style={{
+          color: VBT.zinc,
+          fontWeight: 600,
+          fontSize: VBT_TYPO.micro,
+          letterSpacing: "0.16em",
+          fontFamily: VBT_FONT.mono,
+        }}
+        title={label}
+      >
+        {label}
       </div>
     </div>
   );
@@ -567,7 +576,7 @@ function SummaryBar({ c }: { c: { id: string; label: string; score: number; weig
           className="font-semibold truncate"
           style={{
             color: VBT.ink,
-            fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+            fontFamily: VBT_FONT.title,
             fontSize: VBT_TYPO.body,
             letterSpacing: "-0.01em",
           }}
@@ -576,9 +585,9 @@ function SummaryBar({ c }: { c: { id: string; label: string; score: number; weig
           {c.label}
         </span>
         <span className="tabular-nums shrink-0" style={{ color: VBT.zinc, fontSize: VBT_TYPO.bodySm }}>
-          <strong style={{ color: fill, fontWeight: 800, fontSize: VBT_TYPO.body + 2 }}>{c.score}</strong>
-          <span className="ml-0.5" style={{ color: VBT.zinc }}>/100</span>
-          <span className="ml-3 uppercase" style={{ color: VBT.zinc, fontSize: VBT_TYPO.micro, letterSpacing: "0.14em", fontWeight: 600 }}>
+          <strong style={{ color: fill, fontWeight: 400, fontSize: VBT_TYPO.subhead, fontFamily: VBT_FONT.display }}>{c.score}</strong>
+          <span className="ml-0.5" style={{ color: VBT.zinc, fontFamily: VBT_FONT.mono, fontSize: VBT_TYPO.caption }}>/100</span>
+          <span className="ml-3 uppercase" style={{ color: VBT.zinc, fontSize: VBT_TYPO.micro, letterSpacing: "0.12em", fontWeight: 600, fontFamily: VBT_FONT.mono }}>
             poids {c.weight}
           </span>
         </span>

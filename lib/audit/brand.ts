@@ -76,6 +76,19 @@ export const VBT_SPACING = {
 
 export const VBT_NAME = "Visibili'tea";
 
+// Font-family stacks (editorial tri-stack). Reference these instead of
+// hard-coding the CSS-var + fallback string in every component.
+export const VBT_FONT = {
+  // Warm display serif — hero numbers, cover + section titles, slide H2.
+  display: "var(--font-vbt-display), 'Calistoga', Georgia, 'Times New Roman', serif",
+  // Geometric sans — precise tabular data, KPI values, numeric emphasis.
+  title: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+  // Humanist sans — body copy, descriptions, table cells.
+  body: "var(--font-vbt-body), 'Poppins', system-ui, sans-serif",
+  // Technical mono — uppercase micro-labels, kickers, badges, axis labels.
+  mono: "var(--font-vbt-mono), 'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
+} as const;
+
 // Severity → palette (background, foreground, fill for Excel — argb)
 export const SEVERITY = {
   critical: { bg: "#F8E4E0", fg: "#642720", argbBg: "FFF8E4E0", argbFg: "FF642720" },

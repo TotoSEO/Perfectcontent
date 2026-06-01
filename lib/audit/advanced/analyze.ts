@@ -2160,6 +2160,117 @@ function buildRationale(label: string, affected: number, critical: number, high:
   return `${affected} URLs concernées (${sevPart}) · ${effortPart} · ${impactPart}.`;
 }
 
+// ---------- Client-facing guidance (rendered atop each XLSX sheet) ---------
+// Keyed by sub.id. `why` = why it's a problem (1 phrase), `fix` = how to
+// correct it (concrete steps). Applied to every subcategory in the
+// orchestrator so the XLSX is self-explanatory without the slide deck.
+const SUB_GUIDE: Record<string, { why: string; fix: string }> = {
+  robots_sitemap: {
+    why: "Le robots.txt pilote le crawl et le sitemap.xml liste les URLs à indexer. Absents ou mal référencés, Google découvre et explore moins bien le site.",
+    fix: "Créer /robots.txt et /sitemap.xml à la racine du domaine, puis ajouter la ligne « Sitemap: https://votre-domaine/sitemap.xml » dans le robots.txt.",
+  },
+  depth: {
+    why: "Une page profonde (5 clics ou plus depuis l'accueil) reçoit moins de PageRank interne et est explorée moins souvent par Google.",
+    fix: "Remonter les pages importantes via des liens contextuels et des pages de catégorie pour viser une profondeur de 3 clics maximum.",
+  },
+  http_codes: {
+    why: "Les codes 3xx/4xx/5xx gaspillent le budget de crawl, cassent l'expérience utilisateur et font perdre le jus SEO transmis par les liens.",
+    fix: "Corriger ou rediriger en 301 les pages en 4xx, réparer les 5xx côté serveur, et limiter les chaînes de redirections 3xx.",
+  },
+  hreflang: {
+    why: "Une balise hreflang erronée empêche Google d'associer correctement les versions linguistiques d'une page, créant des conflits d'indexation.",
+    fix: "Ajouter la valeur x-default, ne pointer que vers des URLs en 200 indexables, et vérifier la réciprocité des liens retour entre versions.",
+  },
+  canonical: {
+    why: "Sans balise canonical, Google peut choisir lui-même l'URL de référence et indexer une variante (paramètres d'URL, tri, pagination).",
+    fix: "Ajouter une balise canonical auto-référente (pointant sur elle-même) sur chaque page, ou vers la version maître pour les variantes.",
+  },
+  noindex_pages: {
+    why: "Une page en noindex n'apparaît jamais dans Google. C'est souvent volontaire (panier, compte, remerciement), mais une page stratégique en noindex par erreur reste invisible.",
+    fix: "Parcourir la liste et confirmer que chaque noindex est intentionnel. Retirer la directive noindex sur les pages qui doivent être indexées.",
+  },
+  response_time: {
+    why: "Un temps de réponse serveur (TTFB) élevé dégrade le LCP (Core Web Vital) et ralentit l'exploration par Googlebot.",
+    fix: "Activer un cache serveur / CDN, optimiser les requêtes base de données et le temps de génération des pages. Cible : moins de 500 ms.",
+  },
+  html_weight: {
+    why: "Au-delà de 2 Mo de HTML, Googlebot tronque la page et peut manquer du contenu et des liens situés en bas du code.",
+    fix: "Alléger le DOM, différer le JavaScript non critique, retirer le HTML inutilisé et le contenu masqué. Cible : moins de 1 Mo.",
+  },
+  titles_meta_basic: {
+    why: "Un title ou une meta description manquant / hors gabarit réduit le taux de clic (CTR) en page de résultats Google.",
+    fix: "Rédiger un title unique de 30 à 60 caractères et une meta description de 70 à 155 caractères, propres à chaque page.",
+  },
+  title_duplicate: {
+    why: "Des balises title identiques empêchent Google de distinguer les pages entre elles et diluent leur pertinence respective.",
+    fix: "Rédiger un title unique par page, reflétant son intention de recherche spécifique.",
+  },
+  meta_duplicate: {
+    why: "Des meta descriptions dupliquées affaiblissent le taux de clic et la différenciation des pages en SERP.",
+    fix: "Écrire une meta description spécifique et incitative pour chaque page concernée.",
+  },
+  h1_duplicate: {
+    why: "Un H1 répété sur plusieurs pages brouille le sujet principal de chacune aux yeux de Google.",
+    fix: "Donner un H1 unique et descriptif à chaque page, aligné sur son contenu.",
+  },
+  hn_structure: {
+    why: "Un H1 absent ou une structure Hn incohérente prive Google et les lecteurs d'écran de la hiérarchie du contenu.",
+    fix: "Un seul H1 par page, puis des H2/H3 logiques décrivant chaque section dans l'ordre.",
+  },
+  hn_hierarchy: {
+    why: "Un saut de niveau (passer d'un H1 directement à un H3) casse la logique d'outline lue par Google et l'accessibilité.",
+    fix: "Respecter l'ordre des niveaux H1 → H2 → H3 sans en sauter aucun.",
+  },
+  broken_links: {
+    why: "Un lien rompu crée une impasse pour les robots et les visiteurs, et fait perdre le jus SEO qui aurait dû transiter.",
+    fix: "Corriger l'URL cible, la rediriger en 301 vers la page équivalente, ou retirer le lien s'il n'a plus lieu d'être.",
+  },
+  internal_redirects: {
+    why: "Un lien interne pointant vers une 301/302 gaspille du jus SEO et ajoute une étape de navigation inutile.",
+    fix: "Mettre à jour le lien pour qu'il pointe directement sur l'URL finale en 200, sans passer par la redirection.",
+  },
+  http_mixed_content: {
+    why: "Un lien interne en HTTP déclenche une alerte de contenu mixte dans le navigateur et représente un risque de sécurité.",
+    fix: "Remplacer http:// par https:// dans tous les liens internes concernés.",
+  },
+  orphan_pages: {
+    why: "Une page sans lien entrant contextuel est quasi invisible pour Google : elle reçoit peu de PageRank et est rarement explorée.",
+    fix: "Ajouter des liens contextuels (dans le corps de texte) depuis des pages thématiquement proches vers ces pages isolées.",
+  },
+  anchors_low_diversity: {
+    why: "Une même ancre répétée vers une page transmet un signal sémantique pauvre et limite le champ de requêtes sur lequel la page peut ranker.",
+    fix: "Varier les textes d'ancrage contextuels pointant vers la page cible, en utilisant des formulations et synonymes différents.",
+  },
+  anchors_empty: {
+    why: "Un lien contextuel sans aucun texte d'ancrage ne transmet aucun signal sémantique à Google et nuit à l'accessibilité.",
+    fix: "Remplacer l'ancre vide par un texte descriptif. S'il s'agit d'un lien décoratif en doublon d'un autre, le retirer.",
+  },
+  image_alt: {
+    why: "Une image sans attribut alt est invisible pour Google Images et pour les lecteurs d'écran (accessibilité).",
+    fix: "Ajouter un attribut alt descriptif. Pour une image purement décorative, utiliser un alt vide (alt=\"\").",
+  },
+  image_size_attr: {
+    why: "Sans attributs width/height, le navigateur ne réserve pas l'espace de l'image, ce qui provoque des décalages visuels (mauvais score CLS).",
+    fix: "Déclarer width et height dans le HTML (ou une aspect-ratio en CSS) sur chaque image.",
+  },
+  image_weight: {
+    why: "Une image trop lourde ralentit le chargement de la page et dégrade le LCP, surtout sur mobile.",
+    fix: "Compresser l'image, la redimensionner à sa taille d'affichage réelle, et la servir en WebP ou AVIF.",
+  },
+  schemas_missing: {
+    why: "Sans données structurées (JSON-LD), pas de rich snippets en SERP et une compréhension réduite par les moteurs et les IA génératives.",
+    fix: "Ajouter le balisage JSON-LD du schéma manquant dans le <head>, puis valider avec l'outil Google Rich Results Test.",
+  },
+  ia_bots: {
+    why: "Un crawler IA bloqué ou non déclaré signifie que votre contenu n'apparaît pas dans les réponses génératives (ChatGPT, Perplexity, Gemini).",
+    fix: "Déclarer chaque bot IA avec « Allow: / » dans le robots.txt, ou retirer le « Disallow: / » qui le bloque.",
+  },
+  http_headers: {
+    why: "Sans en-têtes ETag ou Last-Modified, les robots re-téléchargent les pages même inchangées, ce qui gaspille le budget de crawl.",
+    fix: "Activer ETag et/ou Last-Modified côté serveur pour permettre la mise en cache conditionnelle (304 Not Modified).",
+  },
+};
+
 // ---------- Orchestrator ---------------------------------------------------
 
 export type AdvancedAnalyzeOpts = {
@@ -2195,6 +2306,19 @@ export function analyzeAdvanced(
   const { section: secGeo, slides: slGeo } = buildGeo(rows, opts.site_resources);
 
   const sections = [secIdx, secPerf, secMeta, secStruct, secLink, secImg, secSD, secGeo];
+
+  // Attach client-facing guidance (why + how to fix) to every subcategory
+  // so the XLSX sheets are self-explanatory when handed to a client.
+  for (const sec of sections) {
+    for (const sub of sec.subcategories) {
+      const g = SUB_GUIDE[sub.id];
+      if (g) {
+        sub.why = g.why;
+        sub.how_to_fix = g.fix;
+      }
+    }
+  }
+
   const totalWeight = sections.reduce((s, c) => s + c.weight, 0);
   const weightedSum = sections.reduce((s, c) => s + c.score * c.weight, 0);
   const global_score = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;

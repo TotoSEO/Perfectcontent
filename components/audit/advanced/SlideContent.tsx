@@ -1,6 +1,6 @@
 "use client";
 
-import { VBT, VBT_TYPO } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
 import { BarChart, DonutChart, Histogram } from "../Charts";
 import { SectionPill } from "./AdvSlide";
 import { RecoIcon, iconForReco } from "./RecoIcons";
@@ -62,7 +62,7 @@ export function AdvKpiTile({ kpi, size = "md" }: { kpi: AdvKPI; size?: "sm" | "m
         style={{
           color: palette.text,
           fontWeight: 800,
-          fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+          fontFamily: VBT_FONT.title,
           fontSize: valueSize,
           letterSpacing: "-0.02em",
           marginTop: 4,
@@ -192,6 +192,7 @@ export function ChartContainer({
             fontWeight: 700,
             fontSize: VBT_TYPO.micro,
             letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
           }}
         >
           <span
@@ -255,13 +256,15 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
 
       {/* Main body */}
       <div
-        className="flex-1 grid gap-6 min-h-0 overflow-hidden"
+        className="flex-1 grid gap-8 min-h-0 overflow-hidden"
         style={{
           gridTemplateColumns: hasChart ? "minmax(0, 4fr) minmax(0, 6fr)" : "1fr",
         }}
       >
-        {/* Left column — KPIs (2 hero tiles when chart present) */}
-        <div className="flex flex-col gap-3 min-w-0">
+        {/* Left column — KPIs (2 hero tiles when chart present).
+            Vertically centered so a short stack reads as deliberate balance
+            against the chart instead of leaving a void at the bottom. */}
+        <div className={`flex flex-col gap-4 min-w-0 ${hasChart ? "justify-center" : "justify-center"}`}>
           <div
             className={`grid gap-3 ${
               hasChart
@@ -270,32 +273,28 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
                 ? "grid-cols-2"
                 : kpisNoChart.length === 3
                 ? "grid-cols-3"
-                : "grid-cols-4"
+                : "grid-cols-2"
             }`}
           >
             {(hasChart ? kpisForChart : kpisNoChart).map((k, i) => (
               <AdvKpiTile key={i} kpi={k} size={hasChart ? "lg" : "md"} />
             ))}
           </div>
-          {slide.takeaway && !hasChart && (
-            <div className="mt-1">
-              <TakeawayBlock text={slide.takeaway} />
-            </div>
-          )}
+          {slide.takeaway && !hasChart && <TakeawayBlock text={slide.takeaway} />}
         </div>
 
-        {/* Right column — chart + takeaway */}
+        {/* Right column — chart + takeaway, vertically centered to match. */}
         {hasChart && (
-          <div className="flex flex-col gap-3 min-w-0 min-h-0">
+          <div className="flex flex-col gap-3 min-w-0 min-h-0 justify-center">
             <ChartContainer maxWidth="100%" caption={chartCaption(slide.chart!.type)}>
               {slide.chart!.type === "donut" && (
                 <DonutChart segments={slide.chart!.segments} size={200} thickness={32} />
               )}
               {slide.chart!.type === "bar" && (
-                <BarChart bars={slide.chart!.bars} max={slide.chart!.max} width={560} barHeight={24} gap={6} />
+                <BarChart bars={slide.chart!.bars} max={slide.chart!.max} barHeight={24} gap={8} />
               )}
               {slide.chart!.type === "histogram" && (
-                <Histogram bins={slide.chart!.bins} height={170} />
+                <Histogram bins={slide.chart!.bins} height={180} />
               )}
             </ChartContainer>
             {slide.takeaway && <TakeawayBlock text={slide.takeaway} />}
@@ -370,10 +369,10 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
                   className="tabular-nums"
                   style={{
                     color: ring.fill,
-                    fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-                    fontWeight: 800,
-                    fontSize: 78,
-                    letterSpacing: "-0.045em",
+                    fontFamily: VBT_FONT.display,
+                    fontWeight: 400,
+                    fontSize: 76,
+                    letterSpacing: "-0.02em",
                     lineHeight: 1,
                   }}
                 >
@@ -386,6 +385,7 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
                     fontWeight: 700,
                     fontSize: VBT_TYPO.micro,
                     letterSpacing: "0.18em",
+                    fontFamily: VBT_FONT.mono,
                   }}
                 >
                   {heroKpi.label}
@@ -417,7 +417,7 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
                   className="tabular-nums"
                   style={{
                     color: VBT.ink,
-                    fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                    fontFamily: VBT_FONT.title,
                     fontWeight: 700,
                     fontSize: 22,
                   }}
@@ -536,7 +536,7 @@ export function InfoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "inf
                 style={{
                   color: VBT.terracotta700,
                   fontWeight: 700,
-                  fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                  fontFamily: VBT_FONT.title,
                   fontSize: 22,
                   marginTop: 4,
                 }}
@@ -582,6 +582,7 @@ function Callout({ callout }: { callout: { tone: "warn" | "info"; title: string;
             fontWeight: 700,
             fontSize: VBT_TYPO.micro,
             letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
             marginBottom: 4,
           }}
         >
@@ -640,12 +641,12 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
           </div>
         </div>
         <h1
-          className="leading-[1.02] mt-2"
+          className="leading-[1.0] mt-2"
           style={{
-            fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-            fontWeight: 800,
-            fontSize: 72,
-            letterSpacing: "-0.03em",
+            fontFamily: VBT_FONT.display,
+            fontWeight: 400,
+            fontSize: 70,
+            letterSpacing: "-0.015em",
             color: VBT.ink,
           }}
         >
@@ -675,7 +676,7 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
                   color: VBT.paper,
                   fontWeight: 800,
                   fontSize: 13,
-                  fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                  fontFamily: VBT_FONT.title,
                 }}
               >
                 {i + 1}
@@ -812,7 +813,7 @@ function RecoCard({
           <div
             className="truncate"
             style={{
-              fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+              fontFamily: VBT_FONT.title,
               color: tint.accent,
               fontWeight: 700,
               letterSpacing: "-0.005em",
@@ -877,6 +878,7 @@ export function AnchorLowDiversityBody({
               fontWeight: 700,
               fontSize: VBT_TYPO.micro,
               letterSpacing: "0.18em",
+              fontFamily: VBT_FONT.mono,
             }}
           >
             <span
@@ -957,7 +959,7 @@ export function AnchorLowDiversityBody({
                         style={{
                           color: VBT.ink,
                           fontWeight: 700,
-                          fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                          fontFamily: VBT_FONT.title,
                           fontSize: VBT_TYPO.body,
                         }}
                       >
@@ -1033,6 +1035,7 @@ export function AnchorLowDiversityBody({
             fontWeight: 700,
             fontSize: VBT_TYPO.micro,
             letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
           }}
         >
           <span
@@ -1087,11 +1090,11 @@ function Th({ children, align = "left" }: { children: React.ReactNode; align?: "
       className="px-3 py-2.5 uppercase"
       style={{
         color: VBT.terracotta700,
-        fontWeight: 800,
+        fontWeight: 700,
         fontSize: VBT_TYPO.micro,
-        letterSpacing: "0.12em",
+        letterSpacing: "0.1em",
         textAlign: align,
-        fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+        fontFamily: VBT_FONT.mono,
       }}
     >
       {children}
@@ -1125,6 +1128,7 @@ export function AnchorEmptyBody({
               fontWeight: 700,
               fontSize: VBT_TYPO.micro,
               letterSpacing: "0.18em",
+              fontFamily: VBT_FONT.mono,
             }}
           >
             <span
@@ -1189,6 +1193,7 @@ export function AnchorEmptyBody({
             fontWeight: 700,
             fontSize: VBT_TYPO.micro,
             letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
           }}
         >
           <span
@@ -1277,7 +1282,7 @@ function EmptyAnchorGroup({
             style={{
               color: tint.headerFg,
               fontWeight: 800,
-              fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+              fontFamily: VBT_FONT.title,
               fontSize: VBT_TYPO.bodySm,
               wordBreak: "break-all",
               lineHeight: 1.35,
@@ -1424,6 +1429,7 @@ export function AnchorBarsBody({ slide }: { slide: Extract<AdvSlide, { kind: "an
                 fontWeight: 700,
                 fontSize: VBT_TYPO.micro,
                 letterSpacing: "0.18em",
+                fontFamily: VBT_FONT.mono,
               }}
             >
               <span
@@ -1703,6 +1709,7 @@ function DiversityScatter({ rows }: { rows: AnchorDestinationSummary[] }) {
           fontWeight: 700,
           fontSize: VBT_TYPO.micro,
           letterSpacing: "0.18em",
+          fontFamily: VBT_FONT.mono,
         }}
       >
         <span
@@ -1911,6 +1918,7 @@ export function PrioritySlideBody({
             fontWeight: 700,
             fontSize: VBT_TYPO.micro,
             letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
           }}
         >
           <span className="inline-block rounded-full" style={{ width: 6, height: 6, background: VBT.terracotta500 }} />
@@ -1936,6 +1944,7 @@ export function PrioritySlideBody({
             fontWeight: 700,
             fontSize: VBT_TYPO.micro,
             letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
           }}
         >
           <SparklesIcon size={12} color={VBT.terracotta500} />
@@ -2040,10 +2049,10 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
           className="uppercase truncate"
           style={{
             color: palette.label,
-            fontWeight: 800,
+            fontWeight: 700,
             fontSize: VBT_TYPO.micro,
-            letterSpacing: "0.16em",
-            fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+            letterSpacing: "0.14em",
+            fontFamily: VBT_FONT.mono,
           }}
         >
           {URGENCY_LABEL[urgency]}
@@ -2115,7 +2124,7 @@ function KanbanCard({
             color: VBT.paper,
             fontSize: 9,
             fontWeight: 800,
-            fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+            fontFamily: VBT_FONT.title,
           }}
         >
           {item.rank}
