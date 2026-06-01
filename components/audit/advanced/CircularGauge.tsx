@@ -1,6 +1,6 @@
 "use client";
 
-import { VBT, VBT_TYPO } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
 
 /**
  * Circular gauge used on the cover slide (4.12). The score sits at the
@@ -63,10 +63,10 @@ export function CircularGauge({
           className="tabular-nums"
           style={{
             color: scoreColor,
-            fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-            fontWeight: 800,
-            fontSize: Math.round(size * 0.42),
-            letterSpacing: "-0.045em",
+            fontFamily: VBT_FONT.display,
+            fontWeight: 400,
+            fontSize: Math.round(size * 0.4),
+            letterSpacing: "-0.02em",
             lineHeight: 0.95,
           }}
         >
@@ -80,6 +80,7 @@ export function CircularGauge({
             letterSpacing: "0.22em",
             textTransform: "uppercase",
             marginTop: 6,
+            fontFamily: VBT_FONT.mono,
           }}
         >
           {label || "Score / 100"}

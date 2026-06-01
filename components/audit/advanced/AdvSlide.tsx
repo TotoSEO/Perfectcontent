@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { VBT, VBT_TYPO } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
 
 /**
  * 16:9 slide for the Advanced audit deck. Authored against a 1600×900
@@ -77,26 +77,34 @@ export function AdvSlide({
             }}
           >
             <div className="min-w-0 flex-1">
-              <div
-                className="uppercase"
-                style={{
-                  color: VBT.terracotta600,
-                  fontWeight: 700,
-                  fontSize: VBT_TYPO.micro,
-                  letterSpacing: "0.24em",
-                }}
-              >
-                {subtitle || `Slide ${index + 1} / ${total}`}
+              {/* Mono kicker with a leading rule — editorial section marker */}
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  style={{ width: 22, height: 2, background: VBT.terracotta500, borderRadius: 2 }}
+                />
+                <span
+                  className="uppercase truncate"
+                  style={{
+                    color: VBT.terracotta600,
+                    fontWeight: 600,
+                    fontSize: VBT_TYPO.micro,
+                    letterSpacing: "0.22em",
+                    fontFamily: VBT_FONT.mono,
+                  }}
+                >
+                  {subtitle || `Slide ${index + 1} / ${total}`}
+                </span>
               </div>
               <h2
                 className="mt-2.5"
                 style={{
-                  fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-                  fontWeight: 700,
+                  fontFamily: VBT_FONT.display,
+                  fontWeight: 400,
                   fontSize: VBT_TYPO.pageTitle,
-                  letterSpacing: "-0.02em",
+                  letterSpacing: "-0.01em",
                   color: VBT.ink,
-                  lineHeight: 1.1,
+                  lineHeight: 1.08,
                   display: "-webkit-box",
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: "vertical",
@@ -151,23 +159,24 @@ export function AdvSlide({
             <span
               className="font-semibold"
               style={{
-                fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+                fontFamily: VBT_FONT.display,
                 color: VBT.terracotta600,
-                letterSpacing: "0.04em",
-                fontSize: VBT_TYPO.caption,
+                letterSpacing: "0.01em",
+                fontSize: VBT_TYPO.caption + 1,
               }}
             >
               Visibili&apos;tea
             </span>
             <span style={{ color: VBT.paperEdge }}>·</span>
-            <span>{footer || "Audit technique avancé SEO"}</span>
+            <span style={{ fontFamily: VBT_FONT.body }}>{footer || "Audit technique avancé SEO"}</span>
           </div>
           <div
             className="tabular-nums"
             style={{
-              fontFamily: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
+              fontFamily: VBT_FONT.mono,
               fontWeight: 600,
               color: VBT.inkSoft,
+              letterSpacing: "0.05em",
             }}
           >
             {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
@@ -194,8 +203,9 @@ export function SectionPill({ children, tone = "default" }: { children: ReactNod
         border: `1px solid ${palette.border}`,
         padding: "5px 12px",
         fontSize: VBT_TYPO.caption,
-        fontWeight: 700,
-        letterSpacing: "0.01em",
+        fontWeight: 600,
+        letterSpacing: "0.02em",
+        fontFamily: VBT_FONT.mono,
       }}
     >
       {children}
