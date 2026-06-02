@@ -237,6 +237,16 @@ export type AdvSlide =
       // Optional Claude-generated narrative summary (1-3 short paragraphs).
       ai_summary: string | null;
       ai_summary_error: string | null;
+    }
+  | {
+      // Free-form slide inserted by the user via the in-app editor.
+      // Title is rendered by the slide chrome ; body is plain text with
+      // blank-line-separated paragraphs.
+      kind: "custom";
+      title: string;
+      body: string;
+      // Optional eyebrow shown above the title (defaults to "Note").
+      eyebrow?: string;
     };
 
 export type PriorityItem = {

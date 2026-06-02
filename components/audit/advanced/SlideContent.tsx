@@ -2587,6 +2587,60 @@ function MiniStat({
   );
 }
 
+// ===========================================================================
+// CUSTOM slide — user-authored free text (title in chrome, body here).
+// ===========================================================================
+
+export function CustomSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "custom" }> }) {
+  const paragraphs = (slide.body || "").split(/\n{2,}/).filter((p) => p.trim().length > 0);
+  return (
+    <div className="flex-1 flex flex-col gap-4 min-h-0 overflow-hidden justify-center">
+      {paragraphs.length === 0 ? (
+        <p style={{ color: VBT.zinc, fontStyle: "italic", fontSize: VBT_TYPO.body }}>
+          (Slide vide : ajoute du texte depuis l&apos;éditeur.)
+        </p>
+      ) : (
+        paragraphs.map((p, i) => {
+          // Lines starting with "- " or "• " render as a bullet list.
+          const lines = p.split("\n");
+          const isList = lines.every((l) => /^\s*[-•]\s+/.test(l));
+          if (isList) {
+            return (
+              <ul key={i} className="space-y-2">
+                {lines.map((l, j) => (
+                  <li
+                    key={j}
+                    className="flex items-start gap-3"
+                    style={{ color: VBT.ink, fontSize: VBT_TYPO.body, lineHeight: 1.55, fontFamily: VBT_FONT.body }}
+                  >
+                    <span className="shrink-0 mt-1" style={{ color: VBT.terracotta500 }}>
+                      <ChevronRightIcon size={13} color={VBT.terracotta500} />
+                    </span>
+                    <span>{l.replace(/^\s*[-•]\s+/, "")}</span>
+                  </li>
+                ))}
+              </ul>
+            );
+          }
+          return (
+            <p
+              key={i}
+              style={{
+                color: VBT.ink,
+                fontSize: VBT_TYPO.body,
+                lineHeight: 1.6,
+                fontFamily: VBT_FONT.body,
+              }}
+            >
+              {p}
+            </p>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 export function PrioritySlideBody({
   slide,
   onRequestAi,
