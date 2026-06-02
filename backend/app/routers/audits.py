@@ -207,10 +207,16 @@ async def _expand_sitemap(client: httpx.AsyncClient, url: str, depth: int = 0, m
     if tag == "sitemapindex":
         flat: list[str] = []
         nested = 0
-        for loc in root.iter():
-            if _localname(loc.tag) != "loc":
+        # Only the <loc> that is a DIRECT child of a <sitemap> entry : never
+        # a <loc> nested in an extension block.
+        for sm in root:
+            if _localname(sm.tag) != "sitemap":
                 continue
-            child_url = (loc.text or "").strip()
+            child_url = ""
+            for child in sm:
+                if _localname(child.tag) == "loc":
+                    child_url = (child.text or "").strip()
+                    break
             if child_url:
                 nested += 1
                 child_flat, child_nested = await _expand_sitemap(client, child_url, depth=depth + 1, max_depth=max_depth, cap=cap)
@@ -221,14 +227,22 @@ async def _expand_sitemap(client: httpx.AsyncClient, url: str, depth: int = 0, m
         return flat[:cap], nested
     if tag == "urlset":
         urls: list[str] = []
-        for loc in root.iter():
-            if _localname(loc.tag) != "loc":
+        # Take ONE <loc> per <url> entry. Iterating every <loc> via
+        # root.iter() would also pick up <image:loc> / <video:loc> from the
+        # image/video sitemap extensions (the namespace prefix is stripped by
+        # _localname), inflating the URL count : the exact "1400 vs 1374"
+        # discrepancy the client saw.
+        for url_el in root:
+            if _localname(url_el.tag) != "url":
                 continue
-            u = (loc.text or "").strip()
-            if u:
-                urls.append(u)
-                if len(urls) >= cap:
+            for child in url_el:
+                if _localname(child.tag) == "loc":
+                    u = (child.text or "").strip()
+                    if u:
+                        urls.append(u)
                     break
+            if len(urls) >= cap:
+                break
         return urls, 0
     return [], 0
 
@@ -565,9 +579,10 @@ async def priority_summary(payload: PriorityIn) -> PriorityOut:
 
     system = (
         "Tu es un consultant SEO senior français qui synthétise un audit technique. "
-        "Tu rédiges UN paragraphe court (4-6 phrases) de synthèse pour la slide finale d'un livrable client. "
-        "Tu nommes le sujet principal à traiter en priorité, tu expliques pourquoi en t'appuyant sur les chiffres, "
-        "et tu termines sur une recommandation d'ordre de chantier (actions rapides puis chantiers de fond). "
+        "Tu rédiges UN paragraphe COURT (3 phrases maximum, 60 mots au total) pour la slide finale. "
+        "Le tableau des priorités est juste à côté : NE le réénumère PAS. "
+        "Phrase 1 : le chantier prioritaire et pourquoi (1 chiffre clé). Phrase 2 : le second levier. "
+        "Phrase 3 : l'ordre conseillé (actions rapides d'abord, chantiers de fond ensuite). "
         "Style : direct, factuel, sans superlatifs, sans listes à puces, sans titres. "
         "Tu écris du texte brut destiné à être affiché tel quel sur une slide : "
         "n'utilise AUCUNE syntaxe Markdown. Pas d'astérisques (*texte* ou **texte**) pour le gras ou l'italique, "
@@ -597,7 +612,7 @@ Rédige le paragraphe de synthèse pour la slide "Priorisation des corrections".
             system=system,
             user=user,
             model=HAIKU,
-            max_tokens=600,
+            max_tokens=220,
             temperature=0.3,
         )
         return PriorityOut(summary=resp.text.strip(), cost_usd=resp.cost)
@@ -892,7 +907,9 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
             if head_resp is not None and "last-modified" in head_resp.headers:
                 last_modified = head_resp.headers["last-modified"]
             urls, _depth = await _expand_sitemap(client, sm_url)
-            sitemap_urls = urls
+            # Dedup while preserving order : the reported count must be the
+            # number of UNIQUE URLs, matching third-party sitemap extractors.
+            sitemap_urls = list(dict.fromkeys(urls))
     except Exception as exc:
         return SitemapAnalysisOut(
             fetched=False,
@@ -937,20 +954,28 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
         "Tu es un consultant SEO senior français. Tu rédiges l'analyse d'un sitemap.xml pour une slide d'audit. "
         "Tu retournes UNIQUEMENT un objet JSON sans Markdown autour. Schéma :\n"
         "{\n"
-        '  "overview": "string",     // 3 à 5 phrases courtes décrivant la structure (nombre d\'URLs, typologies dominantes, structure ou non en sitemap-index, recommandation de structure)\n'
-        '  "gaps_summary": "string"   // 3 à 5 phrases si missing_count > 0 décrivant les sections absentes ; sinon null\n'
+        '  "overview": "string",     // 2 a 4 phrases courtes : volume d\'URLs, typologies dominantes, structure sitemap-index ou non\n'
+        '  "gaps_summary": "string"   // 2 a 4 phrases si des URLs sont absentes ; sinon null\n'
         "}\n"
-        "Règles : pas de Markdown, pas de tirets cadratins, pas d'asterisques, pas d'anglais, phrases courtes, 25 mots maximum chacune."
+        "REGLES ANTI-HALLUCINATION STRICTES :\n"
+        "1. Tu n'utilises QUE les chiffres et les libelles de chemins fournis ci-dessous. "
+        "INTERDICTION d'inventer une section, un dossier ou un type de page qui n'est pas dans les listes donnees. "
+        "Si un chemin s'appelle /questions/, tu ecris /questions/, tu ne le renommes pas en /faq/ ni en autre chose.\n"
+        "2. INTERDICTION d'inventer des chiffres : reprends exactement ceux fournis.\n"
+        "3. Si la repartition des absences est vide ou « (aucun) », gaps_summary doit etre null.\n"
+        "Regles editoriales : pas de Markdown, pas de tirets cadratins, pas d'asterisques, pas d'anglais, "
+        "phrases courtes (25 mots max). Tu peux rester general si les libelles ne sont pas parlants, "
+        "mais tu ne dois JAMAIS citer un chemin absent des listes."
     )
     user_msg = (
         f"Domaine : {payload.domain or 'inconnu'}\n"
         f"Sitemap URL : {sm_url}\n"
-        f"Nombre total d'URLs dans le sitemap : {len(sitemap_urls)}\n"
-        f"Répartition par section (top 8) : {sm_breakdown_txt}\n"
-        f"Dernière modification : {last_modified or 'inconnue'}\n"
+        f"Nombre total d'URLs UNIQUES dans le sitemap : {len(sitemap_urls)}\n"
+        f"Repartition du sitemap par chemin (libelles EXACTS a reutiliser tels quels) : {sm_breakdown_txt}\n"
+        f"Derniere modification : {last_modified or 'inconnue'}\n"
         f"URLs indexables (crawl) : {len(indexable)}\n"
         f"URLs indexables ABSENTES du sitemap : {len(missing)}\n"
-        f"Répartition des absences (top 6) : {gap_txt}\n"
+        f"Repartition des absences par chemin (libelles EXACTS a reutiliser tels quels) : {gap_txt}\n"
     )
     overview = ""
     gaps_summary: str | None = None

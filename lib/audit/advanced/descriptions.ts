@@ -21,7 +21,7 @@ export const DESC = {
 
   html_weight: `Depuis février 2026, Google a officialisé que Googlebot ne lit que les 2 premiers Mo d'un fichier HTML pour l'indexation. Au-delà, le contenu est tronqué : liens internes, données structurées, mots-clés en bas de page peuvent être ignorés. Cette limite concerne le fichier HTML seul, pas le poids total de la page avec ses ressources.`,
 
-  titles_meta: `La balise title est le titre de la page tel qu'il apparaît dans les résultats Google. Elle doit être unique, différente du H1, et comprise entre 52 et 65 caractères. La meta description est le résumé affiché sous le titre dans les SERPs. Elle n'est pas un facteur de ranking direct mais impacte le taux de clic. Longueur idéale : entre 130 et 155 caractères.`,
+  titles_meta: `La balise title est le titre de la page affiché dans les résultats Google : unique, différente du H1, idéalement 52 à 65 caractères. La meta description (130 à 155 caractères) résume la page sous le titre. Sur Google, elle n'est pas un facteur de ranking direct mais influence le taux de clic. Elle joue aussi un rôle croissant pour les IA génératives, qui s'en servent pour comprendre, résumer et citer la page ou la marque.`,
 
   titles_duplicate: `Deux pages avec le même title envoient des signaux contradictoires à Google sur leur thématique respective. Cela crée de la cannibalisation et rend plus difficile pour Google de déterminer quelle page positionner pour une requête donnée.`,
 
@@ -44,7 +44,7 @@ export const DESC = {
   anchor_table: `Le score de diversité d'ancres est le ratio entre le nombre d'ancres uniques et le nombre total de liens entrants internes par page de destination. Plus le ratio est proche de 1, plus la diversité est bonne ; proche de 0, c'est qu'une même ancre revient en boucle. Les pages avec un ratio faible ET un volume de liens entrants élevé sont les plus urgentes à corriger.`,
 
   // ---- New anchor slides (replace anchor_bars / anchor_table copy) ----
-  anchor_low_diversity: `Une même page reçoit plusieurs liens internes contextuels avec systématiquement la même ancre exacte. Ce schéma envoie un signal sémantique pauvre à Google : la page n'est associée qu'à une seule expression, alors qu'un maillage diversifié transmettrait davantage de contexte et plusieurs intentions de recherche. Varier les ancres qui pointent vers une URL clé est l'un des leviers de ranking les plus directs sur les pages stratégiques.`,
+  anchor_low_diversity: `Ces pages reçoivent presque toujours la même ancre éditoriale exacte. Le signal envoyé à Google est pauvre : la page n'est associée qu'à une seule expression. Varier les ancres contextuelles qui pointent vers une URL clé élargit son champ sémantique et reste l'un des leviers de ranking les plus directs.`,
 
   anchor_empty: `Ces URLs reçoivent des liens internes contextuels dont le texte d'ancrage est totalement vide (ni Ancrage, ni Texte Alt). Cela peut arriver sur des liens posés autour d'éléments décoratifs vides, des balises <a> oubliées dans le markdown ou des templates mal corrigés. Une ancre vide ne transmet aucun signal sémantique : c'est un lien qui ne contribue ni au SEO ni à l'accessibilité, et qui doit être complété par un texte descriptif. Les liens images (dont le Texte Alt est rempli) sont exclus de cette analyse car ils transmettent un contexte via leur alt.`,
 

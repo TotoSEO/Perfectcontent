@@ -28,9 +28,11 @@
 import Papa from "papaparse";
 import type { AnchorDestinationSummary, AnchorRow } from "./types";
 
-const SOURCE_KEYS = ["source", "url source", "page source", "from"];
-const DESTINATION_KEYS = ["destination", "url de destination", "to"];
-const ANCHOR_KEYS = ["ancrage", "anchor", "anchor text", "texte d'ancre", "texte de l'ancre", "texte de l ancre"];
+// "de" / "a" cover the Screaming Frog FR "Liens entrants" export whose
+// columns are literally "De" and "À" (À normalises to "a").
+const SOURCE_KEYS = ["source", "url source", "page source", "from", "de"];
+const DESTINATION_KEYS = ["destination", "url de destination", "to", "a", "vers"];
+const ANCHOR_KEYS = ["ancrage", "anchor", "anchor text", "texte d'ancrage", "texte d'ancre", "texte de l'ancre", "texte de l ancre", "texte d ancrage"];
 // Fallback: when Ancrage is empty (typical case of <a><img></a>), use the
 // image alt as the link's accessible name : Google and the LLMs treat the
 // alt as the effective anchor text in that case.
@@ -164,7 +166,20 @@ function isGeneric(anchor: string): boolean {
 function isTemplateCta(anchor: string): boolean {
   const norm = normalizeKey(anchor || "");
   if (!norm) return false;
-  return TEMPLATE_CTA_ANCHORS.has(norm);
+  if (TEMPLATE_CTA_ANCHORS.has(norm)) return true;
+  // Fuzzy match : a templated CTA often carries a suffix that makes it
+  // unique per page while still being the same button, e.g.
+  // "Recevoir le guide comparateur" / "Télécharger le livre blanc ERP".
+  // Treat the anchor as a CTA when it STARTS WITH a known CTA phrase at a
+  // word boundary, so it never gets counted as an editorial over-optimised
+  // anchor.
+  for (const p of TEMPLATE_CTA_ANCHORS) {
+    if (p.length < 6) continue; // skip very short phrases to avoid false hits
+    if (norm === p || norm.startsWith(p + " ") || norm.endsWith(" " + p) || norm.includes(" " + p + " ")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // True when the link wraps an image and has no own text content.

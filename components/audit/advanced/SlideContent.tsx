@@ -39,37 +39,41 @@ const KPI_PALETTES = {
 
 export function AdvKpiTile({ kpi, size = "md" }: { kpi: AdvKPI; size?: "sm" | "md" | "lg" }) {
   const palette = KPI_PALETTES[kpi.tone || "ok"];
-  const valueSize = size === "lg" ? 32 : size === "sm" ? 18 : 24;
-  const pad = size === "lg" ? "14px 18px" : size === "sm" ? "8px 12px" : "12px 16px";
+  // Centered "stat card" : the figure leads (warm display serif), the label
+  // sits centered underneath. Reads as a deliberate metric, not a wide
+  // half-empty rectangle.
+  const valueSize = size === "lg" ? 46 : size === "sm" ? 26 : 38;
+  const pad = size === "lg" ? "18px 16px" : size === "sm" ? "12px 10px" : "16px 14px";
   return (
     <div
-      className="rounded-xl border min-w-0"
-      style={{ background: palette.bg, borderColor: palette.border, padding: pad }}
+      className="rounded-xl border min-w-0 flex flex-col items-center justify-center text-center gap-1"
+      style={{ background: palette.bg, borderColor: palette.border, padding: pad, minHeight: size === "sm" ? 72 : 96 }}
     >
       <div
-        className="uppercase truncate"
+        className="tabular-nums leading-none"
         style={{
-          color: VBT.zinc,
+          color: palette.text,
+          fontWeight: 400,
+          fontFamily: VBT_FONT.display,
+          fontSize: valueSize,
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {kpi.value}
+      </div>
+      <div
+        className="uppercase"
+        style={{
+          color: VBT.inkSoft,
           fontWeight: 700,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.16em",
+          letterSpacing: "0.12em",
+          lineHeight: 1.25,
+          maxWidth: "100%",
         }}
         title={kpi.label}
       >
         {kpi.label}
-      </div>
-      <div
-        className="tabular-nums leading-tight"
-        style={{
-          color: palette.text,
-          fontWeight: 800,
-          fontFamily: VBT_FONT.title,
-          fontSize: valueSize,
-          letterSpacing: "-0.02em",
-          marginTop: 4,
-        }}
-      >
-        {kpi.value}
       </div>
     </div>
   );
@@ -235,8 +239,12 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
   const kpisForChart = slide.kpis.slice(0, 2);
   const kpisNoChart = slide.kpis;
 
+  // No-chart slides put the KPIs in a single horizontal row so the centered
+  // stat cards read as a balanced band rather than a stacked 2-column block.
+  const noChartCols = Math.min(kpisNoChart.length || 1, 4);
+
   return (
-    <div className="flex-1 flex flex-col gap-4 min-h-0">
+    <div className="flex-1 flex flex-col gap-5 min-h-0">
       {/* Description (with terracotta left-bar) + xlsx badge */}
       <div className="flex items-start gap-6 min-w-0">
         <div
@@ -246,7 +254,7 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
             paddingLeft: 14,
           }}
         >
-          <DescriptionBlock text={slide.description} maxLines={3} />
+          <DescriptionBlock text={slide.description} maxLines={5} size={VBT_TYPO.bodySm} />
         </div>
         {hasIssues && slide.xlsx_sheet && (
           <div className="shrink-0">
@@ -265,17 +273,10 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
         {/* Left column : KPIs (2 hero tiles when chart present).
             Vertically centered so a short stack reads as deliberate balance
             against the chart instead of leaving a void at the bottom. */}
-        <div className={`flex flex-col gap-4 min-w-0 ${hasChart ? "justify-center" : "justify-center"}`}>
+        <div className="flex flex-col gap-4 min-w-0 justify-center">
           <div
-            className={`grid gap-3 ${
-              hasChart
-                ? "grid-cols-1"
-                : kpisNoChart.length <= 2
-                ? "grid-cols-2"
-                : kpisNoChart.length === 3
-                ? "grid-cols-3"
-                : "grid-cols-2"
-            }`}
+            className="grid gap-3"
+            style={{ gridTemplateColumns: `repeat(${hasChart ? 1 : noChartCols}, minmax(0, 1fr))` }}
           >
             {(hasChart ? kpisForChart : kpisNoChart).map((k, i) => (
               <AdvKpiTile key={i} kpi={k} size={hasChart ? "lg" : "md"} />
@@ -328,7 +329,7 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
           className="rounded-r-md"
           style={{ borderLeft: `3px solid ${VBT.terracotta500}`, paddingLeft: 16 }}
         >
-          <DescriptionBlock text={slide.description} maxLines={8} />
+          <DescriptionBlock text={slide.description} maxLines={10} size={VBT_TYPO.bodySm} />
         </div>
         {hasIssues && slide.xlsx_sheet && (
           <div>
@@ -745,15 +746,15 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
 // ===========================================================================
 
 export function RecoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "reco" }> }) {
-  const count = slide.groups.length;
-  const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
-  const maxItemsPerCard = count <= 2 ? 6 : count <= 4 ? 5 : 4;
-
+  // analyze.ts now chunks reco slides to <= 2 groups each, so a single group
+  // gets the full width and two groups split 50/50. Either way each bullet
+  // has room to breathe and is never truncated.
+  const count = slide.groups.length || 1;
   return (
     <div
-      className="flex-1 grid gap-4 min-h-0 overflow-hidden"
+      className="flex-1 grid gap-6 min-h-0 overflow-hidden"
       style={{
-        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        gridTemplateColumns: `repeat(${Math.min(count, 2)}, minmax(0, 1fr))`,
         gridAutoRows: "minmax(0, 1fr)",
       }}
     >
@@ -761,7 +762,7 @@ export function RecoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "rec
         <RecoCard
           key={i}
           subLabel={g.sub_label}
-          items={g.items.slice(0, maxItemsPerCard)}
+          items={g.items.slice(0, 5)}
           accentIndex={i}
         />
       ))}
@@ -779,73 +780,84 @@ function RecoCard({
   accentIndex: number;
 }) {
   const tint = accentIndex % 2 === 0
-    ? { bg: VBT.terracotta50, accent: VBT.terracotta600, accentSoft: VBT.terracotta500, edge: "#F5D5BA" }
-    : { bg: VBT.amber50, accent: VBT.amber600, accentSoft: VBT.amber500, edge: "#E5CD83" };
+    ? { bg: VBT.terracotta50, accent: VBT.terracotta700, chip: VBT.terracotta500, edge: "#F5D5BA" }
+    : { bg: VBT.amber50, accent: VBT.amber700, chip: VBT.amber500, edge: "#E5CD83" };
   const iconKey = iconForReco(subLabel);
   return (
     <div
-      className="rounded-xl overflow-hidden flex flex-col min-w-0"
+      className="rounded-2xl overflow-hidden flex flex-col min-w-0"
       style={{
-        background: tint.bg,
+        background: VBT.paper,
         border: `1px solid ${tint.edge}`,
-        boxShadow: "0 6px 16px -10px rgba(36, 23, 18, 0.2)",
+        boxShadow: "0 8px 22px -14px rgba(36, 23, 18, 0.25)",
       }}
     >
+      {/* Header band */}
       <div
-        className="flex items-center gap-3 min-w-0"
+        className="flex items-center gap-3 min-w-0 shrink-0"
         style={{
-          background: VBT.paper,
+          background: tint.bg,
           borderBottom: `1px solid ${tint.edge}`,
-          padding: "12px 16px",
+          padding: "14px 18px",
         }}
       >
         <span
-          className="shrink-0 inline-flex items-center justify-center rounded-lg"
+          className="shrink-0 inline-flex items-center justify-center rounded-xl"
           style={{
-            width: 40,
-            height: 40,
-            background: tint.bg,
+            width: 44,
+            height: 44,
+            background: VBT.paper,
             border: `1px solid ${tint.edge}`,
           }}
         >
-          <RecoIcon name={iconKey} size={24} />
+          <RecoIcon name={iconKey} size={26} />
         </span>
-        <div className="min-w-0">
-          <div
-            className="truncate"
-            style={{
-              fontFamily: VBT_FONT.title,
-              color: tint.accent,
-              fontWeight: 700,
-              letterSpacing: "-0.005em",
-              fontSize: VBT_TYPO.bodySm + 1,
-            }}
-            title={subLabel}
-          >
-            {subLabel}
-          </div>
+        <div
+          className="min-w-0"
+          style={{
+            fontFamily: VBT_FONT.display,
+            color: tint.accent,
+            fontWeight: 400,
+            fontSize: 21,
+            lineHeight: 1.1,
+            letterSpacing: "-0.01em",
+          }}
+          title={subLabel}
+        >
+          {subLabel}
         </div>
       </div>
 
-      <ul className="flex-1 overflow-hidden min-h-0" style={{ padding: "14px 16px" }}>
+      {/* Numbered actions, vertically centered so the card never looks empty */}
+      <ul className="flex-1 flex flex-col justify-center gap-3.5 overflow-hidden min-h-0" style={{ padding: "18px 20px" }}>
         {items.map((item, j) => (
-          <li
-            key={j}
-            className="flex items-start gap-2.5"
-            style={{
-              color: VBT.ink,
-              lineHeight: 1.5,
-              fontSize: VBT_TYPO.bodySm - 1,
-              marginBottom: j === items.length - 1 ? 0 : 8,
-            }}
-          >
+          <li key={j} className="flex items-start gap-3">
             <span
-              className="shrink-0 mt-0.5"
-              style={{ color: tint.accentSoft }}
+              className="shrink-0 inline-flex items-center justify-center tabular-nums"
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                background: tint.chip,
+                color: VBT.paper,
+                fontSize: 11,
+                fontWeight: 800,
+                fontFamily: VBT_FONT.title,
+                marginTop: 1,
+              }}
             >
-              <ChevronRightIcon size={11} color={tint.accentSoft} />
+              {j + 1}
             </span>
-            <span style={{ fontWeight: 400 }}>{item}</span>
+            <span
+              style={{
+                color: VBT.ink,
+                lineHeight: 1.5,
+                fontSize: VBT_TYPO.bodySm,
+                fontFamily: VBT_FONT.body,
+              }}
+            >
+              {item}
+            </span>
           </li>
         ))}
       </ul>
@@ -905,92 +917,75 @@ export function AnchorLowDiversityBody({
           >
             <table className="w-full" style={{ tableLayout: "fixed", fontSize: VBT_TYPO.bodySm }}>
               <colgroup>
-                <col style={{ width: "44%" }} />
-                <col style={{ width: "28%" }} />
+                <col style={{ width: "42%" }} />
+                <col style={{ width: "30%" }} />
                 <col style={{ width: "12%" }} />
                 <col style={{ width: "16%" }} />
               </colgroup>
               <thead style={{ background: VBT.terracotta50 }}>
                 <tr>
                   <Th>URL concernée</Th>
-                  <Th>Ancre</Th>
-                  <Th align="right">Occurrences</Th>
-                  <Th align="right">sur liens totaux</Th>
+                  <Th>Ancre dominante</Th>
+                  <Th align="right">Occur.</Th>
+                  <Th align="right">Domination</Th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((r, i) => {
                   const tone =
                     r.ratio_pct >= 80 ? { bg: "#FEE2E2", fg: VBT.sigRed } :
-                    r.ratio_pct >= 60 ? { bg: "#FFEDD5", fg: VBT.sigOrange } :
+                    r.ratio_pct >= 65 ? { bg: "#FFEDD5", fg: VBT.sigOrange } :
                     { bg: "#FEF3C7", fg: "#A16207" };
                   return (
-                    <tr
-                      key={i}
-                      style={{
-                        borderTop: `1px solid ${VBT.paperEdge}`,
-                      }}
-                    >
+                    <tr key={i} style={{ borderTop: `1px solid ${VBT.paperEdge}` }}>
                       <td
-                        className="px-3 py-2.5"
+                        className="px-3 py-2.5 align-top"
                         style={{
                           color: VBT.ink,
                           fontWeight: 500,
-                          // URL must remain visible in full : wrap on slashes.
                           wordBreak: "break-all",
-                          fontSize: VBT_TYPO.caption + 1,
+                          fontSize: VBT_TYPO.caption,
                           lineHeight: 1.4,
                         }}
                       >
                         {r.destination}
                       </td>
                       <td
-                        className="px-3 py-2.5"
+                        className="px-3 py-2.5 align-top"
                         style={{
                           color: VBT.terracotta700,
                           fontWeight: 600,
-                          fontSize: VBT_TYPO.bodySm,
+                          fontSize: VBT_TYPO.caption + 1,
                           wordBreak: "break-word",
+                          lineHeight: 1.4,
                         }}
                       >
                         « {r.anchor} »
                       </td>
                       <td
-                        className="px-3 py-2.5 tabular-nums text-right"
+                        className="px-3 py-2.5 tabular-nums text-right align-top"
                         style={{
                           color: VBT.ink,
                           fontWeight: 700,
                           fontFamily: VBT_FONT.title,
-                          fontSize: VBT_TYPO.body,
+                          fontSize: VBT_TYPO.bodySm,
                         }}
                       >
-                        {r.occurrences}
+                        {r.occurrences}/{r.total_inlinks}
                       </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <span
-                            className="tabular-nums"
-                            style={{
-                              color: VBT.inkSoft,
-                              fontWeight: 600,
-                              fontSize: VBT_TYPO.bodySm,
-                            }}
-                          >
-                            / {r.total_inlinks}
-                          </span>
-                          <span
-                            className="tabular-nums inline-flex items-center px-2 py-0.5 rounded"
-                            style={{
-                              background: tone.bg,
-                              color: tone.fg,
-                              fontWeight: 700,
-                              fontSize: VBT_TYPO.micro,
-                              letterSpacing: "0.02em",
-                            }}
-                          >
-                            {r.ratio_pct.toFixed(0)}%
-                          </span>
-                        </div>
+                      <td className="px-3 py-2.5 text-right align-top">
+                        <span
+                          className="tabular-nums inline-flex items-center rounded"
+                          style={{
+                            background: tone.bg,
+                            color: tone.fg,
+                            fontWeight: 700,
+                            fontSize: VBT_TYPO.caption,
+                            padding: "2px 8px",
+                          }}
+                        >
+                          {r.ratio_pct.toFixed(0)} %
+                        </span>
                       </td>
                     </tr>
                   );
@@ -1056,7 +1051,7 @@ export function AnchorLowDiversityBody({
             lineHeight: 1.55,
           }}
         >
-          <DescriptionBlock text={slide.description} maxLines={16} size={VBT_TYPO.bodySm} />
+          <DescriptionBlock text={slide.description} maxLines={10} size={VBT_TYPO.bodySm} />
         </div>
         <div
           className="rounded-xl flex items-start gap-2.5"
@@ -1214,7 +1209,7 @@ export function AnchorEmptyBody({
             lineHeight: 1.55,
           }}
         >
-          <DescriptionBlock text={slide.description} maxLines={16} size={VBT_TYPO.bodySm} />
+          <DescriptionBlock text={slide.description} maxLines={10} size={VBT_TYPO.bodySm} />
         </div>
         <div
           className="rounded-xl flex items-start gap-2.5"
@@ -2779,7 +2774,17 @@ export function PrioritySlideBody({
           </span>
           <div style={{ paddingLeft: 22, paddingTop: 4 }}>
             {slide.ai_summary ? (
-              <p style={{ whiteSpace: "pre-wrap" }}>{renderRichText(slide.ai_summary)}</p>
+              <p
+                style={{
+                  whiteSpace: "pre-wrap",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 14,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {renderRichText(slide.ai_summary)}
+              </p>
             ) : slide.ai_summary_error ? (
               <>
                 <p style={{ color: VBT.sigRed }} className="mb-2">
@@ -2889,7 +2894,17 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
             Aucun chantier
           </div>
         ) : (
-          items.slice(0, 6).map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)
+          <>
+            {items.slice(0, 5).map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)}
+            {items.length > 5 && (
+              <div
+                className="text-center"
+                style={{ color: palette.label, fontSize: VBT_TYPO.micro, fontWeight: 700, fontFamily: VBT_FONT.mono, paddingTop: 2 }}
+              >
+                + {items.length - 5} autres
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

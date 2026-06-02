@@ -46,6 +46,25 @@ function scoreFromRatio(badRatio: number): number {
   return Math.round(clamp(100 * (1 - clamp(badRatio, 0, 1))));
 }
 
+// Build the recommendation slides for a section, chunked so each slide
+// carries at most `perSlide` groups : a single slide with 5-6 groups was
+// unreadable and truncated. Two groups per slide keeps every bullet
+// visible at a comfortable size. Title gets a " (1/3)" suffix when split.
+function buildRecoSlides(sectionId: string, title: string, perSlide = 2): AdvSlide[] {
+  const groups = recosForSection(sectionId);
+  if (groups.length === 0) return [];
+  const chunks: (typeof groups)[] = [];
+  for (let i = 0; i < groups.length; i += perSlide) {
+    chunks.push(groups.slice(i, i + perSlide));
+  }
+  return chunks.map((g, idx) => ({
+    kind: "reco" as const,
+    section_id: sectionId,
+    title: chunks.length > 1 ? `${title} (${idx + 1}/${chunks.length})` : title,
+    groups: g,
+  }));
+}
+
 // Strict scoring used by the maillage subcategories. The previous
 // scoreFromRatio decayed too slowly (a 28% orphan ratio still scored
 // ~72/100). With this variant, score 100 at 0% bad, 50 at `badAt`,
@@ -421,7 +440,7 @@ function buildIndexabilityCrawl(
     section_id: "indexability_crawl",
     sub_id: "noindex_pages",
     title: "Pages en noindex",
-    description: "Les pages en noindex ne sont pas indexées par Google. C'est très fréquemment volontaire et parfaitement sain : panier, compte client, page de remerciement après formulaire, page de désabonnement, filtres facettes, résultats de recherche interne. Cette slide n'est PAS une liste d'erreurs : c'est une liste à parcourir pour confirmer que chaque page est bien noindex intentionnellement. Une page seulement devient un problème si elle reçoit des liens internes alors qu'elle ne devrait pas être noindex.",
+    description: "Les pages en noindex ne sont pas indexées par Google. C'est très souvent volontaire et sain (panier, compte client, page de remerciement, filtres facettes, recherche interne). Ce n'est donc PAS une liste d'erreurs, mais une liste à parcourir pour confirmer que chaque exclusion est intentionnelle. Une page ne devient un problème que si elle reçoit des liens internes alors qu'elle ne devrait pas être en noindex.",
     kpis: [
       { label: "URLs en noindex", value: noindexRows.length, tone: "info" },
       { label: "% du site", value: html.length > 0 ? `${Math.round((noindexRows.length / html.length) * 100)} %` : "0 %", tone: "info" },
@@ -439,12 +458,7 @@ function buildIndexabilityCrawl(
   //  which is where it belongs thematically.)
 
   // ----- Recommendations slide
-  const slideReco: AdvSlide = {
-    kind: "reco",
-    section_id: "indexability_crawl",
-    title: "Recommandations : Indexabilité & crawl",
-    groups: recosForSection("indexability_crawl"),
-  };
+  const recoSlides = buildRecoSlides("indexability_crawl", "Recommandations : Indexabilité & crawl");
 
   const subcategories = [subRobots, subDepth, subHttp, subHreflang, subCanonical, subNoindex];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
@@ -462,7 +476,7 @@ function buildIndexabilityCrawl(
     // llms.txt was moved to the new GEO section : it sat awkwardly in
     // "Indexabilité & crawl" because it's specifically an LLM signal, not a
     // search-engine indexation lever.
-    slides: [cover, slideRobots, slideDepth, slideHttp, slideHreflang, slideCanonical, slideNoindex, slideReco],
+    slides: [cover, slideRobots, slideDepth, slideHttp, slideHreflang, slideCanonical, slideNoindex, ...recoSlides],
   };
 }
 
@@ -590,12 +604,7 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
     icon: SECTION_COVER.performance.icon,
     bullets: SECTION_COVER.performance.bullets,
   };
-  const reco: AdvSlide = {
-    kind: "reco",
-    section_id: "performance",
-    title: "Recommandations : Performance",
-    groups: recosForSection("performance"),
-  };
+  const recoSlides = buildRecoSlides("performance", "Recommandations : Performance");
 
   const subcategories = [subResp, subWeight];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
@@ -607,7 +616,7 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
     summary: `${slow + verySlow} pages > 1 s TTFB · ${over2m} pages > 2 Mo HTML`,
     subcategories,
   };
-  return { section, slides: [cover, slideResp, slideWeight, reco] };
+  return { section, slides: [cover, slideResp, slideWeight, ...recoSlides] };
 }
 
 // ---------- Meta section ---------------------------------------------------
@@ -785,12 +794,7 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
     icon: SECTION_COVER.meta.icon,
     bullets: SECTION_COVER.meta.bullets,
   };
-  const reco: AdvSlide = {
-    kind: "reco",
-    section_id: "meta",
-    title: "Recommandations : Balises & métadonnées",
-    groups: recosForSection("meta"),
-  };
+  const recoSlides = buildRecoSlides("meta", "Recommandations : Balises & métadonnées");
 
   const subcategories = [subTitlesMeta, subTitleDup, subMetaDup, subH1Dup];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
@@ -804,7 +808,7 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
   };
   return {
     section,
-    slides: [cover, slideTitlesMeta, slideTitleDup, slideMetaDup, slideH1Dup, reco],
+    slides: [cover, slideTitlesMeta, slideTitleDup, slideMetaDup, slideH1Dup, ...recoSlides],
   };
 }
 
@@ -877,13 +881,13 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
       { key: "problem", label: "Problème", width: 50 },
       { key: "url", label: "URL", width: 60 },
     ],
-    xlsx_sheet: "Sauts hiérarchie H2",
+    xlsx_sheet: "Sauts hiérarchie Hn",
   };
   const slideHier: AdvSlide = {
     kind: "data",
     section_id: "structure",
     sub_id: "hn_hierarchy",
-    title: "Sauts de hiérarchie H2",
+    title: "Sauts de hiérarchie Hn",
     description: DESC.hn_hierarchy,
     kpis: [
       { label: "Pages concernées", value: hierIssues.length, tone: hierIssues.length > 0 ? "warn" : "ok" },
@@ -900,12 +904,7 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
     icon: SECTION_COVER.structure.icon,
     bullets: SECTION_COVER.structure.bullets,
   };
-  const reco: AdvSlide = {
-    kind: "reco",
-    section_id: "structure",
-    title: "Recommandations : Structure de contenu",
-    groups: recosForSection("structure"),
-  };
+  const recoSlides = buildRecoSlides("structure", "Recommandations : Structure de contenu");
 
   const subcategories = [subHn, subHier];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
@@ -917,7 +916,7 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
     summary: `${h1Missing?.rows.length || 0} sans H1 · ${h2Missing?.rows.length || 0} sans H2 · ${hierIssues.length} sauts de hiérarchie`,
     subcategories,
   };
-  return { section, slides: [cover, slideHn, slideHier, reco] };
+  return { section, slides: [cover, slideHn, slideHier, ...recoSlides] };
 }
 
 // ---------- Linking section ------------------------------------------------
@@ -1263,50 +1262,57 @@ function buildLinking(
   const slidesAnchor: AdvSlide[] = [];
   const subAnchor: AdvSubcategory[] = [];
   if (anchors) {
-    // ---- (A) Low-diversity destinations -----------------------------------
-    // For each destination, look at the most-used anchor and ratio it to the
-    // total contextual inlinks. We surface destinations where one anchor
-    // dominates and the destination has substantial inlinks. Empty anchors
-    // are NOT in this slide (they go to "anchor-empty"). The aggregator in
-    // parse-anchors.ts already excludes templates / image links / cards /
-    // buttons, so by_destination is already editorial-only.
-    const lowDivCandidates = [...anchors.by_destination.values()]
-      .filter((d) => {
-        // Only meaningful with at least 3 inlinks. With less than 3, a
-        // 100% dominance is trivially "always the same anchor".
-        if (d.inlinks_count < 3) return false;
-        // Skip rows where the dominant anchor is empty : those belong to
-        // the next slide. Empty anchors shouldn't drive a "diversity"
-        // recommendation.
-        if (!d.dominant_anchor || d.dominant_anchor === "(vide)") return false;
-        // Real over-concentration : either >= 60% of inlinks share the
-        // same anchor, OR overall diversity is below 0.5 (less than one
-        // unique anchor per two inlinks).
-        return d.dominant_anchor_pct >= 60 || d.diversity_ratio < 0.5;
-      })
-      .sort((a, b) => {
-        // Worst-first : highest dominance pct, tiebreak on inlinks count.
-        if (b.dominant_anchor_pct !== a.dominant_anchor_pct) {
-          return b.dominant_anchor_pct - a.dominant_anchor_pct;
-        }
-        return b.inlinks_count - a.inlinks_count;
-      });
+    // ---- Low-diversity destinations (over-optimised editorial anchors) ----
+    // CRITICAL : the anchor distribution must be EDITORIAL-ONLY. Generic
+    // anchors ("Découvrir", "En savoir plus", "Lire la suite"…) and
+    // templated CTAs ("Recevoir le guide comparateur"…) are repeated UI
+    // buttons, NOT editorial anchors. Counting them produced false
+    // positives like "20/20 Recevoir le guide" on pages whose real
+    // editorial anchors are perfectly varied. We re-aggregate from the raw
+    // rows here, keeping only genuine editorial anchors.
+    const editorialByDest = new Map<string, Map<string, number>>();
+    const contextualTotalByDest = new Map<string, number>();
+    for (const r of anchors.rows) {
+      // Denominator : every contextual inbound link (UI buttons included),
+      // so the ratio reads "X identical editorial anchors out of N total
+      // contextual links toward this page".
+      contextualTotalByDest.set(r.destination, (contextualTotalByDest.get(r.destination) || 0) + 1);
+      // Numerator pool : genuine editorial anchors only.
+      if (r.is_generic || r.is_template_cta || r.is_image_link || r.is_card_like || r.is_button_like) continue;
+      const a = (r.anchor || "").trim();
+      if (!a) continue; // empty anchors are not an over-optimisation signal
+      let m = editorialByDest.get(r.destination);
+      if (!m) { m = new Map(); editorialByDest.set(r.destination, m); }
+      m.set(a, (m.get(a) || 0) + 1);
+    }
 
-    const lowDivRows = lowDivCandidates.map((d) => ({
-      destination: d.destination,
-      anchor: d.dominant_anchor,
-      occurrences: d.dominant_anchor_count,
-      total_inlinks: d.inlinks_count,
-      ratio_pct: d.dominant_anchor_pct,
-    }));
+    type LowDivRow = { destination: string; anchor: string; occurrences: number; total_inlinks: number; ratio_pct: number };
+    const lowDivRows: LowDivRow[] = [];
+    for (const [dest, anchorMap] of editorialByDest) {
+      let dom = "";
+      let domCount = 0;
+      for (const [a, c] of anchorMap) {
+        if (c > domCount) { dom = a; domCount = c; }
+      }
+      // Over-optimisation requires a MEANINGFUL editorial anchor repeated
+      // at least 3 times. The ratio is against the total contextual inlinks.
+      if (domCount < 3) continue;
+      const total = contextualTotalByDest.get(dest) || domCount;
+      const ratio = Math.round((domCount / total) * 1000) / 10;
+      // Flag only when the dominant editorial anchor represents a real share
+      // (>= 50%) of the page's contextual links.
+      if (ratio < 50) continue;
+      lowDivRows.push({ destination: dest, anchor: dom, occurrences: domCount, total_inlinks: total, ratio_pct: ratio });
+    }
+    lowDivRows.sort((a, b) => (b.ratio_pct - a.ratio_pct) || (b.occurrences - a.occurrences));
 
     const subAnchorsLowDiv: AdvSubcategory = {
       id: "anchors_low_diversity",
       label: "URLs avec ancres peu variées",
-      score: scoreFromRatio(Math.min(1, lowDivRows.length / Math.max(anchors.by_destination.size, 1))),
+      score: scoreFromRatio(Math.min(1, lowDivRows.length / Math.max(editorialByDest.size, 1))),
       issues_full: lowDivRows.map((r) => ({
         url: r.destination,
-        severity: r.ratio_pct >= 80 ? "high" : r.ratio_pct >= 60 ? "medium" : "low",
+        severity: r.ratio_pct >= 80 ? "high" : r.ratio_pct >= 65 ? "medium" : "low",
         anchor: r.anchor,
         occurrences: r.occurrences,
         total_inlinks: r.total_inlinks,
@@ -1314,7 +1320,7 @@ function buildLinking(
       } as AdvIssueRow)),
       columns: [
         { key: "url", label: "URL concernée", width: 70 },
-        { key: "anchor", label: "Ancre dominante", width: 40 },
+        { key: "anchor", label: "Ancre éditoriale dominante", width: 40 },
         { key: "occurrences", label: "Occurrences", width: 14 },
         { key: "total_inlinks", label: "Liens contextuels totaux", width: 22 },
         { key: "ratio_pct", label: "Ratio de domination", width: 20 },
@@ -1322,63 +1328,10 @@ function buildLinking(
       xlsx_sheet: "Ancres peu variees",
     };
 
-    // ---- (B) Empty editorial anchors --------------------------------------
-    // Empty = both Ancrage and Texte Alt empty. Exclude image-wrapping
-    // (alt is filled), templates, cards, buttons. Group by destination so
-    // the consultant sees each target URL with all its empty-anchor sources.
-    // Each (source, destination) pair is counted once even if the source
-    // page has multiple empty <a> tags to the same target : what matters
-    // for the consultant is the unique pairs to investigate / patch.
-    const emptyByDest = new Map<string, Set<string>>();
-    for (const r of anchors.rows) {
-      // Image links have a filled alt -> they're NOT in this slide.
-      if (r.is_image_link) continue;
-      // Skip templates / cards / buttons.
-      if (r.is_template_cta || r.is_card_like || r.is_button_like) continue;
-      // Only true empty (Ancrage AND Texte Alt empty).
-      if (!r.is_empty) continue;
-      if (!emptyByDest.has(r.destination)) emptyByDest.set(r.destination, new Set());
-      emptyByDest.get(r.destination)!.add(r.source);
-    }
-    // Sort groups : destinations with the most empty links first.
-    const emptyGroups = [...emptyByDest.entries()]
-      .map(([destination, sources]) => ({
-        destination,
-        sources: [...sources].sort(),
-      }))
-      .sort((a, b) => b.sources.length - a.sources.length);
-    const totalEmptyLinks = emptyGroups.reduce((s, g) => s + g.sources.length, 0);
+    subAnchor.push(subAnchorsLowDiv);
 
-    // XLSX rows : one per (source, destination) pair, with a group_key so
-    // the exporter can render visual separators between groups.
-    const emptyXlsxRows: AdvIssueRow[] = [];
-    for (const g of emptyGroups) {
-      for (const src of g.sources) {
-        emptyXlsxRows.push({
-          url: src,
-          severity: g.sources.length >= 5 ? "high" : g.sources.length >= 2 ? "medium" : "low",
-          destination: g.destination,
-          anchor: "(vide)",
-          _group: g.destination,
-        } as AdvIssueRow);
-      }
-    }
-    const subAnchorsEmpty: AdvSubcategory = {
-      id: "anchors_empty",
-      label: "URLs recevant des ancres vides",
-      score: scoreStrict(totalEmptyLinks / Math.max(anchors.total_editorial_links, 1), 0.05),
-      issues_full: emptyXlsxRows,
-      columns: [
-        { key: "url", label: "URL source du lien", width: 70 },
-        { key: "destination", label: "URL cible", width: 70 },
-        { key: "anchor", label: "Ancre", width: 14 },
-      ],
-      xlsx_sheet: "Ancres vides",
-    };
-
-    subAnchor.push(subAnchorsLowDiv, subAnchorsEmpty);
-
-    // Slide A : low diversity
+    // Single anchor slide : low diversity. (The "empty anchors" slide was
+    // removed : it was confusing and low-value.)
     slidesAnchor.push({
       kind: "anchor-low-diversity",
       section_id: "linking",
@@ -1389,20 +1342,6 @@ function buildLinking(
       total_concerned: lowDivRows.length,
       xlsx_sheet: lowDivRows.length > 0 ? "Ancres peu variees" : undefined,
       issues_count: lowDivRows.length,
-    });
-
-    // Slide B : empty anchors
-    slidesAnchor.push({
-      kind: "anchor-empty",
-      section_id: "linking",
-      sub_id: "anchors_empty",
-      title: "URLs recevant trop d'ancres vides",
-      description: DESC.anchor_empty,
-      groups: emptyGroups.slice(0, 6),
-      total_groups: emptyGroups.length,
-      total_empty_links: totalEmptyLinks,
-      xlsx_sheet: emptyXlsxRows.length > 0 ? "Ancres vides" : undefined,
-      issues_count: emptyXlsxRows.length,
     });
   } else {
     // Placeholder slide explaining that liens_entrants_tous.csv is needed
@@ -1428,12 +1367,7 @@ function buildLinking(
     icon: SECTION_COVER.linking.icon,
     bullets: SECTION_COVER.linking.bullets,
   };
-  const reco: AdvSlide = {
-    kind: "reco",
-    section_id: "linking",
-    title: "Recommandations : Maillage interne",
-    groups: recosForSection("linking"),
-  };
+  const recoSlides = buildRecoSlides("linking", "Recommandations : Maillage interne");
 
   const subcategories = [subOverview, subBroken, subRedirects, subHttp, subOrphans, ...subAnchor];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
@@ -1447,7 +1381,7 @@ function buildLinking(
   };
   return {
     section,
-    slides: [cover, slideOverview, slideBroken, slideRedirects, slideHttp, slideOrphans, ...slidesAnchor, reco],
+    slides: [cover, slideOverview, slideBroken, slideRedirects, slideHttp, slideOrphans, ...slidesAnchor, ...recoSlides],
   };
 }
 
@@ -1704,12 +1638,7 @@ function buildImages(
     icon: SECTION_COVER.images.icon,
     bullets: SECTION_COVER.images.bullets,
   };
-  const reco: AdvSlide = {
-    kind: "reco",
-    section_id: "images",
-    title: "Recommandations : Images",
-    groups: recosForSection("images"),
-  };
+  const recoSlides = buildRecoSlides("images", "Recommandations : Images");
 
   const subcategories = [subAlt, subSize, subWeight, subFormats];
   const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
@@ -1721,7 +1650,7 @@ function buildImages(
     summary: `${imagesList.length.toLocaleString("fr-FR")} images · ${altRows.length} sans alt · ${sizeAttrRows.length} sans dimensions · ${heavyCount + veryHeavy} > 100 Ko`,
     subcategories,
   };
-  return { section, slides: [cover, slideAlt, slideSize, slideWeight, slideFormats, reco] };
+  return { section, slides: [cover, slideAlt, slideSize, slideWeight, slideFormats, ...recoSlides] };
 }
 
 // ---------- Données structurées section ------------------------------------
@@ -1777,13 +1706,21 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
     sub_id: "schemas_detected",
     title: "Données structurées détectées sur la page d'accueil",
     description: DESC_EXT.structured_data + (homepageFetched
-      ? `\n\nNous avons analysé le HTML de la page d'accueil et détecté ${blocksCount} bloc(s) JSON-LD, couvrant ${schemasFound.size} type(s) de schéma.`
-      : "\n\n⚠️ Impossible d'analyser la page d'accueil automatiquement. Vérifie manuellement avec l'outil Google Rich Results Test."),
-    kpis: [
-      { label: "Blocs JSON-LD", value: blocksCount, tone: blocksCount > 0 ? "ok" : "bad" },
-      { label: "Schémas distincts", value: schemasFound.size, tone: schemasFound.size > 2 ? "ok" : schemasFound.size > 0 ? "warn" : "bad" },
-      { label: "Schémas critiques manquants", value: missing.length, tone: missing.length === 0 ? "ok" : missing.length > 4 ? "bad" : "warn" },
-    ],
+      ? `\n\nNous avons analysé le HTML de la page d'accueil et détecté ${blocksCount} bloc(s) JSON-LD, couvrant ${schemasFound.size} type(s) de schéma. L'analyse porte uniquement sur la page d'accueil.`
+      : "\n\nL'analyse automatique de la page d'accueil n'a pas abouti (pare-feu, rendu JavaScript ou domaine non détecté). Les chiffres ci-dessous ne sont donc pas fiables : à vérifier manuellement avec l'outil Google Rich Results Test."),
+    // When the homepage couldn't be fetched, do NOT show "0 / 9 manquants"
+    // (that reads as a real absence). Show "Non analysé" instead.
+    kpis: homepageFetched
+      ? [
+          { label: "Blocs JSON-LD", value: blocksCount, tone: blocksCount > 0 ? "ok" : "bad" },
+          { label: "Schémas distincts", value: schemasFound.size, tone: schemasFound.size > 2 ? "ok" : schemasFound.size > 0 ? "warn" : "bad" },
+          { label: "Schémas critiques manquants", value: missing.length, tone: missing.length === 0 ? "ok" : missing.length > 4 ? "bad" : "warn" },
+        ]
+      : [
+          { label: "Page d'accueil", value: "Non analysée", tone: "warn" },
+          { label: "Blocs JSON-LD", value: "?", tone: "info" },
+          { label: "Schémas détectés", value: "?", tone: "info" },
+        ],
     issues_count: 0,
     takeaway: homepageFetched
       ? (schemasFound.size === 0
@@ -1791,20 +1728,26 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
         : missing.length > 4
           ? `${missing.length} schémas critiques absents sur ${CRITICAL_SCHEMAS.length} attendus : fort potentiel d'amélioration.`
           : `${present.length}/${CRITICAL_SCHEMAS.length} schémas critiques présents : bonne base, à étendre.`)
-      : undefined,
+      : "Vérifiez manuellement les données structurées de la page d'accueil avec l'outil Google Rich Results Test.",
   };
 
-  // Slide 2 : Schémas critiques absents (one per row)
-  const missingRows: AdvIssueRow[] = missing.map((m) => ({
-    url: m.schema,
-    severity: ["Organization", "WebSite", "Product"].includes(m.schema) ? "high" : "medium",
-    schema: m.schema,
-    impact: m.blurb,
-  } as AdvIssueRow));
+  // Slide 2 : Schémas critiques absents (one per row).
+  // Only when the homepage was actually analysed : otherwise we'd wrongly
+  // report every critical schema as "missing".
+  const missingRows: AdvIssueRow[] = homepageFetched
+    ? missing.map((m) => ({
+        url: m.schema,
+        severity: ["Organization", "WebSite", "Product"].includes(m.schema) ? "high" : "medium",
+        schema: m.schema,
+        impact: m.blurb,
+      } as AdvIssueRow))
+    : [];
+  // Scores stay neutral (50) when the homepage couldn't be analysed : we
+  // must not tank the global score on data we never actually fetched.
   const subDetected: AdvSubcategory = {
     id: "schemas_detected",
     label: "JSON-LD détectés",
-    score: schemasFound.size > 0 ? 100 : 0,
+    score: !homepageFetched ? 50 : schemasFound.size > 0 ? 100 : 0,
     issues_full: [],
     columns: [],
     xlsx_sheet: "Données structurées",
@@ -1812,7 +1755,7 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
   const subMissing: AdvSubcategory = {
     id: "schemas_missing",
     label: "Schémas critiques manquants",
-    score: scoreFromRatio(missing.length / CRITICAL_SCHEMAS.length),
+    score: !homepageFetched ? 50 : scoreFromRatio(missing.length / CRITICAL_SCHEMAS.length),
     issues_full: missingRows,
     columns: [
       { key: "schema", label: "Schéma", width: 24 },
@@ -1822,12 +1765,7 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
   };
 
   // Recommendations slide
-  const slideReco: AdvSlide = {
-    kind: "reco",
-    section_id: "structured_data",
-    title: "Recommandations : Données structurées",
-    groups: recosForSection("structured_data"),
-  };
+  const recoSlides = buildRecoSlides("structured_data", "Recommandations : Données structurées");
 
   const subcategories = [subDetected, subMissing];
   const sectionScore = Math.round(
@@ -1838,11 +1776,13 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
     label: "Données structurées",
     score: sectionScore,
     weight: 8,
-    summary: `${blocksCount} blocs JSON-LD · ${schemasFound.size} schémas distincts · ${missing.length} schémas critiques manquants`,
+    summary: homepageFetched
+      ? `${blocksCount} blocs JSON-LD · ${schemasFound.size} schémas distincts · ${missing.length} schémas critiques manquants`
+      : "Page d'accueil non analysée automatiquement : à vérifier manuellement",
     subcategories,
   };
 
-  return { section, slides: [cover, slideDetected, slideReco] };
+  return { section, slides: [cover, slideDetected, ...recoSlides] };
 }
 
 // ---------- GEO (Generative Engine Optimization) section --------------------
@@ -1976,15 +1916,25 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
     sub_id: "http_headers",
     title: "Headers ETag & Last-Modified",
     description: DESC_EXT.http_headers + `\n\nMéthode : nous envoyons 5 requêtes HEAD (page d'accueil + 4 URLs du sitemap) et comptons combien renvoient un ETag et un Last-Modified. Si le serveur ne les renvoie sur aucune des 5 URLs testées, la configuration manque au niveau CDN ou framework et la conclusion vaut pour l'ensemble du site.`,
-    kpis: [
-      { label: "URLs testées (HEAD)", value: sampled, tone: "info" },
-      { label: "Avec ETag", value: `${withEtag} / ${sampled}`, tone: sampled > 0 && withEtag === sampled ? "ok" : withEtag > 0 ? "warn" : "bad" },
-      { label: "Avec Last-Modified", value: `${withLm} / ${sampled}`, tone: sampled > 0 && withLm === sampled ? "ok" : withLm > 0 ? "warn" : "bad" },
-      { label: "Couverture globale", value: sampled > 0 ? `${Math.round(((withEtag + withLm) / (sampled * 2)) * 100)} %` : ", ", tone: "info" },
-    ],
+    kpis: sampled === 0
+      ? [
+          // The server-side HEAD sampling did not return (WAF, timeout,
+          // domain not detected). Show "Non testé", NOT misleading zeros
+          // that would read as "the site has no ETag".
+          { label: "URLs testées (HEAD)", value: 0, tone: "info" },
+          { label: "Avec ETag", value: "Non testé", tone: "info" },
+          { label: "Avec Last-Modified", value: "Non testé", tone: "info" },
+          { label: "Statut", value: "Non analysé", tone: "warn" },
+        ]
+      : [
+          { label: "URLs testées (HEAD)", value: sampled, tone: "info" },
+          { label: "Avec ETag", value: `${withEtag} / ${sampled}`, tone: withEtag === sampled ? "ok" : withEtag > 0 ? "warn" : "bad" },
+          { label: "Avec Last-Modified", value: `${withLm} / ${sampled}`, tone: withLm === sampled ? "ok" : withLm > 0 ? "warn" : "bad" },
+          { label: "Couverture globale", value: `${Math.round(((withEtag + withLm) / (sampled * 2)) * 100)} %`, tone: "info" },
+        ],
     issues_count: 0,
     takeaway: sampled === 0
-      ? "Échantillonnage indisponible. Vérifiez manuellement avec un curl -I sur quelques URLs."
+      ? "Analyse non disponible : les requêtes HEAD n'ont pas abouti (pare-feu, délai dépassé ou domaine non détecté à l'import). À vérifier manuellement avec un curl -I sur quelques URLs."
       : withEtag === sampled && withLm === sampled
         ? `Toutes les ${sampled} pages testées renvoient ETag ET Last-Modified : configuration optimale pour le budget de crawl.`
         : withEtag === 0 && withLm === 0
@@ -2003,12 +1953,7 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
     icon: SECTION_COVER.geo.icon,
     bullets: SECTION_COVER.geo.bullets,
   };
-  const slideReco: AdvSlide = {
-    kind: "reco",
-    section_id: "geo",
-    title: "Recommandations : Optimisation pour les IA (GEO)",
-    groups: recosForSection("geo"),
-  };
+  const recoSlides = buildRecoSlides("geo", "Recommandations : Optimisation pour les IA (GEO)");
 
   // Score: penalize blocked bots more than missing declarations
   const botsScore = scoreFromRatio((blocked.length * 1 + Math.min(missing.length, 8) * 0.1) / 8);
@@ -2025,7 +1970,7 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
     subcategories,
   };
 
-  return { section, slides: [cover, slideBots, slideLlms, slideJs, slideHeaders, slideReco] };
+  return { section, slides: [cover, slideBots, slideLlms, slideJs, slideHeaders, ...recoSlides] };
 }
 
 // ---------- Priorities -----------------------------------------------------
@@ -2412,14 +2357,18 @@ export function analyzeAdvanced(
     ai_summary_error: null,
   };
 
+  // The robots.txt / sitemap.xml AI slides belong INSIDE the "Indexabilité
+  // & crawl" section, just after its section cover (slIdx[0]) and the
+  // fetched robots/sitemap KPI slide (slIdx[1]) : not floating before the
+  // section title. Splice them in at index 2.
+  const idxSlides = [...slIdx];
+  const injectAt = Math.min(2, idxSlides.length);
+  idxSlides.splice(injectAt, 0, ...robotsSlides, ...sitemapSlides);
+
   const slides: AdvSlide[] = [
     coverSlide,
     synthesisSlide,
-    // Robots / sitemap slides slot just BEFORE the Indexabilité & crawl
-    // section so they read naturally with the rest of the indexation block.
-    ...robotsSlides,
-    ...sitemapSlides,
-    ...slIdx,
+    ...idxSlides,
     ...slPerf,
     ...slMeta,
     ...slStruct,
