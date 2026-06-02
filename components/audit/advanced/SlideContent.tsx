@@ -1,6 +1,6 @@
 "use client";
 
-import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT, hardShadow, VBT_CARD, VBT_CARD_SM, VBT_BLOB_RADIUS } from "@/lib/audit/brand";
 import { BarChart, DonutChart, Histogram } from "../Charts";
 import { SectionPill } from "./AdvSlide";
 import { RecoIcon, iconForReco } from "./RecoIcons";
@@ -46,8 +46,15 @@ export function AdvKpiTile({ kpi, size = "md" }: { kpi: AdvKPI; size?: "sm" | "m
   const pad = size === "lg" ? "18px 16px" : size === "sm" ? "12px 10px" : "16px 14px";
   return (
     <div
-      className="rounded-xl border min-w-0 flex flex-col items-center justify-center text-center gap-1"
-      style={{ background: palette.bg, borderColor: palette.border, padding: pad, minHeight: size === "sm" ? 72 : 96 }}
+      className="min-w-0 flex flex-col items-center justify-center text-center gap-1"
+      style={{
+        background: palette.bg,
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 16,
+        boxShadow: hardShadow(size === "lg" ? 5 : 3),
+        padding: pad,
+        minHeight: size === "sm" ? 72 : 96,
+      }}
     >
       <div
         className="tabular-nums leading-none"
@@ -87,30 +94,33 @@ export function AdvKpiTile({ kpi, size = "md" }: { kpi: AdvKPI; size?: "sm" | "m
 export function XlsxRefBadge({ sheet }: { sheet: string }) {
   return (
     <div
-      className="inline-flex items-center gap-2.5 rounded-lg"
+      className="inline-flex items-center gap-2.5"
       style={{
-        background: VBT.terracotta50,
-        border: `1px solid ${VBT.terracotta500}`,
-        color: VBT.terracotta700,
+        background: VBT.cream100,
+        border: `2px solid ${VBT.ink}`,
+        borderRadius: 999,
+        boxShadow: hardShadow(2.5),
+        color: VBT.ink,
         fontWeight: 600,
         fontSize: VBT_TYPO.caption,
-        padding: "8px 12px",
+        padding: "6px 13px 6px 8px",
       }}
     >
       <span
-        className="inline-flex items-center justify-center rounded"
+        className="inline-flex items-center justify-center"
         style={{
           width: 22,
           height: 22,
           background: VBT.terracotta500,
+          border: `1.5px solid ${VBT.ink}`,
+          borderRadius: 999,
           color: VBT.paper,
         }}
       >
-        <FileSpreadsheetIcon size={13} color={VBT.paper} />
+        <FileSpreadsheetIcon size={12} color={VBT.paper} />
       </span>
-      <span>
-        Voir l&apos;onglet&nbsp;
-        <strong style={{ color: VBT.terracotta700 }}>« {sheet} »</strong>&nbsp;du XLSX
+      <span style={{ fontFamily: VBT_FONT.title, fontWeight: 600 }}>
+        Onglet&nbsp;<strong style={{ fontWeight: 800 }}>« {sheet} »</strong>
       </span>
     </div>
   );
@@ -155,23 +165,35 @@ export function DescriptionBlock({ text, maxLines = 6, size }: { text: string; m
   );
 }
 
-// "Takeaway" block : replaces the ► glyph with a ChevronRight icon (4.2).
+// "Takeaway" : a DS card-style note with an ink-bordered chevron chip.
 function TakeawayBlock({ text }: { text: string }) {
   return (
     <div
-      className="rounded-lg flex items-start gap-2.5"
+      className="flex items-start gap-3"
       style={{
-        background: VBT.terracotta50,
-        color: VBT.terracotta700,
-        border: `1px solid ${VBT.terracotta100}`,
+        background: VBT.amber50,
+        color: VBT.ink,
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 14,
+        boxShadow: hardShadow(3),
         fontWeight: 500,
         padding: "12px 16px",
-        fontSize: VBT_TYPO.body - 2,
+        fontSize: VBT_TYPO.bodySm,
         lineHeight: 1.5,
       }}
     >
-      <span className="shrink-0 mt-0.5" style={{ color: VBT.terracotta500 }}>
-        <ChevronRightIcon size={14} color={VBT.terracotta500} />
+      <span
+        className="shrink-0 inline-flex items-center justify-center mt-0.5"
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          background: VBT.terracotta500,
+          border: `1.5px solid ${VBT.ink}`,
+          color: VBT.paper,
+        }}
+      >
+        <ChevronRightIcon size={12} color={VBT.paper} />
       </span>
       <span>{text}</span>
     </div>
@@ -208,12 +230,13 @@ export function ChartContainer({
         </div>
       )}
       <div
-        className="rounded-xl p-4 w-full"
+        className="p-4 w-full"
         style={{
           background: VBT.paper,
-          border: `1px solid ${VBT.paperEdge}`,
+          border: `1.5px solid ${VBT.ink}`,
+          borderRadius: 16,
+          boxShadow: hardShadow(4),
           maxWidth,
-          boxShadow: "0 4px 12px -10px rgba(36,23,18,0.2)",
         }}
       >
         {children}
@@ -350,7 +373,7 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
                 height: 260,
                 background: ring.soft,
                 border: `1px solid ${ring.ringEdge}`,
-                boxShadow: "0 18px 44px -22px rgba(36, 23, 18, 0.32)",
+                boxShadow: hardShadow(4),
               }}
             >
               <span
@@ -399,7 +422,7 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
                 className="rounded-lg text-center"
                 style={{
                   background: VBT.paper,
-                  border: `1px solid ${VBT.paperEdge}`,
+                  border: `1.5px solid ${VBT.ink}`,
                   minWidth: 200,
                   padding: "10px 16px",
                 }}
@@ -562,14 +585,15 @@ export function InfoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "inf
 function Callout({ callout }: { callout: { tone: "warn" | "info"; title: string; body: string } }) {
   const isWarn = callout.tone === "warn";
   const bg = isWarn ? "#fcf2dc" : "#e1eef5";
-  const border = isWarn ? "#efd07f" : "#a8c9d6";
   const fg = isWarn ? VBT.sigOrange : VBT.sigBlue;
   return (
     <div
-      className="rounded-xl flex items-start gap-3"
+      className="flex items-start gap-3"
       style={{
         background: bg,
-        border: `1px solid ${border}`,
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 14,
+        boxShadow: hardShadow(3),
         padding: "14px 18px",
       }}
     >
@@ -612,34 +636,42 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
   return (
     <div className="flex-1 flex items-center gap-12 min-h-0">
       <div className="flex-1 min-w-0 max-w-3xl">
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-4 mb-5">
+          {/* Organic blob icon (DS signature) */}
           <span
-            className="inline-flex items-center justify-center rounded-xl"
+            className="inline-flex items-center justify-center"
             style={{
-              width: 64,
-              height: 64,
-              background: VBT.terracotta50,
-              border: `1px solid #fae0cd`,
-              boxShadow: "0 6px 20px -10px rgba(196, 107, 48, 0.5)",
+              width: 66,
+              height: 66,
+              background: VBT.amber200,
+              border: `2px solid ${VBT.ink}`,
+              borderRadius: VBT_BLOB_RADIUS,
+              boxShadow: hardShadow(4),
+              transform: "rotate(-3deg)",
+              color: VBT.ink,
             }}
           >
             <RecoIcon name={slide.icon} size={36} />
           </span>
           <div>
-            {/* Single "Partie X sur N" lockup (4.3, 4.4) : uses the live
-                computed value, not the stale stored eyebrow, so the
-                count matches the actual number of sections. */}
-            <div
-              className="uppercase"
+            {/* "Partie X sur N" as a sticker badge. */}
+            <span
+              className="uppercase inline-flex items-center"
               style={{
-                color: VBT.terracotta600,
+                color: VBT.ink,
+                background: VBT.cream100,
+                border: `2px solid ${VBT.ink}`,
+                borderRadius: 999,
+                boxShadow: hardShadow(2),
+                padding: "5px 13px",
                 fontWeight: 700,
                 fontSize: VBT_TYPO.caption,
-                letterSpacing: "0.28em",
+                letterSpacing: "0.16em",
+                fontFamily: VBT_FONT.title,
               }}
             >
               {partOf}
-            </div>
+            </span>
           </div>
         </div>
         <h1
@@ -671,11 +703,13 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
               <span
                 className="inline-flex items-center justify-center shrink-0 tabular-nums"
                 style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
+                  width: 32,
+                  height: 32,
+                  borderRadius: 999,
                   background: VBT.terracotta500,
                   color: VBT.paper,
+                  border: `1.5px solid ${VBT.ink}`,
+                  boxShadow: hardShadow(2),
                   fontWeight: 800,
                   fontSize: 13,
                   fontFamily: VBT_FONT.title,
@@ -689,51 +723,45 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
         </ul>
       </div>
 
-      {/* Decorative side panel with the section icon */}
+      {/* Decorative side panel : a DS card framing a big blob icon */}
       <div className="hidden md:flex shrink-0 items-center justify-center pl-8">
         <div
-          className="relative rounded-2xl flex items-center justify-center"
+          className="relative flex items-center justify-center"
           style={{
-            width: 260,
-            height: 260,
+            width: 264,
+            height: 264,
             background: `linear-gradient(135deg, ${VBT.terracotta50} 0%, ${VBT.amber50} 100%)`,
-            border: `1px solid #fae0cd`,
-            boxShadow: "0 18px 36px -18px rgba(36, 23, 18, 0.28)",
+            border: `1.5px solid ${VBT.ink}`,
+            borderRadius: 24,
+            boxShadow: hardShadow(7),
           }}
         >
-          <span
-            aria-hidden
-            className="absolute rounded-full"
+          {/* big blob holding the icon */}
+          <div
+            className="flex items-center justify-center"
             style={{
-              width: 210,
-              height: 210,
-              border: `1px solid ${VBT.terracotta100}`,
-              opacity: 0.6,
-            }}
-          />
-          <span
-            aria-hidden
-            className="absolute rounded-full"
-            style={{
-              width: 160,
-              height: 160,
+              width: 150,
+              height: 150,
               background: VBT.paper,
-              border: `1px solid #fae0cd`,
-              boxShadow: "0 4px 16px -6px rgba(196, 107, 48, 0.2)",
+              border: `2px solid ${VBT.ink}`,
+              borderRadius: VBT_BLOB_RADIUS,
+              boxShadow: hardShadow(4),
+              transform: "rotate(-4deg)",
+              color: VBT.ink,
             }}
-          />
-          <div style={{ position: "relative", zIndex: 1 }}>
+          >
             <RecoIcon name={slide.icon} size={76} />
           </div>
+          {/* sticker dots */}
           <span
             aria-hidden
-            className="absolute rounded-full"
-            style={{ top: 16, right: 16, width: 9, height: 9, background: VBT.terracotta500 }}
+            className="absolute"
+            style={{ top: 14, right: 14, width: 14, height: 14, borderRadius: 999, background: VBT.amber300, border: `1.5px solid ${VBT.ink}` }}
           />
           <span
             aria-hidden
-            className="absolute rounded-full"
-            style={{ bottom: 16, left: 16, width: 7, height: 7, background: VBT.amber400 }}
+            className="absolute"
+            style={{ bottom: 14, left: 14, width: 11, height: 11, borderRadius: 999, background: VBT.terracotta400, border: `1.5px solid ${VBT.ink}` }}
           />
         </div>
       </div>
@@ -780,34 +808,40 @@ function RecoCard({
   accentIndex: number;
 }) {
   const tint = accentIndex % 2 === 0
-    ? { bg: VBT.terracotta50, accent: VBT.terracotta700, chip: VBT.terracotta500, edge: "#fae0cd" }
-    : { bg: VBT.amber50, accent: VBT.amber700, chip: VBT.amber500, edge: "#efd07f" };
+    ? { band: VBT.terracotta50, accent: VBT.terracotta700, chip: VBT.terracotta500, blob: VBT.amber200 }
+    : { band: VBT.amber50, accent: VBT.amber700, chip: VBT.brick400, blob: VBT.terracotta200 };
   const iconKey = iconForReco(subLabel);
   return (
     <div
-      className="rounded-2xl overflow-hidden flex flex-col min-w-0"
+      className="overflow-hidden flex flex-col min-w-0"
       style={{
         background: VBT.paper,
-        border: `1px solid ${tint.edge}`,
-        boxShadow: "0 8px 22px -14px rgba(36, 23, 18, 0.25)",
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 18,
+        boxShadow: hardShadow(5),
       }}
     >
       {/* Header band */}
       <div
         className="flex items-center gap-3 min-w-0 shrink-0"
         style={{
-          background: tint.bg,
-          borderBottom: `1px solid ${tint.edge}`,
+          background: tint.band,
+          borderBottom: `1.5px solid ${VBT.ink}`,
           padding: "14px 18px",
         }}
       >
+        {/* Organic "blob" icon container (DS signature) */}
         <span
-          className="shrink-0 inline-flex items-center justify-center rounded-xl"
+          className="shrink-0 inline-flex items-center justify-center"
           style={{
-            width: 44,
-            height: 44,
-            background: VBT.paper,
-            border: `1px solid ${tint.edge}`,
+            width: 46,
+            height: 46,
+            background: tint.blob,
+            border: `1.5px solid ${VBT.ink}`,
+            borderRadius: VBT_BLOB_RADIUS,
+            boxShadow: hardShadow(2.5),
+            transform: "rotate(-3deg)",
+            color: VBT.ink,
           }}
         >
           <RecoIcon name={iconKey} size={26} />
@@ -815,12 +849,12 @@ function RecoCard({
         <div
           className="min-w-0"
           style={{
-            fontFamily: VBT_FONT.display,
-            color: tint.accent,
-            fontWeight: 400,
-            fontSize: 21,
+            fontFamily: VBT_FONT.title,
+            color: VBT.ink,
+            fontWeight: 800,
+            fontSize: 20,
             lineHeight: 1.1,
-            letterSpacing: "-0.01em",
+            letterSpacing: "-0.02em",
           }}
           title={subLabel}
         >
@@ -835,11 +869,12 @@ function RecoCard({
             <span
               className="shrink-0 inline-flex items-center justify-center tabular-nums"
               style={{
-                width: 22,
-                height: 22,
-                borderRadius: 6,
+                width: 24,
+                height: 24,
+                borderRadius: 999,
                 background: tint.chip,
                 color: VBT.paper,
+                border: `1.5px solid ${VBT.ink}`,
                 fontSize: 11,
                 fontWeight: 800,
                 fontFamily: VBT_FONT.title,
@@ -911,7 +946,7 @@ export function AnchorLowDiversityBody({
           <div
             className="rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0"
             style={{
-              border: `1px solid ${VBT.paperEdge}`,
+              border: `1.5px solid ${VBT.ink}`,
               background: VBT.paper,
             }}
           >
@@ -975,13 +1010,15 @@ export function AnchorLowDiversityBody({
                       </td>
                       <td className="px-3 py-2.5 text-right align-top">
                         <span
-                          className="tabular-nums inline-flex items-center rounded"
+                          className="tabular-nums inline-flex items-center"
                           style={{
                             background: tone.bg,
-                            color: tone.fg,
-                            fontWeight: 700,
+                            color: VBT.ink,
+                            border: `1.5px solid ${VBT.ink}`,
+                            borderRadius: 999,
+                            fontWeight: 800,
                             fontSize: VBT_TYPO.caption,
-                            padding: "2px 8px",
+                            padding: "2px 9px",
                           }}
                         >
                           {r.ratio_pct.toFixed(0)} %
@@ -1044,7 +1081,7 @@ export function AnchorLowDiversityBody({
           className="flex-1 rounded-xl overflow-y-auto min-h-0"
           style={{
             background: VBT.paper,
-            border: `1px solid ${VBT.paperEdge}`,
+            border: `1.5px solid ${VBT.ink}`,
             padding: "16px 18px",
             color: VBT.inkSoft,
             fontSize: VBT_TYPO.bodySm,
@@ -1085,12 +1122,13 @@ function Th({ children, align = "left" }: { children: React.ReactNode; align?: "
     <th
       className="px-3 py-2.5 uppercase"
       style={{
-        color: VBT.terracotta700,
-        fontWeight: 700,
+        color: VBT.ink,
+        fontWeight: 800,
         fontSize: VBT_TYPO.micro,
-        letterSpacing: "0.1em",
+        letterSpacing: "0.08em",
         textAlign: align,
-        fontFamily: VBT_FONT.mono,
+        fontFamily: VBT_FONT.title,
+        borderBottom: `1.5px solid ${VBT.ink}`,
       }}
     >
       {children}
@@ -1144,7 +1182,7 @@ export function AnchorEmptyBody({
           <div
             className="flex-1 rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0"
             style={{
-              border: `1px solid ${VBT.paperEdge}`,
+              border: `1.5px solid ${VBT.ink}`,
               background: VBT.paper,
             }}
           >
@@ -1202,7 +1240,7 @@ export function AnchorEmptyBody({
           className="flex-1 rounded-xl overflow-y-auto min-h-0"
           style={{
             background: VBT.paper,
-            border: `1px solid ${VBT.paperEdge}`,
+            border: `1.5px solid ${VBT.ink}`,
             padding: "16px 18px",
             color: VBT.inkSoft,
             fontSize: VBT_TYPO.bodySm,
@@ -1413,7 +1451,7 @@ export function AnchorBarsBody({ slide }: { slide: Extract<AdvSlide, { kind: "an
           <div
             className="col-span-8 rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0"
             style={{
-              border: `1px solid ${VBT.paperEdge}`,
+              border: `1.5px solid ${VBT.ink}`,
               background: VBT.paper,
               padding: "18px 22px",
             }}
@@ -1611,7 +1649,7 @@ export function AnchorTableBody({ slide }: { slide: Extract<AdvSlide, { kind: "a
               className="rounded-xl"
               style={{
                 background: VBT.paper,
-                border: `1px solid ${VBT.paperEdge}`,
+                border: `1.5px solid ${VBT.ink}`,
                 padding: "12px 14px",
               }}
             >
@@ -1693,7 +1731,7 @@ function DiversityScatter({ rows }: { rows: AnchorDestinationSummary[] }) {
     <div
       className="col-span-8 rounded-xl flex flex-col min-w-0 min-h-0"
       style={{
-        border: `1px solid ${VBT.paperEdge}`,
+        border: `1.5px solid ${VBT.ink}`,
         background: VBT.paper,
         padding: "18px 22px",
       }}
@@ -2033,44 +2071,51 @@ function BestWorstBlock({
 }) {
   const palette =
     tone === "ok"
-      ? { fg: VBT.sigGreen, bg: "#e6f3eb", edge: "#9bc4ad" }
-      : { fg: VBT.sigRed, bg: "#fbe3dd", edge: "#e29a8d" };
+      ? { fg: VBT.good, bg: "#bfe6cd", chip: "#bfe6cd" }
+      : { fg: VBT.bad, bg: "#e9b3a4", chip: "#e9b3a4" };
   return (
     <div
-      className="rounded-xl"
       style={{
-        background: palette.bg,
-        border: `1px solid ${palette.edge}`,
-        padding: "10px 14px",
+        background: VBT.paper,
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 14,
+        boxShadow: hardShadow(3),
+        padding: "12px 14px",
       }}
     >
       <div
-        className="uppercase mb-1.5"
+        className="uppercase mb-2 inline-flex items-center"
         style={{
-          color: palette.fg,
-          fontWeight: 700,
+          color: VBT.ink,
+          background: palette.bg,
+          border: `1.5px solid ${VBT.ink}`,
+          borderRadius: 999,
+          padding: "3px 10px",
+          fontWeight: 800,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.16em",
-          fontFamily: VBT_FONT.mono,
+          letterSpacing: "0.1em",
+          fontFamily: VBT_FONT.title,
         }}
       >
         {title}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1">
+      <div className="flex flex-wrap gap-2 mt-1">
         {items.map((item, i) => (
           <span
             key={i}
+            className="inline-flex items-center"
             style={{
               color: VBT.ink,
-              fontWeight: 600,
-              fontSize: VBT_TYPO.bodySm,
+              background: VBT.cream100,
+              border: `1.5px solid ${VBT.ink}`,
+              borderRadius: 999,
+              padding: "3px 10px",
+              fontWeight: 700,
+              fontSize: VBT_TYPO.caption,
               fontFamily: VBT_FONT.title,
             }}
           >
             {item}
-            {i < items.length - 1 && (
-              <span className="ml-3" style={{ color: palette.fg, opacity: 0.5 }}>·</span>
-            )}
           </span>
         ))}
       </div>
@@ -2110,8 +2155,8 @@ function FilePanel({ raw, label }: { raw: string; label: string }) {
       className="rounded-xl flex flex-col min-w-0 min-h-0 overflow-hidden w-full"
       style={{
         background: VBT.paper,
-        border: `1px solid ${VBT.paperEdge}`,
-        boxShadow: "0 6px 18px -12px rgba(36,23,18,0.18)",
+        border: `1.5px solid ${VBT.ink}`,
+        boxShadow: hardShadow(4),
       }}
     >
       <div
@@ -2536,7 +2581,7 @@ export function SitemapGapsBody({
           className="rounded-xl flex-1 min-h-0 overflow-y-auto"
           style={{
             background: VBT.paper,
-            border: `1px solid ${VBT.paperEdge}`,
+            border: `1.5px solid ${VBT.ink}`,
             padding: "10px 12px",
           }}
         >
@@ -2589,27 +2634,29 @@ function MiniStat({
   tone: "ok" | "warn" | "bad" | "info";
 }) {
   const palette =
-    tone === "ok" ? { fg: VBT.sigGreen, bg: "#e6f3eb", edge: "#9bc4ad" } :
-    tone === "warn" ? { fg: VBT.sigOrange, bg: "#fcf2dc", edge: "#efd07f" } :
-    tone === "bad" ? { fg: VBT.sigRed, bg: "#fbe3dd", edge: "#e29a8d" } :
-    { fg: VBT.sigBlue, bg: "#e1eef5", edge: "#a8c9d6" };
+    tone === "ok" ? { fg: VBT.good, bg: "#bfe6cd" } :
+    tone === "warn" ? { fg: VBT.warn, bg: VBT.amber200 } :
+    tone === "bad" ? { fg: VBT.bad, bg: "#e9b3a4" } :
+    { fg: VBT.info, bg: "#c4e1ee" };
   return (
     <div
-      className="rounded-xl min-w-0"
+      className="min-w-0"
       style={{
         background: palette.bg,
-        border: `1px solid ${palette.edge}`,
-        padding: "10px 12px",
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 14,
+        boxShadow: hardShadow(3),
+        padding: "10px 13px",
       }}
     >
       <div
         className="tabular-nums truncate"
         style={{
-          color: palette.fg,
+          color: VBT.ink,
           fontFamily: VBT_FONT.display,
           fontWeight: 800,
           fontSize: 26,
-          letterSpacing: "-0.01em",
+          letterSpacing: "-0.02em",
           lineHeight: 1.05,
         }}
       >
@@ -2618,11 +2665,11 @@ function MiniStat({
       <div
         className="uppercase truncate mt-1"
         style={{
-          color: VBT.inkSoft,
+          color: VBT.ink2,
           fontWeight: 700,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.14em",
-          fontFamily: VBT_FONT.mono,
+          letterSpacing: "0.12em",
+          fontFamily: VBT_FONT.title,
         }}
       >
         {label}
@@ -2752,9 +2799,9 @@ export function PrioritySlideBody({
           className="flex-1 rounded-xl relative min-h-0 overflow-y-auto"
           style={{
             background: VBT.paper,
-            border: `1px solid ${VBT.paperEdge}`,
+            border: `1.5px solid ${VBT.ink}`,
             color: VBT.inkSoft,
-            boxShadow: "0 6px 18px -12px rgba(36, 23, 18, 0.18)",
+            boxShadow: hardShadow(4),
             padding: "18px 20px",
             fontSize: VBT_TYPO.bodySm,
             lineHeight: 1.6,
@@ -2836,10 +2883,12 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
   const Icon = URGENCY_ICON[urgency];
   return (
     <div
-      className="rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0"
+      className="overflow-hidden flex flex-col min-w-0 min-h-0"
       style={{
         background: palette.soft,
-        border: `1px solid ${palette.edge}`,
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 16,
+        boxShadow: hardShadow(4),
       }}
     >
       <div
@@ -2923,11 +2972,13 @@ function KanbanCard({
     item.effort === "medium" ? "Effort modéré" : "Chantier de fond";
   return (
     <div
-      className="rounded-lg min-w-0"
+      className="min-w-0"
       style={{
         background: VBT.paper,
-        border: `1px solid ${palette.edge}`,
-        borderLeft: `3px solid ${palette.fg}`,
+        border: `1.5px solid ${VBT.ink}`,
+        borderLeft: `5px solid ${palette.fg}`,
+        borderRadius: 10,
+        boxShadow: hardShadow(2),
         padding: "8px 10px",
       }}
     >

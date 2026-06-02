@@ -88,6 +88,49 @@ export const VBT_SPACING = {
 
 export const VBT_NAME = "Visibili'tea";
 
+// ---------------------------------------------------------------------------
+// Design-system "look" helpers — the distinctive Visibili'tea signature:
+// thick ink borders + HARD offset shadows (no blur) + pills + sticker badges
+// + organic blob icons. Lifted straight from the DS preview components
+// (cards.html / buttons.html / badges-tags.html).
+// ---------------------------------------------------------------------------
+
+const INK = "#1a1814";
+
+// Hard, blur-less offset shadow in the brand ink (the core DS signature).
+export function hardShadow(n: number, color: string = INK): string {
+  return `${n}px ${n}px 0 ${color}`;
+}
+
+// Card : surface + thin ink border + hard shadow + generous radius.
+export const VBT_CARD = {
+  border: `1.5px solid ${INK}`,
+  borderRadius: 18,
+  boxShadow: hardShadow(5),
+} as const;
+
+// Smaller card / tile (KPI, kanban card…).
+export const VBT_CARD_SM = {
+  border: `1.5px solid ${INK}`,
+  borderRadius: 14,
+  boxShadow: hardShadow(3),
+} as const;
+
+// Sticker badge : 2px ink border, pill, small hard shadow.
+export const VBT_BADGE = {
+  border: `2px solid ${INK}`,
+  borderRadius: 999,
+  boxShadow: hardShadow(3),
+} as const;
+
+// Ribbon : soft tinted pill, no shadow (used for inline labels).
+export const VBT_RIBBON = {
+  borderRadius: 999,
+} as const;
+
+// Organic "blob" radius for icon containers (rotate them a few degrees).
+export const VBT_BLOB_RADIUS = "18px 22px 16px 24px / 22px 16px 24px 18px";
+
 // Font-family stacks. The DS pins everything on Montserrat + Poppins
 // (titles + body). No Calistoga, no JetBrains Mono : the mono stack
 // uses the OS system mono.

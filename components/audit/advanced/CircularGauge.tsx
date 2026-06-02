@@ -1,6 +1,6 @@
 "use client";
 
-import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT, hardShadow } from "@/lib/audit/brand";
 
 /**
  * Circular gauge used on the cover slide (4.12). The score sits at the
@@ -43,9 +43,12 @@ export function CircularGauge({
           cy={center}
           r={radius}
           fill="none"
-          stroke={VBT.paperEdge}
+          stroke={VBT.cream200}
           strokeWidth={thickness}
         />
+        {/* ink outer + inner hairlines : frames the ring (DS look) */}
+        <circle cx={center} cy={center} r={radius + thickness / 2} fill="none" stroke={VBT.ink} strokeWidth={1.5} />
+        <circle cx={center} cy={center} r={radius - thickness / 2} fill="none" stroke={VBT.ink} strokeWidth={1.5} />
         <circle
           cx={center}
           cy={center}
@@ -73,14 +76,20 @@ export function CircularGauge({
           {clamped}
         </div>
         <div
+          className="inline-flex items-center"
           style={{
-            color: VBT.zinc,
-            fontWeight: 600,
-            fontSize: VBT_TYPO.caption,
-            letterSpacing: "0.22em",
+            color: VBT.ink,
+            background: VBT.cream100,
+            border: `1.5px solid ${VBT.ink}`,
+            borderRadius: 999,
+            boxShadow: hardShadow(2),
+            padding: "4px 12px",
+            fontWeight: 800,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.16em",
             textTransform: "uppercase",
-            marginTop: 6,
-            fontFamily: VBT_FONT.mono,
+            marginTop: 10,
+            fontFamily: VBT_FONT.title,
           }}
         >
           {label || "Score / 100"}

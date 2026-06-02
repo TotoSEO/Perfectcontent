@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT, hardShadow } from "@/lib/audit/brand";
 
 /**
  * 16:9 slide for the Advanced audit deck. Authored against a 1600×900
@@ -55,8 +55,8 @@ export function AdvSlide({
           background: bg,
           color: VBT.ink,
           fontFamily: "var(--font-vbt-body), 'Poppins', system-ui, sans-serif",
-          boxShadow: "0 24px 60px -28px rgba(36,23,18,0.45)",
-          border: `1px solid ${VBT.paperEdge}`,
+          boxShadow: "0 24px 60px -28px rgba(26,24,20,0.45)",
+          border: `1.5px solid ${VBT.ink}`,
         }}
       >
         {accentBand && (
@@ -171,12 +171,18 @@ export function AdvSlide({
             <span style={{ fontFamily: VBT_FONT.body }}>{footer || "Audit technique avancé SEO"}</span>
           </div>
           <div
-            className="tabular-nums"
+            className="tabular-nums inline-flex items-center"
             style={{
-              fontFamily: VBT_FONT.mono,
-              fontWeight: 600,
-              color: VBT.inkSoft,
-              letterSpacing: "0.05em",
+              fontFamily: VBT_FONT.title,
+              fontWeight: 700,
+              color: VBT.ink,
+              letterSpacing: "0.03em",
+              background: VBT.cream100,
+              border: `1.5px solid ${VBT.ink}`,
+              borderRadius: 999,
+              boxShadow: hardShadow(2),
+              padding: "3px 11px",
+              fontSize: VBT_TYPO.caption,
             }}
           >
             {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
@@ -187,25 +193,29 @@ export function AdvSlide({
   );
 }
 
-/** Coloured pill used to badge a sub-id / section etc. */
+/** Sticker badge used to flag a section status. DS recipe : saturated
+ * fill, ink text, 2px ink border, hard offset shadow. */
 export function SectionPill({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "warn" | "ok" | "bad" }) {
-  const palette =
-    tone === "ok" ? { bg: "#e6f3eb", text: VBT.sigGreen, border: "#9bc4ad" } :
-    tone === "warn" ? { bg: "#fcf2dc", text: VBT.sigOrange, border: "#efd07f" } :
-    tone === "bad" ? { bg: "#fbe3dd", text: VBT.sigRed, border: "#e29a8d" } :
-    { bg: "#e1eef5", text: VBT.sigBlue, border: "#a8c9d6" };
+  // Saturated tea-palette fills with ink text (the DS badge style).
+  const bg =
+    tone === "ok" ? "#bfe6cd" :
+    tone === "warn" ? VBT.amber300 :
+    tone === "bad" ? "#e9b3a4" :
+    VBT.cream200;
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full whitespace-nowrap"
+      className="inline-flex items-center gap-1.5 whitespace-nowrap"
       style={{
-        background: palette.bg,
-        color: palette.text,
-        border: `1px solid ${palette.border}`,
-        padding: "5px 12px",
+        background: bg,
+        color: VBT.ink,
+        border: `2px solid ${VBT.ink}`,
+        borderRadius: 999,
+        boxShadow: hardShadow(3),
+        padding: "5px 13px",
         fontSize: VBT_TYPO.caption,
-        fontWeight: 600,
+        fontWeight: 700,
         letterSpacing: "0.02em",
-        fontFamily: VBT_FONT.mono,
+        fontFamily: VBT_FONT.title,
       }}
     >
       {children}
