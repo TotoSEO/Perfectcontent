@@ -917,92 +917,75 @@ export function AnchorLowDiversityBody({
           >
             <table className="w-full" style={{ tableLayout: "fixed", fontSize: VBT_TYPO.bodySm }}>
               <colgroup>
-                <col style={{ width: "44%" }} />
-                <col style={{ width: "28%" }} />
+                <col style={{ width: "42%" }} />
+                <col style={{ width: "30%" }} />
                 <col style={{ width: "12%" }} />
                 <col style={{ width: "16%" }} />
               </colgroup>
               <thead style={{ background: VBT.terracotta50 }}>
                 <tr>
                   <Th>URL concernée</Th>
-                  <Th>Ancre</Th>
-                  <Th align="right">Occurrences</Th>
-                  <Th align="right">sur liens totaux</Th>
+                  <Th>Ancre dominante</Th>
+                  <Th align="right">Occur.</Th>
+                  <Th align="right">Domination</Th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((r, i) => {
                   const tone =
                     r.ratio_pct >= 80 ? { bg: "#FEE2E2", fg: VBT.sigRed } :
-                    r.ratio_pct >= 60 ? { bg: "#FFEDD5", fg: VBT.sigOrange } :
+                    r.ratio_pct >= 65 ? { bg: "#FFEDD5", fg: VBT.sigOrange } :
                     { bg: "#FEF3C7", fg: "#A16207" };
                   return (
-                    <tr
-                      key={i}
-                      style={{
-                        borderTop: `1px solid ${VBT.paperEdge}`,
-                      }}
-                    >
+                    <tr key={i} style={{ borderTop: `1px solid ${VBT.paperEdge}` }}>
                       <td
-                        className="px-3 py-2.5"
+                        className="px-3 py-2.5 align-top"
                         style={{
                           color: VBT.ink,
                           fontWeight: 500,
-                          // URL must remain visible in full : wrap on slashes.
                           wordBreak: "break-all",
-                          fontSize: VBT_TYPO.caption + 1,
+                          fontSize: VBT_TYPO.caption,
                           lineHeight: 1.4,
                         }}
                       >
                         {r.destination}
                       </td>
                       <td
-                        className="px-3 py-2.5"
+                        className="px-3 py-2.5 align-top"
                         style={{
                           color: VBT.terracotta700,
                           fontWeight: 600,
-                          fontSize: VBT_TYPO.bodySm,
+                          fontSize: VBT_TYPO.caption + 1,
                           wordBreak: "break-word",
+                          lineHeight: 1.4,
                         }}
                       >
                         « {r.anchor} »
                       </td>
                       <td
-                        className="px-3 py-2.5 tabular-nums text-right"
+                        className="px-3 py-2.5 tabular-nums text-right align-top"
                         style={{
                           color: VBT.ink,
                           fontWeight: 700,
                           fontFamily: VBT_FONT.title,
-                          fontSize: VBT_TYPO.body,
+                          fontSize: VBT_TYPO.bodySm,
                         }}
                       >
-                        {r.occurrences}
+                        {r.occurrences}/{r.total_inlinks}
                       </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <span
-                            className="tabular-nums"
-                            style={{
-                              color: VBT.inkSoft,
-                              fontWeight: 600,
-                              fontSize: VBT_TYPO.bodySm,
-                            }}
-                          >
-                            / {r.total_inlinks}
-                          </span>
-                          <span
-                            className="tabular-nums inline-flex items-center px-2 py-0.5 rounded"
-                            style={{
-                              background: tone.bg,
-                              color: tone.fg,
-                              fontWeight: 700,
-                              fontSize: VBT_TYPO.micro,
-                              letterSpacing: "0.02em",
-                            }}
-                          >
-                            {r.ratio_pct.toFixed(0)}%
-                          </span>
-                        </div>
+                      <td className="px-3 py-2.5 text-right align-top">
+                        <span
+                          className="tabular-nums inline-flex items-center rounded"
+                          style={{
+                            background: tone.bg,
+                            color: tone.fg,
+                            fontWeight: 700,
+                            fontSize: VBT_TYPO.caption,
+                            padding: "2px 8px",
+                          }}
+                        >
+                          {r.ratio_pct.toFixed(0)} %
+                        </span>
                       </td>
                     </tr>
                   );
@@ -1068,7 +1051,7 @@ export function AnchorLowDiversityBody({
             lineHeight: 1.55,
           }}
         >
-          <DescriptionBlock text={slide.description} maxLines={16} size={VBT_TYPO.bodySm} />
+          <DescriptionBlock text={slide.description} maxLines={10} size={VBT_TYPO.bodySm} />
         </div>
         <div
           className="rounded-xl flex items-start gap-2.5"
@@ -1226,7 +1209,7 @@ export function AnchorEmptyBody({
             lineHeight: 1.55,
           }}
         >
-          <DescriptionBlock text={slide.description} maxLines={16} size={VBT_TYPO.bodySm} />
+          <DescriptionBlock text={slide.description} maxLines={10} size={VBT_TYPO.bodySm} />
         </div>
         <div
           className="rounded-xl flex items-start gap-2.5"
@@ -2791,7 +2774,17 @@ export function PrioritySlideBody({
           </span>
           <div style={{ paddingLeft: 22, paddingTop: 4 }}>
             {slide.ai_summary ? (
-              <p style={{ whiteSpace: "pre-wrap" }}>{renderRichText(slide.ai_summary)}</p>
+              <p
+                style={{
+                  whiteSpace: "pre-wrap",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 14,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {renderRichText(slide.ai_summary)}
+              </p>
             ) : slide.ai_summary_error ? (
               <>
                 <p style={{ color: VBT.sigRed }} className="mb-2">
@@ -2901,7 +2894,17 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
             Aucun chantier
           </div>
         ) : (
-          items.slice(0, 6).map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)
+          <>
+            {items.slice(0, 5).map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)}
+            {items.length > 5 && (
+              <div
+                className="text-center"
+                style={{ color: palette.label, fontSize: VBT_TYPO.micro, fontWeight: 700, fontFamily: VBT_FONT.mono, paddingTop: 2 }}
+              >
+                + {items.length - 5} autres
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

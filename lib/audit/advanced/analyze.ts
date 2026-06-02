@@ -1706,13 +1706,21 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
     sub_id: "schemas_detected",
     title: "Données structurées détectées sur la page d'accueil",
     description: DESC_EXT.structured_data + (homepageFetched
-      ? `\n\nNous avons analysé le HTML de la page d'accueil et détecté ${blocksCount} bloc(s) JSON-LD, couvrant ${schemasFound.size} type(s) de schéma.`
-      : "\n\n⚠️ Impossible d'analyser la page d'accueil automatiquement. Vérifie manuellement avec l'outil Google Rich Results Test."),
-    kpis: [
-      { label: "Blocs JSON-LD", value: blocksCount, tone: blocksCount > 0 ? "ok" : "bad" },
-      { label: "Schémas distincts", value: schemasFound.size, tone: schemasFound.size > 2 ? "ok" : schemasFound.size > 0 ? "warn" : "bad" },
-      { label: "Schémas critiques manquants", value: missing.length, tone: missing.length === 0 ? "ok" : missing.length > 4 ? "bad" : "warn" },
-    ],
+      ? `\n\nNous avons analysé le HTML de la page d'accueil et détecté ${blocksCount} bloc(s) JSON-LD, couvrant ${schemasFound.size} type(s) de schéma. L'analyse porte uniquement sur la page d'accueil.`
+      : "\n\nL'analyse automatique de la page d'accueil n'a pas abouti (pare-feu, rendu JavaScript ou domaine non détecté). Les chiffres ci-dessous ne sont donc pas fiables : à vérifier manuellement avec l'outil Google Rich Results Test."),
+    // When the homepage couldn't be fetched, do NOT show "0 / 9 manquants"
+    // (that reads as a real absence). Show "Non analysé" instead.
+    kpis: homepageFetched
+      ? [
+          { label: "Blocs JSON-LD", value: blocksCount, tone: blocksCount > 0 ? "ok" : "bad" },
+          { label: "Schémas distincts", value: schemasFound.size, tone: schemasFound.size > 2 ? "ok" : schemasFound.size > 0 ? "warn" : "bad" },
+          { label: "Schémas critiques manquants", value: missing.length, tone: missing.length === 0 ? "ok" : missing.length > 4 ? "bad" : "warn" },
+        ]
+      : [
+          { label: "Page d'accueil", value: "Non analysée", tone: "warn" },
+          { label: "Blocs JSON-LD", value: "?", tone: "info" },
+          { label: "Schémas détectés", value: "?", tone: "info" },
+        ],
     issues_count: 0,
     takeaway: homepageFetched
       ? (schemasFound.size === 0
@@ -1720,20 +1728,26 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
         : missing.length > 4
           ? `${missing.length} schémas critiques absents sur ${CRITICAL_SCHEMAS.length} attendus : fort potentiel d'amélioration.`
           : `${present.length}/${CRITICAL_SCHEMAS.length} schémas critiques présents : bonne base, à étendre.`)
-      : undefined,
+      : "Vérifiez manuellement les données structurées de la page d'accueil avec l'outil Google Rich Results Test.",
   };
 
-  // Slide 2 : Schémas critiques absents (one per row)
-  const missingRows: AdvIssueRow[] = missing.map((m) => ({
-    url: m.schema,
-    severity: ["Organization", "WebSite", "Product"].includes(m.schema) ? "high" : "medium",
-    schema: m.schema,
-    impact: m.blurb,
-  } as AdvIssueRow));
+  // Slide 2 : Schémas critiques absents (one per row).
+  // Only when the homepage was actually analysed : otherwise we'd wrongly
+  // report every critical schema as "missing".
+  const missingRows: AdvIssueRow[] = homepageFetched
+    ? missing.map((m) => ({
+        url: m.schema,
+        severity: ["Organization", "WebSite", "Product"].includes(m.schema) ? "high" : "medium",
+        schema: m.schema,
+        impact: m.blurb,
+      } as AdvIssueRow))
+    : [];
+  // Scores stay neutral (50) when the homepage couldn't be analysed : we
+  // must not tank the global score on data we never actually fetched.
   const subDetected: AdvSubcategory = {
     id: "schemas_detected",
     label: "JSON-LD détectés",
-    score: schemasFound.size > 0 ? 100 : 0,
+    score: !homepageFetched ? 50 : schemasFound.size > 0 ? 100 : 0,
     issues_full: [],
     columns: [],
     xlsx_sheet: "Données structurées",
@@ -1741,7 +1755,7 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
   const subMissing: AdvSubcategory = {
     id: "schemas_missing",
     label: "Schémas critiques manquants",
-    score: scoreFromRatio(missing.length / CRITICAL_SCHEMAS.length),
+    score: !homepageFetched ? 50 : scoreFromRatio(missing.length / CRITICAL_SCHEMAS.length),
     issues_full: missingRows,
     columns: [
       { key: "schema", label: "Schéma", width: 24 },
@@ -1762,7 +1776,9 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
     label: "Données structurées",
     score: sectionScore,
     weight: 8,
-    summary: `${blocksCount} blocs JSON-LD · ${schemasFound.size} schémas distincts · ${missing.length} schémas critiques manquants`,
+    summary: homepageFetched
+      ? `${blocksCount} blocs JSON-LD · ${schemasFound.size} schémas distincts · ${missing.length} schémas critiques manquants`
+      : "Page d'accueil non analysée automatiquement : à vérifier manuellement",
     subcategories,
   };
 
@@ -1900,15 +1916,25 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
     sub_id: "http_headers",
     title: "Headers ETag & Last-Modified",
     description: DESC_EXT.http_headers + `\n\nMéthode : nous envoyons 5 requêtes HEAD (page d'accueil + 4 URLs du sitemap) et comptons combien renvoient un ETag et un Last-Modified. Si le serveur ne les renvoie sur aucune des 5 URLs testées, la configuration manque au niveau CDN ou framework et la conclusion vaut pour l'ensemble du site.`,
-    kpis: [
-      { label: "URLs testées (HEAD)", value: sampled, tone: "info" },
-      { label: "Avec ETag", value: `${withEtag} / ${sampled}`, tone: sampled > 0 && withEtag === sampled ? "ok" : withEtag > 0 ? "warn" : "bad" },
-      { label: "Avec Last-Modified", value: `${withLm} / ${sampled}`, tone: sampled > 0 && withLm === sampled ? "ok" : withLm > 0 ? "warn" : "bad" },
-      { label: "Couverture globale", value: sampled > 0 ? `${Math.round(((withEtag + withLm) / (sampled * 2)) * 100)} %` : ", ", tone: "info" },
-    ],
+    kpis: sampled === 0
+      ? [
+          // The server-side HEAD sampling did not return (WAF, timeout,
+          // domain not detected). Show "Non testé", NOT misleading zeros
+          // that would read as "the site has no ETag".
+          { label: "URLs testées (HEAD)", value: 0, tone: "info" },
+          { label: "Avec ETag", value: "Non testé", tone: "info" },
+          { label: "Avec Last-Modified", value: "Non testé", tone: "info" },
+          { label: "Statut", value: "Non analysé", tone: "warn" },
+        ]
+      : [
+          { label: "URLs testées (HEAD)", value: sampled, tone: "info" },
+          { label: "Avec ETag", value: `${withEtag} / ${sampled}`, tone: withEtag === sampled ? "ok" : withEtag > 0 ? "warn" : "bad" },
+          { label: "Avec Last-Modified", value: `${withLm} / ${sampled}`, tone: withLm === sampled ? "ok" : withLm > 0 ? "warn" : "bad" },
+          { label: "Couverture globale", value: `${Math.round(((withEtag + withLm) / (sampled * 2)) * 100)} %`, tone: "info" },
+        ],
     issues_count: 0,
     takeaway: sampled === 0
-      ? "Échantillonnage indisponible. Vérifiez manuellement avec un curl -I sur quelques URLs."
+      ? "Analyse non disponible : les requêtes HEAD n'ont pas abouti (pare-feu, délai dépassé ou domaine non détecté à l'import). À vérifier manuellement avec un curl -I sur quelques URLs."
       : withEtag === sampled && withLm === sampled
         ? `Toutes les ${sampled} pages testées renvoient ETag ET Last-Modified : configuration optimale pour le budget de crawl.`
         : withEtag === 0 && withLm === 0

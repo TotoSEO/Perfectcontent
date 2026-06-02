@@ -579,9 +579,10 @@ async def priority_summary(payload: PriorityIn) -> PriorityOut:
 
     system = (
         "Tu es un consultant SEO senior français qui synthétise un audit technique. "
-        "Tu rédiges UN paragraphe court (4-6 phrases) de synthèse pour la slide finale d'un livrable client. "
-        "Tu nommes le sujet principal à traiter en priorité, tu expliques pourquoi en t'appuyant sur les chiffres, "
-        "et tu termines sur une recommandation d'ordre de chantier (actions rapides puis chantiers de fond). "
+        "Tu rédiges UN paragraphe COURT (3 phrases maximum, 60 mots au total) pour la slide finale. "
+        "Le tableau des priorités est juste à côté : NE le réénumère PAS. "
+        "Phrase 1 : le chantier prioritaire et pourquoi (1 chiffre clé). Phrase 2 : le second levier. "
+        "Phrase 3 : l'ordre conseillé (actions rapides d'abord, chantiers de fond ensuite). "
         "Style : direct, factuel, sans superlatifs, sans listes à puces, sans titres. "
         "Tu écris du texte brut destiné à être affiché tel quel sur une slide : "
         "n'utilise AUCUNE syntaxe Markdown. Pas d'astérisques (*texte* ou **texte**) pour le gras ou l'italique, "
@@ -611,7 +612,7 @@ Rédige le paragraphe de synthèse pour la slide "Priorisation des corrections".
             system=system,
             user=user,
             model=HAIKU,
-            max_tokens=600,
+            max_tokens=220,
             temperature=0.3,
         )
         return PriorityOut(summary=resp.text.strip(), cost_usd=resp.cost)
