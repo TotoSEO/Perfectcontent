@@ -583,29 +583,40 @@ export default function AdvancedAuditPage() {
               >
                 <div className="flex-1 grid grid-cols-12 gap-10 min-h-0 items-center">
                   <div className="col-span-7 min-w-0 space-y-6">
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        aria-hidden
-                        style={{ width: 26, height: 2, background: VBT.terracotta500, borderRadius: 2 }}
+                    {/* Brand lockup : logo + kicker. Logo file lives at
+                        /visibilitea/logo.png (copied from the design system
+                        ZIP : transparent PNG, terracotta + amber leaves). */}
+                    <div className="flex items-center gap-4">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src="/visibilitea/logo.png"
+                        alt="Visibili'tea"
+                        style={{ height: 56, width: "auto", objectFit: "contain" }}
                       />
-                      <span
-                        className="uppercase"
-                        style={{
-                          color: VBT.terracotta600,
-                          fontWeight: 600,
-                          fontSize: VBT_TYPO.caption,
-                          letterSpacing: "0.28em",
-                          fontFamily: VBT_FONT.mono,
-                        }}
-                      >
-                        Audit technique SEO · Édition avancée
-                      </span>
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          aria-hidden
+                          style={{ width: 22, height: 2, background: VBT.terracotta500, borderRadius: 2 }}
+                        />
+                        <span
+                          className="uppercase"
+                          style={{
+                            color: VBT.terracotta600,
+                            fontWeight: 600,
+                            fontSize: VBT_TYPO.caption,
+                            letterSpacing: "0.24em",
+                            fontFamily: VBT_FONT.mono,
+                          }}
+                        >
+                          Audit technique SEO
+                        </span>
+                      </div>
                     </div>
                     <h1
                       className="leading-[1.0]"
                       style={{
                         fontFamily: VBT_FONT.display,
-                        fontWeight: 400,
+                        fontWeight: 800,
                         fontSize: 66,
                         letterSpacing: "-0.015em",
                         color: VBT.ink,
@@ -1064,7 +1075,7 @@ function SummaryBar({ c }: { c: { id: string; label: string; score: number; weig
           {c.label}
         </span>
         <span className="tabular-nums shrink-0" style={{ color: VBT.zinc, fontSize: VBT_TYPO.bodySm }}>
-          <strong style={{ color: fill, fontWeight: 400, fontSize: VBT_TYPO.subhead, fontFamily: VBT_FONT.display }}>{c.score}</strong>
+          <strong style={{ color: fill, fontWeight: 800, fontSize: VBT_TYPO.subhead, fontFamily: VBT_FONT.display }}>{c.score}</strong>
           <span className="ml-0.5" style={{ color: VBT.zinc, fontFamily: VBT_FONT.mono, fontSize: VBT_TYPO.caption }}>/100</span>
           <span className="ml-3 uppercase" style={{ color: VBT.zinc, fontSize: VBT_TYPO.micro, letterSpacing: "0.12em", fontWeight: 600, fontFamily: VBT_FONT.mono }}>
             poids {c.weight}

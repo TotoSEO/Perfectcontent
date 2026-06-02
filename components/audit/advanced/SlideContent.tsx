@@ -31,10 +31,10 @@ import type {
 // ---------------------------------------------------------------------------
 
 const KPI_PALETTES = {
-  ok:   { bg: "#E6F4EA", text: VBT.sigGreen,  border: "#B3DDC2" },
-  warn: { bg: "#FFEDD5", text: VBT.sigOrange, border: "#FDBA74" },
-  bad:  { bg: "#FEE2E2", text: VBT.sigRed,    border: "#FCA5A5" },
-  info: { bg: "#DBEAFE", text: VBT.sigBlue,   border: "#93C5FD" },
+  ok:   { bg: "#e6f3eb", text: VBT.sigGreen,  border: "#9bc4ad" },
+  warn: { bg: "#fcf2dc", text: VBT.sigOrange, border: "#efd07f" },
+  bad:  { bg: "#fbe3dd", text: VBT.sigRed,    border: "#e29a8d" },
+  info: { bg: "#e1eef5", text: VBT.sigBlue,   border: "#a8c9d6" },
 } as const;
 
 export function AdvKpiTile({ kpi, size = "md" }: { kpi: AdvKPI; size?: "sm" | "md" | "lg" }) {
@@ -53,7 +53,7 @@ export function AdvKpiTile({ kpi, size = "md" }: { kpi: AdvKPI; size?: "sm" | "m
         className="tabular-nums leading-none"
         style={{
           color: palette.text,
-          fontWeight: 400,
+          fontWeight: 800,
           fontFamily: VBT_FONT.display,
           fontSize: valueSize,
           letterSpacing: "-0.01em",
@@ -121,8 +121,8 @@ export function NoIssuesBlock() {
     <div
       className="flex-1 flex items-center justify-center gap-3 rounded-xl"
       style={{
-        border: `1px dashed #B3DDC2`,
-        background: "#E6F4EA",
+        border: `1px dashed #9bc4ad`,
+        background: "#e6f3eb",
         color: VBT.sigGreen,
         fontWeight: 600,
         fontSize: VBT_TYPO.body,
@@ -316,10 +316,10 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
   const heroKpi = slide.kpis[0];
   const secondaryKpi = slide.kpis[1];
   const ring =
-    heroKpi?.tone === "bad" ? { fill: VBT.sigRed, soft: "#FEE2E2", ringEdge: "#FCA5A5" } :
-    heroKpi?.tone === "warn" ? { fill: VBT.sigOrange, soft: "#FFEDD5", ringEdge: "#FDBA74" } :
-    heroKpi?.tone === "info" ? { fill: VBT.sigBlue, soft: "#DBEAFE", ringEdge: "#93C5FD" } :
-    { fill: VBT.sigGreen, soft: "#E6F4EA", ringEdge: "#B3DDC2" };
+    heroKpi?.tone === "bad" ? { fill: VBT.sigRed, soft: "#fbe3dd", ringEdge: "#e29a8d" } :
+    heroKpi?.tone === "warn" ? { fill: VBT.sigOrange, soft: "#fcf2dc", ringEdge: "#efd07f" } :
+    heroKpi?.tone === "info" ? { fill: VBT.sigBlue, soft: "#e1eef5", ringEdge: "#a8c9d6" } :
+    { fill: VBT.sigGreen, soft: "#e6f3eb", ringEdge: "#9bc4ad" };
 
   return (
     <div className="flex-1 grid grid-cols-12 gap-10 min-h-0 items-center pb-2">
@@ -372,7 +372,7 @@ function SparseSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "data" }>
                   style={{
                     color: ring.fill,
                     fontFamily: VBT_FONT.display,
-                    fontWeight: 400,
+                    fontWeight: 800,
                     fontSize: 76,
                     letterSpacing: "-0.02em",
                     lineHeight: 1,
@@ -561,8 +561,8 @@ export function InfoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "inf
 
 function Callout({ callout }: { callout: { tone: "warn" | "info"; title: string; body: string } }) {
   const isWarn = callout.tone === "warn";
-  const bg = isWarn ? "#FFEDD5" : "#DBEAFE";
-  const border = isWarn ? "#FDBA74" : "#93C5FD";
+  const bg = isWarn ? "#fcf2dc" : "#e1eef5";
+  const border = isWarn ? "#efd07f" : "#a8c9d6";
   const fg = isWarn ? VBT.sigOrange : VBT.sigBlue;
   return (
     <div
@@ -619,7 +619,7 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
               width: 64,
               height: 64,
               background: VBT.terracotta50,
-              border: `1px solid #F5D5BA`,
+              border: `1px solid #fae0cd`,
               boxShadow: "0 6px 20px -10px rgba(196, 107, 48, 0.5)",
             }}
           >
@@ -646,7 +646,7 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
           className="leading-[1.0] mt-2"
           style={{
             fontFamily: VBT_FONT.display,
-            fontWeight: 400,
+            fontWeight: 800,
             fontSize: 70,
             letterSpacing: "-0.015em",
             color: VBT.ink,
@@ -697,7 +697,7 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
             width: 260,
             height: 260,
             background: `linear-gradient(135deg, ${VBT.terracotta50} 0%, ${VBT.amber50} 100%)`,
-            border: `1px solid #F5D5BA`,
+            border: `1px solid #fae0cd`,
             boxShadow: "0 18px 36px -18px rgba(36, 23, 18, 0.28)",
           }}
         >
@@ -718,7 +718,7 @@ export function SectionCoverBody({ slide, partOf }: { slide: Extract<AdvSlide, {
               width: 160,
               height: 160,
               background: VBT.paper,
-              border: `1px solid #F5D5BA`,
+              border: `1px solid #fae0cd`,
               boxShadow: "0 4px 16px -6px rgba(196, 107, 48, 0.2)",
             }}
           />
@@ -780,8 +780,8 @@ function RecoCard({
   accentIndex: number;
 }) {
   const tint = accentIndex % 2 === 0
-    ? { bg: VBT.terracotta50, accent: VBT.terracotta700, chip: VBT.terracotta500, edge: "#F5D5BA" }
-    : { bg: VBT.amber50, accent: VBT.amber700, chip: VBT.amber500, edge: "#E5CD83" };
+    ? { bg: VBT.terracotta50, accent: VBT.terracotta700, chip: VBT.terracotta500, edge: "#fae0cd" }
+    : { bg: VBT.amber50, accent: VBT.amber700, chip: VBT.amber500, edge: "#efd07f" };
   const iconKey = iconForReco(subLabel);
   return (
     <div
@@ -933,9 +933,9 @@ export function AnchorLowDiversityBody({
               <tbody>
                 {visible.map((r, i) => {
                   const tone =
-                    r.ratio_pct >= 80 ? { bg: "#FEE2E2", fg: VBT.sigRed } :
-                    r.ratio_pct >= 65 ? { bg: "#FFEDD5", fg: VBT.sigOrange } :
-                    { bg: "#FEF3C7", fg: "#A16207" };
+                    r.ratio_pct >= 80 ? { bg: "#fbe3dd", fg: VBT.sigRed } :
+                    r.ratio_pct >= 65 ? { bg: "#fcf2dc", fg: VBT.sigOrange } :
+                    { bg: "#fcf6e6", fg: "#6c4a14" };
                   return (
                     <tr key={i} style={{ borderTop: `1px solid ${VBT.paperEdge}` }}>
                       <td
@@ -1056,8 +1056,8 @@ export function AnchorLowDiversityBody({
         <div
           className="rounded-xl flex items-start gap-2.5"
           style={{
-            background: "#FFEDD5",
-            border: "1px solid #FDBA74",
+            background: "#fcf2dc",
+            border: "1px solid #efd07f",
             padding: "12px 14px",
           }}
         >
@@ -1165,8 +1165,8 @@ export function AnchorEmptyBody({
               <div
                 className="px-3 py-2.5 flex items-center gap-2"
                 style={{
-                  background: "#FEE2E2",
-                  borderTop: `1px solid #FCA5A5`,
+                  background: "#fbe3dd",
+                  borderTop: `1px solid #e29a8d`,
                   color: VBT.sigRed,
                   fontWeight: 600,
                   fontSize: VBT_TYPO.bodySm,
@@ -1214,8 +1214,8 @@ export function AnchorEmptyBody({
         <div
           className="rounded-xl flex items-start gap-2.5"
           style={{
-            background: "#FEE2E2",
-            border: "1px solid #FCA5A5",
+            background: "#fbe3dd",
+            border: "1px solid #e29a8d",
             padding: "12px 14px",
           }}
         >
@@ -1252,8 +1252,8 @@ function EmptyAnchorGroup({
   index: number;
 }) {
   const tint = index % 2 === 0
-    ? { headerBg: "#FEE2E2", headerEdge: "#FCA5A5", headerFg: VBT.sigRed, bodyBg: "#FEF7F7" }
-    : { headerBg: "#FFEDD5", headerEdge: "#FDBA74", headerFg: VBT.sigOrange, bodyBg: "#FFF8F0" };
+    ? { headerBg: "#fbe3dd", headerEdge: "#e29a8d", headerFg: VBT.sigRed, bodyBg: "#fbeeec" }
+    : { headerBg: "#fcf2dc", headerEdge: "#efd07f", headerFg: VBT.sigOrange, bodyBg: "#fcf6e6" };
   // Cap source URLs displayed inline to keep slides readable; the rest live
   // in the XLSX.
   const visibleSources = sources.slice(0, 4);
@@ -1535,8 +1535,8 @@ export function AnchorBarsBody({ slide }: { slide: Extract<AdvSlide, { kind: "an
 
 function ReadingGuideCard({ title, body, tone }: { title: string; body: string; tone: "warn" | "info" }) {
   const isWarn = tone === "warn";
-  const bg = isWarn ? "#FFEDD5" : VBT.terracotta50;
-  const edge = isWarn ? "#FDBA74" : "#F5D5BA";
+  const bg = isWarn ? "#fcf2dc" : VBT.terracotta50;
+  const edge = isWarn ? "#efd07f" : "#fae0cd";
   const fg = isWarn ? VBT.sigOrange : VBT.terracotta700;
   return (
     <div
@@ -1722,7 +1722,7 @@ function DiversityScatter({ rows }: { rows: AnchorDestinationSummary[] }) {
             y={y(0.3)}
             width={W - padR - x(10)}
             height={H - padB - y(0.3)}
-            fill="#FEE2E2"
+            fill="#fbe3dd"
             opacity="0.5"
           />
           <text
@@ -1877,10 +1877,10 @@ const URGENCY_ICON: Record<PriorityItem["urgency"], typeof FlameIcon> = {
 };
 
 const URGENCY_PALETTE: Record<PriorityItem["urgency"], { fg: string; soft: string; edge: string; label: string }> = {
-  critical: { fg: VBT.sigRed,    soft: "#FEE2E2", edge: "#FCA5A5", label: VBT.sigRed },
-  high:     { fg: VBT.sigOrange, soft: "#FFEDD5", edge: "#FDBA74", label: VBT.sigOrange },
-  medium:   { fg: "#CA8A04",     soft: "#FEF3C7", edge: "#FDE68A", label: "#A16207" },
-  low:      { fg: VBT.sigBlue,   soft: "#DBEAFE", edge: "#93C5FD", label: VBT.sigBlue },
+  critical: { fg: VBT.sigRed,    soft: "#fbe3dd", edge: "#e29a8d", label: VBT.sigRed },
+  high:     { fg: VBT.sigOrange, soft: "#fcf2dc", edge: "#efd07f", label: VBT.sigOrange },
+  medium:   { fg: "#CA8A04",     soft: "#fcf6e6", edge: "#f7e7b8", label: "#6c4a14" },
+  low:      { fg: VBT.sigBlue,   soft: "#e1eef5", edge: "#a8c9d6", label: VBT.sigBlue },
 };
 
 // ===========================================================================
@@ -2033,8 +2033,8 @@ function BestWorstBlock({
 }) {
   const palette =
     tone === "ok"
-      ? { fg: VBT.sigGreen, bg: "#E6F4EA", edge: "#B3DDC2" }
-      : { fg: VBT.sigRed, bg: "#FEE2E2", edge: "#FCA5A5" };
+      ? { fg: VBT.sigGreen, bg: "#e6f3eb", edge: "#9bc4ad" }
+      : { fg: VBT.sigRed, bg: "#fbe3dd", edge: "#e29a8d" };
   return (
     <div
       className="rounded-xl"
@@ -2158,7 +2158,7 @@ function FilePanel({ raw, label }: { raw: string; label: string }) {
           fontSize,
           lineHeight: 1.35,
           color: VBT.ink,
-          background: "#FFFCF7",
+          background: "#fdfaf4",
         }}
       >
         {visibleText}
@@ -2195,8 +2195,8 @@ function AiBulletList({
 }) {
   const palette =
     tone === "ok"
-      ? { fg: VBT.sigGreen, edge: "#B3DDC2" }
-      : { fg: VBT.sigRed, edge: "#FCA5A5" };
+      ? { fg: VBT.sigGreen, edge: "#9bc4ad" }
+      : { fg: VBT.sigRed, edge: "#e29a8d" };
   return (
     <div className="min-w-0">
       <div
@@ -2589,10 +2589,10 @@ function MiniStat({
   tone: "ok" | "warn" | "bad" | "info";
 }) {
   const palette =
-    tone === "ok" ? { fg: VBT.sigGreen, bg: "#E6F4EA", edge: "#B3DDC2" } :
-    tone === "warn" ? { fg: VBT.sigOrange, bg: "#FFEDD5", edge: "#FDBA74" } :
-    tone === "bad" ? { fg: VBT.sigRed, bg: "#FEE2E2", edge: "#FCA5A5" } :
-    { fg: VBT.sigBlue, bg: "#DBEAFE", edge: "#93C5FD" };
+    tone === "ok" ? { fg: VBT.sigGreen, bg: "#e6f3eb", edge: "#9bc4ad" } :
+    tone === "warn" ? { fg: VBT.sigOrange, bg: "#fcf2dc", edge: "#efd07f" } :
+    tone === "bad" ? { fg: VBT.sigRed, bg: "#fbe3dd", edge: "#e29a8d" } :
+    { fg: VBT.sigBlue, bg: "#e1eef5", edge: "#a8c9d6" };
   return (
     <div
       className="rounded-xl min-w-0"
@@ -2607,7 +2607,7 @@ function MiniStat({
         style={{
           color: palette.fg,
           fontFamily: VBT_FONT.display,
-          fontWeight: 400,
+          fontWeight: 800,
           fontSize: 26,
           letterSpacing: "-0.01em",
           lineHeight: 1.05,

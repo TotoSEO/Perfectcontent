@@ -167,7 +167,7 @@ export function BarChart({
                 className="absolute inset-y-0 flex items-center tabular-nums pointer-events-none"
                 style={{
                   left: labelInside ? 10 : `calc(${wPct} + 8px)`,
-                  color: labelInside ? "#FFFCF7" : VBT.ink,
+                  color: labelInside ? VBT.paper : VBT.ink,
                   fontSize: 13,
                   fontWeight: 700,
                   fontFamily: VBT_FONT.title,

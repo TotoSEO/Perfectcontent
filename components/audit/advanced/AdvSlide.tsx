@@ -100,7 +100,7 @@ export function AdvSlide({
                 className="mt-2.5"
                 style={{
                   fontFamily: VBT_FONT.display,
-                  fontWeight: 400,
+                  fontWeight: 800,
                   fontSize: VBT_TYPO.pageTitle,
                   letterSpacing: "-0.01em",
                   color: VBT.ink,
@@ -190,10 +190,10 @@ export function AdvSlide({
 /** Coloured pill used to badge a sub-id / section etc. */
 export function SectionPill({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "warn" | "ok" | "bad" }) {
   const palette =
-    tone === "ok" ? { bg: "#E6F4EA", text: VBT.sigGreen, border: "#B3DDC2" } :
-    tone === "warn" ? { bg: "#FFEDD5", text: VBT.sigOrange, border: "#FDBA74" } :
-    tone === "bad" ? { bg: "#FEE2E2", text: VBT.sigRed, border: "#FCA5A5" } :
-    { bg: "#DBEAFE", text: VBT.sigBlue, border: "#93C5FD" };
+    tone === "ok" ? { bg: "#e6f3eb", text: VBT.sigGreen, border: "#9bc4ad" } :
+    tone === "warn" ? { bg: "#fcf2dc", text: VBT.sigOrange, border: "#efd07f" } :
+    tone === "bad" ? { bg: "#fbe3dd", text: VBT.sigRed, border: "#e29a8d" } :
+    { bg: "#e1eef5", text: VBT.sigBlue, border: "#a8c9d6" };
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full whitespace-nowrap"
