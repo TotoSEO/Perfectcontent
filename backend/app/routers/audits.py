@@ -647,22 +647,24 @@ async def synthesis_overview(payload: SynthesisIn) -> SynthesisOut:
     worst = [_fmt(s) for s in worst3]
 
     system = (
-        "Tu es un consultant SEO senior français. Tu rédiges l'introduction d'une slide de synthèse d'audit technique. "
-        "TROIS phrases courtes maximum, 50 à 70 mots au total. Aucune liste, aucun titre, aucun Markdown, aucune asterisque. "
-        "Pas de tirets cadratins, pas de termes anglais. "
-        "Style : factuel, posé, professionnel. Phrase 1 : situer le score global de manière nuancée. "
-        "Phrase 2 : ce qui est solide. Phrase 3 : ce qui reste à activer. "
+        "Tu es un consultant SEO senior français. Tu rédiges l'intro d'une slide de synthèse d'audit. "
+        "Le graphique radar à droite affiche déjà tous les scores par catégorie : NE LES REPETE PAS, "
+        "ne liste aucune catégorie, ne donne aucun chiffre, ne dis pas le score global. "
+        "DEUX phrases maximum, 35 à 45 mots au total. Aucune liste, aucun titre, aucun Markdown, "
+        "aucune asterisque, pas de tirets cadratins, pas d'anglais. "
+        "Tu cherches l'angle qualitatif : posture générale du site, opposition entre fondamentaux solides "
+        "et leviers techniques sous-exploités, ton synthétique et un peu rédactionnel. Pas de blabla. "
         "Tu écris du texte brut destiné à être affiché tel quel sur la slide."
     )
     user = (
         f"Audit : {payload.audit_name}{f' ({payload.domain})' if payload.domain else ''}\n"
-        f"Score global : {payload.global_score}/100\n"
-        f"Catégories les mieux notées : {', '.join(best)}\n"
-        f"Catégories les plus faibles : {', '.join(worst)}\n\n"
-        "Rédige l'introduction de la slide de synthèse."
+        f"Score global (NE PAS le mentionner explicitement) : {payload.global_score}/100\n"
+        f"Catégories les mieux notées (NE PAS les lister) : {', '.join(best)}\n"
+        f"Catégories les plus faibles (NE PAS les lister) : {', '.join(worst)}\n\n"
+        "Rédige l'intro qualitative (2 phrases max, 35-45 mots)."
     )
     try:
-        resp = await complete(system=system, user=user, model=HAIKU, max_tokens=250, temperature=0.3)
+        resp = await complete(system=system, user=user, model=HAIKU, max_tokens=180, temperature=0.3)
         return SynthesisOut(intro=resp.text.strip(), best=best, worst=worst)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"AI synthesis failed: {exc}")
@@ -718,35 +720,107 @@ async def robots_analysis(payload: RobotsAnalysisIn) -> RobotsAnalysisOut:
         "Schéma attendu :\n"
         "{\n"
         '  "is_good": bool,                   // true SEULEMENT si le fichier est déjà propre et complet (rare)\n'
-        '  "current_analysis": "string",      // 3 à 5 phrases courtes décrivant ce que fait le fichier et d\'où il vient (signaux : Wordfence, Umbraco, .htaccess hérités, etc.)\n'
+        '  "current_analysis": "string",      // 3 à 4 phrases courtes décrivant ce que fait le fichier et d\'où il vient (signaux : Wordfence, Umbraco, .htaccess hérités, etc.)\n'
         '  "issues": ["string", ...],          // 3 à 6 points bloquants concrets, phrases courtes\n'
-        '  "improved_content": "string|null", // robots.txt nettoyé recommandé (null si is_good=true)\n'
+        '  "improved_content": "string|null", // robots.txt nettoyé recommandé (null si is_good=true) ; 30 LIGNES MAX\n'
         '  "improvements": ["string", ...]     // 3 à 6 changements clés (vide si is_good=true)\n'
         "}\n"
         "Règles éditoriales : pas de tirets cadratins, pas d'anglais (utilise « bots IA » au lieu de « AI bots »), "
-        "pas d'asterisques Markdown. Limite chaque phrase à 25 mots. Le improved_content doit être un robots.txt complet et fonctionnel : User-agent, Allow/Disallow, Sitemap. "
-        "Pour les bots IA, déclare explicitement GPTBot, ChatGPT-User, CCBot, Google-Extended, ClaudeBot, PerplexityBot avec Allow: /."
+        "pas d'asterisques Markdown. Limite chaque phrase à 25 mots.\n\n"
+        "RÈGLES STRICTES pour le improved_content (robots.txt recommandé) :\n"
+        "1. MAX 30 LIGNES, idéalement 15 à 20. Compact, lisible, maintenable.\n"
+        "2. INTERDICTION ABSOLUE de transformer un Disallow inutile en Allow. "
+        "Si une règle Disallow ne sert à rien (protection par obscurité, ancienne extension, etc.), "
+        "tu la SUPPRIMES purement et simplement du nouveau fichier, tu n'écris PAS Allow: /xxx à la place. "
+        "Allow: /xxx ne sert à rien si Disallow ne bloque pas /xxx, donc Allow ne doit apparaître QUE "
+        "pour ré-autoriser explicitement un sous-chemin d'un Disallow qui reste utile.\n"
+        "3. Aucun commentaire (#) sauf un seul d'en-tête optionnel.\n"
+        "4. Pour les bots IA, déclare GPTBot, ChatGPT-User, CCBot, Google-Extended, ClaudeBot, "
+        "PerplexityBot avec Allow: / (c'est légitime ici car c'est ce qu'on veut ré-autoriser explicitement).\n"
+        "5. Termine par la ligne Sitemap: <url> si une URL de sitemap est connue, sinon omets-la."
     )
     user_msg = f"Domaine : {payload.domain or 'inconnu'}\n\nrobots.txt actuel :\n```\n{content}\n```"
 
     try:
-        resp = await complete(system=system, user=user_msg, model=HAIKU, max_tokens=2000, temperature=0.2)
+        resp = await complete(system=system, user=user_msg, model=HAIKU, max_tokens=1600, temperature=0.2)
         # Parse JSON (the model occasionally wraps in ```json fences; strip them)
         txt = resp.text.strip()
         if txt.startswith("```"):
             txt = txt.strip("`").lstrip("json").strip()
         data = _json.loads(txt)
+        improved = str(data.get("improved_content") or "").strip()
+        if improved and not data.get("is_good"):
+            improved = _clean_improved_robots(improved)
         return RobotsAnalysisOut(
             is_good=bool(data.get("is_good", False)),
             current_analysis=str(data.get("current_analysis", "")).strip(),
             issues=[str(x).strip() for x in (data.get("issues") or [])][:8],
-            improved_content=(str(data.get("improved_content") or "").strip() or None) if not data.get("is_good") else None,
+            improved_content=(improved or None) if not data.get("is_good") else None,
             improvements=[str(x).strip() for x in (data.get("improvements") or [])][:8],
         )
     except _json.JSONDecodeError as exc:
         raise HTTPException(500, f"AI returned invalid JSON: {exc}")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"AI robots analysis failed: {exc}")
+
+
+def _clean_improved_robots(raw: str) -> str:
+    """Server-side safety net for the AI-generated improved robots.txt.
+
+    The model has been instructed not to introduce useless ``Allow: /xxx``
+    rules (re-allowing what was previously disallowed), but we enforce it
+    deterministically here so the deliverable is clean even when the model
+    slips. The rules are scoped per ``User-agent:`` block :
+
+      • The universal ``Allow: /`` is ALWAYS kept (it's how we explicitly
+        whitelist a bot).
+      • Any other ``Allow: /<path>`` is dropped unless ``/<path>`` is a
+        strict sub-path of one of the ``Disallow:`` paths still present
+        in the same block.
+      • Empty trailing blocks are collapsed.
+    """
+    blocks: list[list[str]] = [[]]
+    for line in raw.splitlines():
+        if line.strip().lower().startswith("user-agent:") and blocks[-1]:
+            blocks.append([])
+        blocks[-1].append(line)
+
+    def _path(value: str) -> str:
+        return value.split(":", 1)[1].strip() if ":" in value else ""
+
+    out_lines: list[str] = []
+    for block in blocks:
+        disallows = [_path(l) for l in block if l.strip().lower().startswith("disallow:") and _path(l)]
+        cleaned: list[str] = []
+        for line in block:
+            stripped = line.strip()
+            low = stripped.lower()
+            if low.startswith("allow:"):
+                path = _path(stripped)
+                if path == "/" or not path:
+                    cleaned.append(line)
+                    continue
+                # Keep only if it's a sub-path of a remaining Disallow.
+                if any(path.startswith(d) and d not in ("", "/") for d in disallows):
+                    cleaned.append(line)
+                # else: drop the Allow (it would just re-allow what's
+                # already allowed by default).
+                continue
+            cleaned.append(line)
+        out_lines.extend(cleaned)
+
+    # Collapse 3+ consecutive blank lines to a single blank line.
+    collapsed: list[str] = []
+    blanks = 0
+    for line in out_lines:
+        if not line.strip():
+            blanks += 1
+            if blanks > 1:
+                continue
+        else:
+            blanks = 0
+        collapsed.append(line)
+    return "\n".join(collapsed).strip() + "\n"
 
 
 class SitemapAnalysisIn(BaseModel):
