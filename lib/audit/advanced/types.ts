@@ -136,16 +136,24 @@ export type AdvSlide =
       sub_id: string;
       title: string;
       description: string;
+      // FULL candidate list, sorted worst-first. The slide renders the first
+      // 4 NON-EXCLUDED rows ; when the consultant marks a row as "non
+      // pertinent" (RGPD, mentions légales etc.) it is added to
+      // `excluded_destinations` and the next-worst row takes its place
+      // automatically.
       rows: {
         destination: string;
         anchor: string;
-        occurrences: number;       // count of that exact anchor pointing to the dest
-        total_inlinks: number;     // total contextual inlinks toward the dest
-        ratio_pct: number;         // occurrences / total * 100 (rounded to 0.1)
+        occurrences: number;
+        total_inlinks: number;
+        ratio_pct: number;
       }[];
+      // Destination URLs marked as "non pertinent" by the consultant.
+      // Persisted with the audit (so the exclusion sticks across reloads).
+      excluded_destinations?: string[];
       // Total number of destinations matching the under-diversified criterion.
-      // The slide table shows the top 5; this is used by the "+ X URLs
-      // concernées" footnote when the total exceeds the table.
+      // Used by the "+ X URLs concernées" footnote when the visible table
+      // doesn't cover them all.
       total_concerned: number;
       xlsx_sheet?: string;
       issues_count: number;
@@ -232,9 +240,11 @@ export type AdvSlide =
   | {
       kind: "priority";
       title: string;
-      // Always computed deterministically : never AI-hallucinated:
+      // "kanban" = the lanes (legacy / default). "synthesis" = the AI
+      // narrative full-width. Splitting in 2 slides keeps both readable
+      // (one slide isn't tall enough for both at once).
+      view?: "kanban" | "synthesis";
       items: PriorityItem[];
-      // Optional Claude-generated narrative summary (1-3 short paragraphs).
       ai_summary: string | null;
       ai_summary_error: string | null;
     }
@@ -266,6 +276,12 @@ export type AdvSubcategory = {
   id: string;
   label: string;
   score: number;
+  // Relative weight inside the parent section, used by the section score
+  // aggregation. Default 1 (equal weight). A subcategory pinned at score
+  // 100 for informational reasons (noindex_pages, schemas_detected when
+  // homepage didn't fetch…) should have weight 0 so it doesn't dilute
+  // the real signal.
+  weight?: number;
   // Issues full set (used in the XLSX). The slide gets a summary count + the
   // top items only for context.
   issues_full: AdvIssueRow[];

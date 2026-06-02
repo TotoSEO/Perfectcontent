@@ -790,7 +790,7 @@ export function RecoSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "rec
         <RecoCard
           key={i}
           subLabel={g.sub_label}
-          items={g.items.slice(0, 5)}
+          items={g.items.slice(0, 4)}
           accentIndex={i}
         />
       ))}
@@ -863,19 +863,19 @@ function RecoCard({
       </div>
 
       {/* Numbered actions, vertically centered so the card never looks empty */}
-      <ul className="flex-1 flex flex-col justify-center gap-3.5 overflow-hidden min-h-0" style={{ padding: "18px 20px" }}>
+      <ul className="flex-1 flex flex-col justify-center gap-3 overflow-hidden min-h-0" style={{ padding: "16px 18px" }}>
         {items.map((item, j) => (
-          <li key={j} className="flex items-start gap-3">
+          <li key={j} className="flex items-start gap-2.5">
             <span
               className="shrink-0 inline-flex items-center justify-center tabular-nums"
               style={{
-                width: 24,
-                height: 24,
+                width: 22,
+                height: 22,
                 borderRadius: 999,
                 background: tint.chip,
                 color: VBT.paper,
                 border: `1.5px solid ${VBT.ink}`,
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: 800,
                 fontFamily: VBT_FONT.title,
                 marginTop: 1,
@@ -886,9 +886,15 @@ function RecoCard({
             <span
               style={{
                 color: VBT.ink,
-                lineHeight: 1.5,
-                fontSize: VBT_TYPO.bodySm,
+                lineHeight: 1.45,
+                fontSize: 13,
                 fontFamily: VBT_FONT.body,
+                // Safety net : clamp each item to 3 lines so dense items
+                // can never push another item off the card.
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
               }}
             >
               {item}
@@ -908,15 +914,25 @@ function RecoCard({
 
 export function AnchorLowDiversityBody({
   slide,
+  editMode = false,
+  onExclude,
 }: {
   slide: Extract<AdvSlide, { kind: "anchor-low-diversity" }>;
+  editMode?: boolean;
+  onExclude?: (destination: string) => void;
 }) {
-  const visible = slide.rows.slice(0, 5);
-  const extra = Math.max(0, slide.total_concerned - visible.length);
+  // Filter out destinations the consultant marked as off-topic, then take
+  // the top 4 worst remaining (the slide table is sized for exactly 4
+  // rows). The next-worst page slides in automatically when one is
+  // excluded.
+  const excluded = new Set(slide.excluded_destinations || []);
+  const remaining = slide.rows.filter((r) => !excluded.has(r.destination));
+  const visible = remaining.slice(0, 4);
+  const extra = Math.max(0, remaining.length - visible.length);
 
   return (
     <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
-      {/* LEFT : top 5 table */}
+      {/* LEFT : top 4 table */}
       <div className="col-span-8 flex flex-col gap-3 min-w-0 min-h-0">
         <div className="flex items-center justify-between gap-3 min-w-0">
           <div
@@ -933,7 +949,7 @@ export function AnchorLowDiversityBody({
               className="inline-block rounded-full"
               style={{ width: 6, height: 6, background: VBT.terracotta500 }}
             />
-            Top 5 · ancres dominantes par page cible
+            Top 4 · ancres dominantes par page cible
           </div>
           {slide.xlsx_sheet && slide.issues_count > 0 && (
             <XlsxRefBadge sheet={slide.xlsx_sheet} />
@@ -952,10 +968,11 @@ export function AnchorLowDiversityBody({
           >
             <table className="w-full" style={{ tableLayout: "fixed", fontSize: VBT_TYPO.bodySm }}>
               <colgroup>
-                <col style={{ width: "42%" }} />
-                <col style={{ width: "30%" }} />
+                <col style={{ width: editMode ? "38%" : "42%" }} />
+                <col style={{ width: editMode ? "28%" : "30%" }} />
                 <col style={{ width: "12%" }} />
                 <col style={{ width: "16%" }} />
+                {editMode && <col style={{ width: "6%" }} />}
               </colgroup>
               <thead style={{ background: VBT.terracotta50 }}>
                 <tr>
@@ -963,16 +980,17 @@ export function AnchorLowDiversityBody({
                   <Th>Ancre dominante</Th>
                   <Th align="right">Occur.</Th>
                   <Th align="right">Domination</Th>
+                  {editMode && <Th align="right">{""}</Th>}
                 </tr>
               </thead>
               <tbody>
                 {visible.map((r, i) => {
                   const tone =
-                    r.ratio_pct >= 80 ? { bg: "#fbe3dd", fg: VBT.sigRed } :
-                    r.ratio_pct >= 65 ? { bg: "#fcf2dc", fg: VBT.sigOrange } :
+                    r.ratio_pct >= 80 ? { bg: "#fbe3dd", fg: VBT.bad } :
+                    r.ratio_pct >= 65 ? { bg: "#fcf2dc", fg: VBT.warn } :
                     { bg: "#fcf6e6", fg: "#6c4a14" };
                   return (
-                    <tr key={i} style={{ borderTop: `1px solid ${VBT.paperEdge}` }}>
+                    <tr key={r.destination} style={{ borderTop: `1px solid ${VBT.paperEdge}` }}>
                       <td
                         className="px-3 py-2.5 align-top"
                         style={{
@@ -1024,6 +1042,28 @@ export function AnchorLowDiversityBody({
                           {r.ratio_pct.toFixed(0)} %
                         </span>
                       </td>
+                      {editMode && (
+                        <td className="px-2 py-2.5 align-top text-right">
+                          <button
+                            onClick={() => onExclude?.(r.destination)}
+                            title="Marquer cette URL comme non pertinente (RGPD, mentions légales, etc.). Sera remplacée par la suivante."
+                            style={{
+                              background: VBT.cream100,
+                              color: VBT.ink,
+                              border: `1.5px solid ${VBT.ink}`,
+                              borderRadius: 999,
+                              width: 24,
+                              height: 24,
+                              fontWeight: 800,
+                              fontSize: 13,
+                              cursor: "pointer",
+                              lineHeight: 1,
+                            }}
+                          >
+                            ×
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -1049,7 +1089,7 @@ export function AnchorLowDiversityBody({
 
         <div
           style={{
-            color: VBT.zinc,
+            color: VBT.ink2,
             fontSize: VBT_TYPO.micro,
             fontWeight: 500,
             lineHeight: 1.4,
@@ -1057,6 +1097,48 @@ export function AnchorLowDiversityBody({
         >
           Le pourcentage indique la part des liens contextuels qui utilisent la même ancre vers la page cible. Les ancres vides ne sont pas comptabilisées ici.
         </div>
+
+        {/* Edit-mode footer : list of excluded URLs with un-exclude buttons */}
+        {editMode && excluded.size > 0 && (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            style={{
+              padding: "8px 12px",
+              background: VBT.cream100,
+              border: `1.5px dashed ${VBT.ink}`,
+              borderRadius: 12,
+              fontSize: VBT_TYPO.micro,
+              color: VBT.ink2,
+            }}
+          >
+            <span style={{ fontWeight: 700, fontFamily: VBT_FONT.title, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              {excluded.size} URL{excluded.size > 1 ? "s" : ""} exclue{excluded.size > 1 ? "s" : ""}
+            </span>
+            {[...excluded].map((d) => (
+              <button
+                key={d}
+                onClick={() => onExclude?.(d)}
+                title="Cliquer pour ré-inclure cette URL"
+                style={{
+                  background: VBT.paper,
+                  color: VBT.ink,
+                  border: `1.5px solid ${VBT.ink}`,
+                  borderRadius: 999,
+                  padding: "2px 10px",
+                  fontSize: VBT_TYPO.micro,
+                  fontFamily: VBT_FONT.body,
+                  cursor: "pointer",
+                  maxWidth: 320,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {d.replace(/^https?:\/\//, "").replace(/\/$/, "")} ↩
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* RIGHT : explanatory text + key takeaway */}
@@ -2741,137 +2823,146 @@ export function PrioritySlideBody({
   onRequestAi: () => void;
   busy: boolean;
 }) {
+  // Legacy single-view slides (older audits) carry no view : render both.
+  const view = slide.view ?? "both";
+  if (view === "kanban") return <PriorityKanban slide={slide} />;
+  if (view === "synthesis") return <PrioritySynthesis slide={slide} onRequestAi={onRequestAi} busy={busy} />;
+  // "both" (legacy two-column layout)
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
+      <div className="col-span-8 flex flex-col gap-3 min-w-0 min-h-0">
+        <PriorityKanban slide={slide} />
+      </div>
+      <div className="col-span-4 flex flex-col gap-2 min-w-0 min-h-0">
+        <PrioritySynthesis slide={slide} onRequestAi={onRequestAi} busy={busy} />
+      </div>
+    </div>
+  );
+}
+
+// Kanban view : full-width 4-lane board.
+function PriorityKanban({ slide }: { slide: Extract<AdvSlide, { kind: "priority" }> }) {
   const items = slide.items.slice(0, 12);
-  // Group by urgency for the kanban lanes
   const groups: Record<PriorityItem["urgency"], PriorityItem[]> = {
-    critical: [],
-    high: [],
-    medium: [],
-    low: [],
+    critical: [], high: [], medium: [], low: [],
   };
   items.forEach((p) => groups[p.urgency].push(p));
   const laneOrder: PriorityItem["urgency"][] = ["critical", "high", "medium", "low"];
-
   return (
-    <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
-      {/* Kanban lanes */}
-      <div className="col-span-8 flex flex-col gap-3 min-w-0 min-h-0">
-        <div
-          className="uppercase flex items-center gap-2"
-          style={{
-            color: VBT.terracotta600,
-            fontWeight: 700,
-            fontSize: VBT_TYPO.micro,
-            letterSpacing: "0.18em",
-            fontFamily: VBT_FONT.mono,
-          }}
-        >
-          <span className="inline-block rounded-full" style={{ width: 6, height: 6, background: VBT.terracotta500 }} />
-          Plan d&apos;action · {items.length} chantiers classés par urgence
-        </div>
-        <div className="flex-1 grid grid-cols-4 gap-3 min-h-0 overflow-hidden">
-          {laneOrder.map((urg) => (
-            <KanbanLane
-              key={urg}
-              urgency={urg}
-              items={groups[urg]}
-            />
-          ))}
-        </div>
+    <div className="flex-1 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
+      <div
+        className="uppercase flex items-center gap-2"
+        style={{
+          color: VBT.terracotta600,
+          fontWeight: 700,
+          fontSize: VBT_TYPO.micro,
+          letterSpacing: "0.18em",
+          fontFamily: VBT_FONT.mono,
+        }}
+      >
+        <span className="inline-block rounded-full" style={{ width: 6, height: 6, background: VBT.terracotta500 }} />
+        Plan d&apos;action · {items.length} chantiers classés par urgence
       </div>
+      <div className="flex-1 grid grid-cols-4 gap-4 min-h-0 overflow-hidden">
+        {laneOrder.map((urg) => (
+          <KanbanLane key={urg} urgency={urg} items={groups[urg]} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      {/* AI synthesis */}
-      <div className="col-span-4 flex flex-col gap-2 min-w-0 min-h-0">
-        <div
-          className="uppercase flex items-center gap-2"
-          style={{
-            color: VBT.terracotta600,
-            fontWeight: 700,
-            fontSize: VBT_TYPO.micro,
-            letterSpacing: "0.18em",
-            fontFamily: VBT_FONT.mono,
-          }}
+// Synthesis view : full-width AI narrative with breathing room.
+function PrioritySynthesis({
+  slide,
+  onRequestAi,
+  busy,
+}: {
+  slide: Extract<AdvSlide, { kind: "priority" }>;
+  onRequestAi: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="flex-1 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
+      <div
+        className="uppercase flex items-center gap-2"
+        style={{
+          color: VBT.terracotta600,
+          fontWeight: 700,
+          fontSize: VBT_TYPO.micro,
+          letterSpacing: "0.18em",
+          fontFamily: VBT_FONT.mono,
+        }}
+      >
+        <SparklesIcon size={12} color={VBT.terracotta500} />
+        Synthèse consultant
+      </div>
+      <div
+        className="flex-1 relative min-h-0 overflow-hidden"
+        style={{
+          background: VBT.paper,
+          border: `1.5px solid ${VBT.ink}`,
+          borderRadius: 18,
+          color: VBT.inkSoft,
+          boxShadow: hardShadow(5),
+          padding: "32px 40px",
+          fontSize: VBT_TYPO.body,
+          lineHeight: 1.7,
+        }}
+      >
+        <span
+          aria-hidden
+          className="absolute pointer-events-none select-none"
+          style={{ top: 18, left: 22, color: VBT.terracotta500, opacity: 0.22 }}
         >
-          <SparklesIcon size={12} color={VBT.terracotta500} />
-          Synthèse consultant
-        </div>
-        <div
-          className="flex-1 rounded-xl relative min-h-0 overflow-y-auto"
-          style={{
-            background: VBT.paper,
-            border: `1.5px solid ${VBT.ink}`,
-            color: VBT.inkSoft,
-            boxShadow: hardShadow(4),
-            padding: "18px 20px",
-            fontSize: VBT_TYPO.bodySm,
-            lineHeight: 1.6,
-          }}
-        >
-          <span
-            aria-hidden
-            className="absolute pointer-events-none select-none"
-            style={{
-              top: 8,
-              left: 10,
-              color: VBT.terracotta500,
-              opacity: 0.25,
-            }}
-          >
-            <QuoteIcon size={28} color={VBT.terracotta500} />
-          </span>
-          <div style={{ paddingLeft: 22, paddingTop: 4 }}>
-            {slide.ai_summary ? (
-              <p
+          <QuoteIcon size={44} color={VBT.terracotta500} />
+        </span>
+        <div style={{ paddingLeft: 36, paddingTop: 14, paddingRight: 12 }}>
+          {slide.ai_summary ? (
+            <p style={{ whiteSpace: "pre-wrap" }}>
+              {renderRichText(slide.ai_summary)}
+            </p>
+          ) : slide.ai_summary_error ? (
+            <>
+              <p style={{ color: VBT.bad }} className="mb-3">
+                Échec de la génération IA : {slide.ai_summary_error}
+              </p>
+              <button
+                onClick={onRequestAi}
+                disabled={busy}
+                className="underline"
+                style={{ color: VBT.terracotta700, fontSize: VBT_TYPO.bodySm }}
+              >
+                Réessayer
+              </button>
+            </>
+          ) : busy ? (
+            <p style={{ color: VBT.inkSoft }}>Synthèse en cours…</p>
+          ) : (
+            <>
+              <p className="mb-4">
+                Une synthèse rédigée par IA (Claude Haiku) résumera ici les priorités à traiter, en s&apos;appuyant sur les scores et compteurs du rapport. Aucune URL n&apos;est transmise : seuls les chiffres agrégés.
+              </p>
+              <button
+                onClick={onRequestAi}
+                disabled={busy}
                 style={{
-                  whiteSpace: "pre-wrap",
-                  display: "-webkit-box",
-                  WebkitLineClamp: 14,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
+                  background: VBT.terracotta500,
+                  color: VBT.paper,
+                  border: `1.5px solid ${VBT.ink}`,
+                  borderRadius: 999,
+                  boxShadow: hardShadow(3),
+                  fontWeight: 700,
+                  fontSize: VBT_TYPO.bodySm,
+                  padding: "10px 18px",
+                  cursor: busy ? "wait" : "pointer",
+                  opacity: busy ? 0.6 : 1,
                 }}
               >
-                {renderRichText(slide.ai_summary)}
-              </p>
-            ) : slide.ai_summary_error ? (
-              <>
-                <p style={{ color: VBT.sigRed }} className="mb-2">
-                  Échec de la génération IA : {slide.ai_summary_error}
-                </p>
-                <button
-                  onClick={onRequestAi}
-                  disabled={busy}
-                  className="underline"
-                  style={{ color: VBT.terracotta700, fontSize: VBT_TYPO.caption }}
-                >
-                  Réessayer
-                </button>
-              </>
-            ) : busy ? (
-              <p style={{ color: VBT.inkSoft }}>Synthèse en cours…</p>
-            ) : (
-              <>
-                <p className="mb-3">
-                  Une synthèse rédigée par IA (Claude Haiku) résumera ici les priorités à traiter, en s&apos;appuyant sur les scores et compteurs du rapport. Aucune URL n&apos;est transmise : seuls les chiffres agrégés.
-                </p>
-                <button
-                  onClick={onRequestAi}
-                  disabled={busy}
-                  className="rounded-lg"
-                  style={{
-                    background: VBT.terracotta500,
-                    color: VBT.paper,
-                    fontWeight: 600,
-                    fontSize: VBT_TYPO.caption,
-                    padding: "8px 14px",
-                    cursor: busy ? "wait" : "pointer",
-                    opacity: busy ? 0.6 : 1,
-                  }}
-                >
-                  Générer la synthèse
-                </button>
-              </>
-            )}
-          </div>
+                Générer la synthèse
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
