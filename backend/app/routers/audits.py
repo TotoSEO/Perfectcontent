@@ -62,6 +62,34 @@ async def get_audit(audit_id: UUID, db: AsyncSession = Depends(get_db)) -> Audit
     return audit
 
 
+class AuditUpdateIn(BaseModel):
+    """Partial update for an audit. Used by the in-app slide editor to
+    persist edited / reordered / added slides and the optional rename.
+    Only the provided fields are touched.
+    """
+    name: str | None = None
+    summary: dict | None = None  # the full edited summary (slides live here)
+    score: float | None = None
+
+
+@router.patch("/{audit_id}", response_model=AuditOut)
+async def update_audit(
+    audit_id: UUID, payload: AuditUpdateIn, db: AsyncSession = Depends(get_db)
+) -> Audit:
+    audit = await db.get(Audit, audit_id)
+    if audit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "audit not found")
+    if payload.name is not None:
+        audit.name = payload.name
+    if payload.summary is not None:
+        audit.summary = payload.summary
+    if payload.score is not None:
+        audit.score = payload.score
+    await db.commit()
+    await db.refresh(audit)
+    return audit
+
+
 @router.delete("/{audit_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_audit(audit_id: UUID, db: AsyncSession = Depends(get_db)) -> None:
     audit = await db.get(Audit, audit_id)

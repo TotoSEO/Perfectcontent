@@ -20,6 +20,7 @@ import {
   RobotsImprovedBody,
   SitemapOverviewBody,
   SitemapGapsBody,
+  CustomSlideBody,
 } from "@/components/audit/advanced/SlideContent";
 import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
 import { DownloadIcon, PrinterIcon } from "@/components/audit/advanced/Icons";
@@ -46,7 +47,7 @@ export default function AdvancedAuditPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
-  const { data: audit, error: loadErr } = useSWR<AuditOut>(
+  const { data: audit, error: loadErr, mutate } = useSWR<AuditOut>(
     id ? `/srv/audits/${id}` : null,
     fetcher,
   );
@@ -87,17 +88,32 @@ export default function AdvancedAuditPage() {
   } | null>(null);
   const [sitemapErr, setSitemapErr] = useState<string | null>(null);
 
+  // ── In-app slide editor ────────────────────────────────────────────────
+  const [editMode, setEditMode] = useState(false);
+  // When non-null, this is the working copy of the raw stored slides that
+  // the editor mutates. The display `slides` derives from it.
+  const [editedSlides, setEditedSlides] = useState<AdvSlideType[] | null>(null);
+  const [savingEdits, setSavingEdits] = useState(false);
+  const [editErr, setEditErr] = useState<string | null>(null);
+
   const isAdvanced = audit?.summary?.audit_type === "advanced";
+
+  // The raw slide list the display layer reads from : the editor's working
+  // copy when editing, otherwise the stored slides.
+  const baseSlides = useMemo<AdvSlideType[]>(
+    () => editedSlides ?? (audit?.summary?.slides as AdvSlideType[] | undefined) ?? [],
+    [editedSlides, audit],
+  );
 
   // Pre-process slides: stitch the audit name into the cover, the AI
   // narrative into the priority slide, and the on-demand AI fields into
   // each of the synthesis / robots / sitemap slides.
   const slides = useMemo<AdvSlideType[]>(() => {
-    if (!audit?.summary?.slides) return [];
+    if (!baseSlides.length) return [];
     const out: AdvSlideType[] = [];
-    for (const s of audit.summary.slides) {
+    for (const s of baseSlides) {
       if (s.kind === "cover") {
-        out.push({ ...s, audit_name: audit.name });
+        out.push({ ...s, audit_name: audit?.name ?? s.audit_name });
         continue;
       }
       if (s.kind === "priority") {
@@ -160,7 +176,7 @@ export default function AdvancedAuditPage() {
       out.push(s);
     }
     return out;
-  }, [audit, aiSummary, aiErr, synthAi, synthErr, robotsAi, robotsErr, sitemapAi, sitemapErr]);
+  }, [baseSlides, audit, aiSummary, aiErr, synthAi, synthErr, robotsAi, robotsErr, sitemapAi, sitemapErr]);
   const total = slides.length;
 
   const totalIssues = useMemo(() => {
@@ -325,19 +341,25 @@ export default function AdvancedAuditPage() {
     }
   }
 
+  const [pdfProgress, setPdfProgress] = useState<{ current: number; total: number } | null>(null);
+
   async function exportPdf() {
     if (!audit) return;
     setExportingPdf(true);
     setExportErr(null);
+    setPdfProgress(null);
     try {
       const { exportDeckToPdf } = await import("@/lib/audit/advanced/export-pdf");
-      // The browser print dialog handles the rest. The user picks
-      // "Save as PDF" from the destination dropdown.
-      await exportDeckToPdf(audit.name, "[data-deck-root]");
+      // Programmatic, full-bleed PDF : one slide = one 1600x900 page.
+      // No print dialog, no margins, downloads directly.
+      await exportDeckToPdf(audit.name, "[data-deck-root]", (current, total) => {
+        setPdfProgress({ current, total });
+      });
     } catch (e) {
       setExportErr(`Échec export PDF : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setExportingPdf(false);
+      setPdfProgress(null);
     }
   }
 
@@ -345,6 +367,82 @@ export default function AdvancedAuditPage() {
     if (!confirm("Supprimer cet audit ?")) return;
     await api(`/srv/audits/${id}`, { method: "DELETE" });
     router.push("/audits/advanced");
+  }
+
+  // ── Editor operations (mutate the working copy `editedSlides`) ──────────
+  function enterEdit() {
+    // Deep-clone the *displayed* slides so any AI text already generated is
+    // captured into the editable copy ; reset the cover name to "" so it
+    // doesn't get baked in (it's re-stitched from audit.name at display).
+    const clone: AdvSlideType[] = JSON.parse(JSON.stringify(slides));
+    for (const s of clone) {
+      if (s.kind === "cover") s.audit_name = "";
+    }
+    setEditedSlides(clone);
+    setEditMode(true);
+    setEditErr(null);
+  }
+  function cancelEdit() {
+    setEditedSlides(null);
+    setEditMode(false);
+    setEditErr(null);
+  }
+  function updateSlideField(index: number, key: string, value: string) {
+    setEditedSlides((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      next[index] = { ...next[index], [key]: value } as AdvSlideType;
+      return next;
+    });
+  }
+  function deleteSlide(index: number) {
+    setEditedSlides((prev) => (prev ? prev.filter((_, i) => i !== index) : prev));
+  }
+  function moveSlide(index: number, dir: -1 | 1) {
+    setEditedSlides((prev) => {
+      if (!prev) return prev;
+      const j = index + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[j]] = [next[j], next[index]];
+      return next;
+    });
+  }
+  function addCustomAfter(index: number) {
+    setEditedSlides((prev) => {
+      if (!prev) return prev;
+      const slide: AdvSlideType = {
+        kind: "custom",
+        title: "Nouvelle slide",
+        body: "Saisis ton texte ici.\n\nUtilise une ligne vide pour séparer les paragraphes, ou commence chaque ligne par « - » pour une liste à puces.",
+        eyebrow: "Note",
+      };
+      const next = [...prev];
+      next.splice(index + 1, 0, slide);
+      return next;
+    });
+  }
+
+  async function saveEdits() {
+    if (!audit?.summary || !editedSlides) return;
+    setSavingEdits(true);
+    setEditErr(null);
+    try {
+      const newSummary = { ...audit.summary, slides: editedSlides };
+      await api(`/srv/audits/${id}`, {
+        method: "PATCH",
+        json: { summary: newSummary },
+        timeoutMs: 60_000,
+      });
+      // Reflect locally + revalidate the SWR cache.
+      await mutate({ ...audit, summary: newSummary }, { revalidate: true });
+      setEditMode(false);
+      setEditedSlides(null);
+    } catch (e) {
+      setEditErr(`Échec de l'enregistrement : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSavingEdits(false);
+    }
   }
 
   if (loadErr) {
@@ -393,25 +491,53 @@ export default function AdvancedAuditPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <button
-            onClick={exportPdf}
-            disabled={exportingPdf}
-            className="btn-primary text-sm inline-flex items-center gap-2"
-            title="Ouvre la boîte de dialogue d'impression. Choisissez « Enregistrer au format PDF » comme destination pour télécharger le fichier."
-          >
-            <PrinterIcon size={15} color="currentColor" />
-            {exportingPdf ? "Ouverture du dialogue…" : "Exporter en PDF"}
-          </button>
-          <button
-            onClick={exportXlsx}
-            disabled={exporting || !audit.issues}
-            className="btn-secondary text-sm inline-flex items-center gap-2"
-            title="Exporte le fichier .xlsx complet avec un onglet par sous-catégorie de problème et un onglet de priorisation."
-          >
-            <DownloadIcon size={15} color="currentColor" />
-            {exporting ? "Export en cours…" : "Exporter le fichier XLSX"}
-          </button>
-          <button onClick={deleteAudit} className="btn-ghost text-xs">Supprimer</button>
+          {editMode ? (
+            <>
+              <button
+                onClick={saveEdits}
+                disabled={savingEdits}
+                className="btn-primary text-sm"
+              >
+                {savingEdits ? "Enregistrement…" : "✓ Enregistrer les modifications"}
+              </button>
+              <button onClick={cancelEdit} disabled={savingEdits} className="btn-secondary text-sm">
+                Annuler
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={enterEdit}
+                className="btn-secondary text-sm inline-flex items-center gap-2"
+                title="Modifier les textes, ajouter, supprimer ou réordonner des slides."
+              >
+                ✎ Modifier
+              </button>
+              <button
+                onClick={exportPdf}
+                disabled={exportingPdf}
+                className="btn-primary text-sm inline-flex items-center gap-2"
+                title="Génère et télécharge un PDF plein écran (une slide par page). Aucune boîte de dialogue."
+              >
+                <PrinterIcon size={15} color="currentColor" />
+                {exportingPdf
+                  ? pdfProgress
+                    ? `Génération ${pdfProgress.current}/${pdfProgress.total}…`
+                    : "Préparation…"
+                  : "Exporter en PDF"}
+              </button>
+              <button
+                onClick={exportXlsx}
+                disabled={exporting || !audit.issues}
+                className="btn-secondary text-sm inline-flex items-center gap-2"
+                title="Exporte le fichier .xlsx complet avec un onglet par sous-catégorie de problème et un onglet de priorisation."
+              >
+                <DownloadIcon size={15} color="currentColor" />
+                {exporting ? "Export en cours…" : "Exporter le fichier XLSX"}
+              </button>
+              <button onClick={deleteAudit} className="btn-ghost text-xs">Supprimer</button>
+            </>
+          )}
         </div>
       </header>
 
@@ -420,16 +546,28 @@ export default function AdvancedAuditPage() {
           Échec export : {exportErr}
         </div>
       )}
+      {editErr && (
+        <div className="card border-red-700/50 bg-red-900/20 text-red-100 p-3 text-sm">
+          {editErr}
+        </div>
+      )}
 
-      <p className="text-xs text-zinc-500">
-        💡 Chaque slide est en 16:9 : capture-la et colle-la directement dans tes Google Slides client.
-      </p>
+      {editMode ? (
+        <div className="card border-accent-600/40 bg-accent-600/10 text-accent-100 p-3 text-sm flex items-center gap-2">
+          ✎ Mode édition : modifie les textes sous chaque slide, réordonne avec ↑↓, supprime, ou ajoute une slide de texte. La prévisualisation se met à jour en direct. N&apos;oublie pas d&apos;enregistrer.
+        </div>
+      ) : (
+        <p className="text-xs text-zinc-500">
+          💡 Chaque slide est en 16:9 : capture-la et colle-la directement dans tes Google Slides client.
+        </p>
+      )}
 
       {/* data-deck-root is the anchor the PDF exporter walks to find every
           slide. Each direct child below wraps a slide and carries
           data-pdf-slide, so the exporter snapshots each in DOM order. */}
       <div className="space-y-6" data-deck-root>
         {slides.map((s, i) => {
+          const slideNode = (() => {
           if (s.kind === "cover") {
             // Use the live counts so the cover stays in sync with the
             // actual deck (4.4) : the slide count is the number of
@@ -806,7 +944,39 @@ export default function AdvancedAuditPage() {
               </AdvSlide>
             );
           }
+          if (s.kind === "custom") {
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title={s.title || "Slide"}
+                subtitle={s.eyebrow || "Note"}
+                footer="Note"
+              >
+                <CustomSlideBody slide={s} />
+              </AdvSlide>
+            );
+          }
           return null;
+          })();
+          if (!slideNode) return null;
+          return (
+            <div key={i}>
+              {slideNode}
+              {editMode && (
+                <SlideEditorCard
+                  slide={s}
+                  index={i}
+                  total={total}
+                  onField={updateSlideField}
+                  onDelete={deleteSlide}
+                  onMove={moveSlide}
+                  onAddAfter={addCustomAfter}
+                />
+              )}
+            </div>
+          );
         })}
       </div>
     </div>
@@ -923,6 +1093,172 @@ function SummaryBar({ c }: { c: { id: string; label: string; score: number; weig
       >
         {c.summary}
       </div>
+    </div>
+  );
+}
+
+// ── In-app slide editor ───────────────────────────────────────────────────
+
+type EditField = { key: string; label: string; value: string; multiline: boolean };
+
+// Returns the editable plain-text fields for a given slide kind. We only
+// expose free-text the consultant would want to tweak ; structural data
+// (KPIs, tables, charts) stays derived from the crawl.
+function editableFields(slide: AdvSlideType): EditField[] {
+  const f: EditField[] = [];
+  const s = slide as unknown as Record<string, unknown>;
+  const str = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : "");
+  switch (slide.kind) {
+    case "custom":
+      f.push({ key: "eyebrow", label: "Sur-titre", value: str("eyebrow"), multiline: false });
+      f.push({ key: "title", label: "Titre", value: str("title"), multiline: false });
+      f.push({ key: "body", label: "Texte (ligne vide = nouveau paragraphe, « - » = puce)", value: str("body"), multiline: true });
+      break;
+    case "data":
+    case "info":
+    case "anchor-low-diversity":
+    case "anchor-empty":
+      f.push({ key: "title", label: "Titre", value: str("title"), multiline: false });
+      f.push({ key: "description", label: "Description", value: str("description"), multiline: true });
+      if ("takeaway" in s) f.push({ key: "takeaway", label: "À retenir", value: str("takeaway"), multiline: true });
+      break;
+    case "synthesis-radar":
+      f.push({ key: "ai_intro", label: "Introduction (synthèse)", value: str("ai_intro"), multiline: true });
+      break;
+    case "robots-current":
+      f.push({ key: "title", label: "Titre", value: str("title"), multiline: false });
+      f.push({ key: "ai_overview", label: "Analyse du robots.txt", value: str("ai_overview"), multiline: true });
+      break;
+    case "robots-improved":
+      f.push({ key: "improved_content", label: "robots.txt recommandé", value: str("improved_content"), multiline: true });
+      break;
+    case "sitemap-overview":
+      f.push({ key: "ai_overview", label: "Analyse du sitemap", value: str("ai_overview"), multiline: true });
+      break;
+    case "sitemap-gaps":
+      f.push({ key: "ai_gaps_summary", label: "Résumé des absences", value: str("ai_gaps_summary"), multiline: true });
+      break;
+    case "priority":
+      f.push({ key: "title", label: "Titre", value: str("title"), multiline: false });
+      f.push({ key: "ai_summary", label: "Synthèse consultant", value: str("ai_summary"), multiline: true });
+      break;
+    case "section-cover":
+      f.push({ key: "title", label: "Titre de section", value: str("title"), multiline: false });
+      break;
+    case "reco":
+      f.push({ key: "title", label: "Titre", value: str("title"), multiline: false });
+      break;
+    default:
+      break;
+  }
+  return f;
+}
+
+const KIND_LABEL: Record<string, string> = {
+  cover: "Couverture",
+  "synthesis-radar": "Synthèse",
+  summary: "Synthèse",
+  "section-cover": "Couverture de section",
+  data: "Données",
+  info: "Information",
+  "anchor-low-diversity": "Ancres peu variées",
+  "anchor-empty": "Ancres vides",
+  "anchor-bars": "Ancres",
+  "anchor-table": "Ancres",
+  "robots-current": "Robots.txt",
+  "robots-improved": "Robots.txt amélioré",
+  "sitemap-overview": "Sitemap",
+  "sitemap-gaps": "Sitemap (absences)",
+  reco: "Recommandations",
+  priority: "Priorisation",
+  custom: "Slide libre",
+};
+
+function SlideEditorCard({
+  slide,
+  index,
+  total,
+  onField,
+  onDelete,
+  onMove,
+  onAddAfter,
+}: {
+  slide: AdvSlideType;
+  index: number;
+  total: number;
+  onField: (index: number, key: string, value: string) => void;
+  onDelete: (index: number) => void;
+  onMove: (index: number, dir: -1 | 1) => void;
+  onAddAfter: (index: number) => void;
+}) {
+  const fields = editableFields(slide);
+  const canDelete = slide.kind !== "cover";
+  return (
+    <div className="card border-accent-600/30 bg-[#16161a] p-4 mt-2 mb-2 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="px-2 py-0.5 rounded-full bg-accent-600/20 border border-accent-500/30 text-accent-200 font-medium">
+            Slide {index + 1} / {total}
+          </span>
+          <span className="text-zinc-500">{KIND_LABEL[slide.kind] || slide.kind}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onMove(index, -1)}
+            disabled={index === 0}
+            className="btn-ghost text-xs px-2 py-1 disabled:opacity-30"
+            title="Monter"
+          >↑</button>
+          <button
+            onClick={() => onMove(index, 1)}
+            disabled={index === total - 1}
+            className="btn-ghost text-xs px-2 py-1 disabled:opacity-30"
+            title="Descendre"
+          >↓</button>
+          <button
+            onClick={() => onAddAfter(index)}
+            className="btn-ghost text-xs px-2 py-1"
+            title="Ajouter une slide de texte après celle-ci"
+          >＋ Texte</button>
+          {canDelete && (
+            <button
+              onClick={() => { if (confirm("Supprimer cette slide ?")) onDelete(index); }}
+              className="btn-ghost text-xs px-2 py-1 text-red-300 hover:text-red-200"
+              title="Supprimer"
+            >🗑</button>
+          )}
+        </div>
+      </div>
+
+      {fields.length === 0 ? (
+        <p className="text-xs text-zinc-500 italic">
+          Cette slide n&apos;a pas de texte libre éditable (contenu dérivé du crawl). Tu peux la déplacer, la supprimer, ou ajouter une slide de texte.
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {fields.map((field) => (
+            <label key={field.key} className="block space-y-1">
+              <span className="label text-[11px]">{field.label}</span>
+              {field.multiline ? (
+                <textarea
+                  value={field.value}
+                  onChange={(e) => onField(index, field.key, e.target.value)}
+                  className={`input w-full text-[13px] leading-relaxed ${field.key === "improved_content" || field.key === "body" ? "font-mono text-[12px]" : ""}`}
+                  rows={field.key === "improved_content" ? 10 : field.key === "body" ? 6 : 3}
+                  spellCheck={false}
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={field.value}
+                  onChange={(e) => onField(index, field.key, e.target.value)}
+                  className="input w-full text-[13px]"
+                />
+              )}
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
