@@ -1928,15 +1928,19 @@ export function SynthesisRadarBody({
 
         {hasAi ? (
           <>
-            {/* Intro paragraph — clamp at 6 lines so it never overflows */}
+            {/* Intro paragraph : two-sentence qualitative angle.
+                Clamp at 5 lines as a safety net (the prompt caps at 35-45
+                words = ~3 lines at this size). Slightly smaller font than
+                body so the eye reads it as the "kicker" of the slide while
+                the radar carries the data weight. */}
             <div
               style={{
                 color: VBT.ink,
                 fontFamily: VBT_FONT.body,
-                fontSize: VBT_TYPO.body,
+                fontSize: VBT_TYPO.bodySm + 1,
                 lineHeight: 1.55,
                 display: "-webkit-box",
-                WebkitLineClamp: 6,
+                WebkitLineClamp: 5,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
               }}
@@ -2083,14 +2087,32 @@ function BestWorstBlock({
 // ROBOTS.TXT current/improved — text left + raw file panel right
 // ===========================================================================
 
+// Cap on lines actually displayed in the panel. Anything beyond is shown
+// via a "+ N lignes" footer so a 500-line legacy robots.txt doesn't blow
+// the slide. The improved panel is naturally capped at 30 by the AI.
+const FILE_PANEL_MAX_LINES = 60;
+
 function FilePanel({ raw, label }: { raw: string; label: string }) {
-  // Render the raw robots.txt content in a mono "code" panel. The user can
-  // also paste a real screenshot in the slide before exporting (the panel
-  // lives in a slot the consultant can manually replace if needed).
-  // Long files clip with overflow-y so the slide never grows.
+  // Render the file in a mono code panel sized to fit the slide WITHOUT
+  // scrolling : font size auto-shrinks based on line count so a 15-line
+  // file reads big and a 50-line file still fits. Slides are static
+  // (no scrollbars in the export), so we never use overflow-y:auto.
+  const allLines = (raw || "").split("\n");
+  const truncated = allLines.length > FILE_PANEL_MAX_LINES;
+  const visibleLines = truncated ? allLines.slice(0, FILE_PANEL_MAX_LINES) : allLines;
+  const visibleText = visibleLines.join("\n");
+  const n = visibleLines.length || 1;
+  // Pick a font size that comfortably fills the ~640px tall panel body
+  // (line-height 1.35) without overflow. Linear ladder.
+  const fontSize =
+    n <= 18 ? 13 :
+    n <= 26 ? 12 :
+    n <= 34 ? 11 :
+    n <= 44 ? 10 :
+    n <= 54 ? 9 : 8;
   return (
     <div
-      className="rounded-xl flex flex-col min-w-0 min-h-0 overflow-hidden"
+      className="rounded-xl flex flex-col min-w-0 min-h-0 overflow-hidden w-full"
       style={{
         background: VBT.paper,
         border: `1px solid ${VBT.paperEdge}`,
@@ -2098,7 +2120,7 @@ function FilePanel({ raw, label }: { raw: string; label: string }) {
       }}
     >
       <div
-        className="flex items-center gap-2"
+        className="flex items-center gap-2 shrink-0"
         style={{
           padding: "8px 14px",
           borderBottom: `1px solid ${VBT.paperEdge}`,
@@ -2110,7 +2132,7 @@ function FilePanel({ raw, label }: { raw: string; label: string }) {
           style={{ width: 7, height: 7, background: VBT.terracotta500 }}
         />
         <span
-          className="uppercase"
+          className="uppercase flex-1"
           style={{
             color: VBT.terracotta700,
             fontWeight: 700,
@@ -2121,21 +2143,48 @@ function FilePanel({ raw, label }: { raw: string; label: string }) {
         >
           {label}
         </span>
+        <span
+          className="tabular-nums"
+          style={{
+            color: VBT.zinc,
+            fontSize: VBT_TYPO.micro,
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          {allLines.length} lignes
+        </span>
       </div>
       <pre
-        className="flex-1 min-h-0 overflow-y-auto whitespace-pre-wrap"
+        className="flex-1 min-h-0 overflow-hidden whitespace-pre-wrap"
         style={{
           margin: 0,
-          padding: "14px 16px",
+          padding: "12px 14px",
           fontFamily: VBT_FONT.mono,
-          fontSize: 11,
-          lineHeight: 1.5,
+          fontSize,
+          lineHeight: 1.35,
           color: VBT.ink,
           background: "#FFFCF7",
         }}
       >
-        {raw}
+        {visibleText}
       </pre>
+      {truncated && (
+        <div
+          className="shrink-0 flex items-center justify-center"
+          style={{
+            padding: "6px 12px",
+            borderTop: `1px dashed ${VBT.paperEdge}`,
+            background: VBT.terracotta50,
+            color: VBT.terracotta700,
+            fontSize: VBT_TYPO.micro,
+            fontFamily: VBT_FONT.mono,
+            fontWeight: 600,
+            letterSpacing: "0.08em",
+          }}
+        >
+          + {allLines.length - FILE_PANEL_MAX_LINES} lignes (voir XLSX)
+        </div>
+      )}
     </div>
   );
 }
