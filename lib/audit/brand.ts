@@ -1,99 +1,114 @@
-// Visibili'tea brand tokens : derived from the logo (terracotta, amber, brick).
-// Used by the audit slide viewer + Excel export so the deliverable looks
-// native to the consultant's brand.
+// Visibili'tea brand tokens — synced to the canonical Design System
+// (colors_and_type.css). Source : the design ZIP the consultant authored.
+// Hex values match 1:1 so the audit deck renders in the brand's exact
+// palette and any future tweak in the DS file gets mirrored here.
 
 export const VBT = {
-  // Terracotta (primary)
-  terracotta50:  "#FAEDE3",
-  terracotta100: "#F5D5BA",
-  terracotta200: "#EBB78D",
-  terracotta300: "#DD9866",
-  terracotta400: "#D17E47",
-  terracotta500: "#C46B30",
-  terracotta600: "#A55720",
-  terracotta700: "#7E411A",
-  terracotta800: "#5A2D11",
+  // Terracotta (primary brand ramp, derived from the logo "V" body).
+  terracotta50:  "#fdf3ec",
+  terracotta100: "#fae0cd",
+  terracotta200: "#f4bf99",
+  terracotta300: "#ec9a64",
+  terracotta400: "#e07a3e",
+  terracotta500: "#d36a2c",   // core brand
+  terracotta600: "#b9551f",
+  terracotta700: "#92421a",
+  terracotta800: "#6b3115",
 
-  // Amber (secondary)
-  amber50:  "#FBF4DE",
-  amber100: "#F2E3B3",
-  amber200: "#E5CD83",
-  amber300: "#D8B962",
-  amber400: "#CCA744",
-  amber500: "#A68526",
-  amber600: "#7C621A",
-  amber700: "#534111",
+  // Amber / ochre (secondary, logo highlights + leaves).
+  amber50:  "#fcf6e6",
+  amber100: "#f7e7b8",
+  amber200: "#efd07f",
+  amber300: "#e7b94e",
+  amber400: "#dba432",   // core amber
+  amber500: "#c08820",
+  amber600: "#966819",
+  amber700: "#6c4a14",
 
-  // Brick (accent / depth)
-  brick50:  "#F8E4E0",
-  brick100: "#E5BDB5",
-  brick200: "#CD9089",
-  brick300: "#B97168",
-  brick400: "#A55448",
-  brick500: "#85382F",
-  brick600: "#642720",
+  // Brick (accent, depth, hover for terracotta).
+  brick50:  "#fbeeec",
+  brick100: "#f3cdc7",
+  brick200: "#e29a8d",
+  brick300: "#cc6a58",
+  brick400: "#b34833",
+  brick500: "#993820",   // deep brick
+  brick600: "#7a2c19",
 
-  // Neutrals for printable slides
-  ink:     "#241712",
-  inkSoft: "#5C4A41",
-  paper:   "#FFFCF7",
-  paperEdge:"#EFE4D8",
-  zinc:    "#9A9189",
+  // Cream / paper (slide backgrounds).
+  cream50:  "#fdfaf4",
+  cream100: "#f9f2e6",
+  cream200: "#f1e6d1",
 
-  // Status (used in charts + KPI tiles, harmonized to the warm palette)
-  good:  "#5C8B4D",   // sage green that fits the warm palette
-  warn:  "#D8B962",   // amber 300
-  bad:   "#A55448",   // brick 400
-  info:  "#C46B30",   // terracotta 500
+  // Ink / warm-biased neutrals (text, borders, divider lines).
+  ink:       "#1a1814",   // ink-800 in the DS, primary text
+  inkSoft:   "#2a2722",   // ink-700, slightly softer
+  ink2:      "#5f5a4e",   // ink-500, secondary
+  ink3:      "#8a8475",   // ink-400, tertiary / captions
+  paper:     "#fdfaf4",   // cream-50
+  paperEdge: "#e6d4b3",   // cream-300, hairlines
+  zinc:      "#8a8475",   // alias for ink-400
 
-  // Semantic urgency palette (4.6) : crisp signal colors that read well at
-  // a glance in cards / lanes / scatter dots. Used by priority lanes, KPI
-  // tone overrides and scatter colorings.
-  sigRed:    "#DC2626",
-  sigOrange: "#EA580C",
-  sigGreen:  "#16A34A",
-  sigBlue:   "#2563EB",
+  // Status (DS semantic palette). Used in KPI tiles, chart fills, ribbons.
+  good:    "#2f7d4f",
+  goodBg:  "#e6f3eb",
+  warn:    "#c98410",
+  warnBg:  "#fcf2dc",
+  bad:     "#b3331a",
+  badBg:   "#fbe3dd",
+  info:    "#2a6f8e",
+  infoBg:  "#e1eef5",
+
+  // Semantic urgency aliases used by Kanban lanes / scatter dots / pills.
+  // Mapped to the DS semantic palette so everything stays cohesive
+  // (no neon red/blue dropped on a warm cream slide).
+  sigRed:    "#b3331a",
+  sigOrange: "#c98410",
+  sigGreen:  "#2f7d4f",
+  sigBlue:   "#2a6f8e",
 } as const;
 
-// Typography tokens (4.1, 4.13) : single source of truth for the deck so
-// every slide reads from the same hierarchy. Numbers are in CSS px, all
-// authored against the 1600×900 slide canvas.
+// Typography tokens : single source of truth for the slide deck so every
+// slide reads from the same hierarchy. Numbers are in CSS px, authored
+// against the 1600×900 slide canvas. Mirrors the DS modular scale (~1.2/1.25).
 export const VBT_TYPO = {
   heroNumber:  72,  // cover score, sparse hero KPIs
-  pageTitle:   36,  // h2 in slide header
-  subhead:     22,  // section eyebrows, large takeaways
-  body:        17,  // primary text content
-  bodySm:      14,  // table / dense
-  caption:     12,  // labels / footnotes
-  micro:       10,  // ALL CAPS labels / metadata
+  pageTitle:   38,  // h2 in slide header (DS --fs-3xl)
+  subhead:     24,  // section eyebrows, large takeaways (DS --fs-xl)
+  body:        16,  // primary text content (DS --fs-base)
+  bodySm:      14,  // table / dense (DS --fs-sm)
+  caption:     12,  // labels / footnotes (DS --fs-xs)
+  micro:       11,  // ALL CAPS labels / metadata
 } as const;
 
 export const VBT_SPACING = {
-  slidePadX: 80,    // 4.14 : horizontal breathing room (cover/section)
-  slidePadXTight: 56, // for data slides where we need slightly more space for charts
-  slidePadY: 48,    // vertical padding
+  slidePadX: 80,
+  slidePadXTight: 56,
+  slidePadY: 48,
 } as const;
 
 export const VBT_NAME = "Visibili'tea";
 
-// Font-family stacks (editorial tri-stack). Reference these instead of
-// hard-coding the CSS-var + fallback string in every component.
+// Font-family stacks. The DS pins everything on Montserrat + Poppins
+// (titles + body). No Calistoga, no JetBrains Mono : the mono stack
+// uses the OS system mono.
 export const VBT_FONT = {
-  // Warm display serif : hero numbers, cover + section titles, slide H2.
-  display: "var(--font-vbt-display), 'Calistoga', Georgia, 'Times New Roman', serif",
-  // Geometric sans : precise tabular data, KPI values, numeric emphasis.
-  title: "var(--font-vbt-title), 'Montserrat', system-ui, sans-serif",
-  // Humanist sans : body copy, descriptions, table cells.
-  body: "var(--font-vbt-body), 'Poppins', system-ui, sans-serif",
-  // Technical mono : uppercase micro-labels, kickers, badges, axis labels.
-  mono: "var(--font-vbt-mono), 'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
+  // Display moments (cover hero, big KPI figures) : Montserrat 800 with
+  // very tight tracking, the same recipe the DS uses for .vt-h1.
+  display: "var(--font-vbt-title), 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif",
+  // Titles / structural type : Montserrat 600-800.
+  title:   "var(--font-vbt-title), 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif",
+  // Body copy : Poppins 400-500.
+  body:    "var(--font-vbt-body), 'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif",
+  // Mono : system stack only.
+  mono:    "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
 } as const;
 
-// Severity → palette (background, foreground, fill for Excel : argb)
+// Severity → palette (background, foreground, ARGB strings for ExcelJS).
+// Synced to the DS semantic palette so the XLSX matches the slide rendering.
 export const SEVERITY = {
-  critical: { bg: "#F8E4E0", fg: "#642720", argbBg: "FFF8E4E0", argbFg: "FF642720" },
-  high:     { bg: "#FBE9D6", fg: "#7E411A", argbBg: "FFFBE9D6", argbFg: "FF7E411A" },
-  medium:   { bg: "#FBF4DE", fg: "#7C621A", argbBg: "FFFBF4DE", argbFg: "FF7C621A" },
-  low:      { bg: "#F4F1E6", fg: "#534111", argbBg: "FFF4F1E6", argbFg: "FF534111" },
-  info:     { bg: "#F1ECE6", fg: "#5C4A41", argbBg: "FFF1ECE6", argbFg: "FF5C4A41" },
+  critical: { bg: "#fbe3dd", fg: "#7a2c19", argbBg: "FFFBE3DD", argbFg: "FF7A2C19" },
+  high:     { bg: "#fcecdd", fg: "#92421a", argbBg: "FFFCECDD", argbFg: "FF92421A" },
+  medium:   { bg: "#fcf2dc", fg: "#6c4a14", argbBg: "FFFCF2DC", argbFg: "FF6C4A14" },
+  low:      { bg: "#f4f1e6", fg: "#5f5a4e", argbBg: "FFF4F1E6", argbFg: "FF5F5A4E" },
+  info:     { bg: "#e1eef5", fg: "#2a6f8e", argbBg: "FFE1EEF5", argbFg: "FF2A6F8E" },
 } as const;

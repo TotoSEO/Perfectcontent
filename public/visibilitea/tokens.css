@@ -1,0 +1,253 @@
+/* =============================================================
+   Visibili'tea — Colors & Type
+   Brand: warm, artisanal, calm. Tea-shop palette: terracotta,
+   amber, golden ochre, deep brick. Pairs with cream and ink.
+   ============================================================= */
+
+/* --- Webfonts -------------------------------------------------
+   Titles: Montserrat (geometric, confident, slightly modern).
+   Body:   Poppins (rounded, approachable, very readable).
+   Both are free on Google Fonts.
+   ------------------------------------------------------------- */
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap");
+
+:root {
+  /* ---------- Brand color ramps ---------- */
+  /* Terracotta — primary brand, derived from logo "V" body */
+  --terracotta-50:  #fdf3ec;
+  --terracotta-100: #fae0cd;
+  --terracotta-200: #f4bf99;
+  --terracotta-300: #ec9a64;
+  --terracotta-400: #e07a3e;
+  --terracotta-500: #d36a2c;   /* core terracotta */
+  --terracotta-600: #b9551f;
+  --terracotta-700: #92421a;
+  --terracotta-800: #6b3115;
+  --terracotta-900: #432010;
+
+  /* Amber/Ochre — secondary, derived from logo highlights & leaves */
+  --amber-50:  #fcf6e6;
+  --amber-100: #f7e7b8;
+  --amber-200: #efd07f;
+  --amber-300: #e7b94e;
+  --amber-400: #dba432;   /* core amber */
+  --amber-500: #c08820;
+  --amber-600: #966819;
+  --amber-700: #6c4a14;
+  --amber-800: #443010;
+
+  /* Brick — accent, depth, hover for terracotta */
+  --brick-50:  #fbeeec;
+  --brick-100: #f3cdc7;
+  --brick-200: #e29a8d;
+  --brick-300: #cc6a58;
+  --brick-400: #b34833;
+  --brick-500: #993820;   /* deep brick */
+  --brick-600: #7a2c19;
+  --brick-700: #582013;
+
+  /* Cream / paper — backgrounds, surfaces */
+  --cream-50:  #fdfaf4;
+  --cream-100: #f9f2e6;
+  --cream-200: #f1e6d1;
+  --cream-300: #e6d4b3;
+
+  /* Ink / neutrals — type, borders, UI greys with a warm bias */
+  --ink-50:  #faf8f5;
+  --ink-100: #efece6;
+  --ink-200: #d9d4c9;
+  --ink-300: #b8b1a3;
+  --ink-400: #8a8475;
+  --ink-500: #5f5a4e;
+  --ink-600: #423e35;
+  --ink-700: #2a2722;
+  --ink-800: #1a1814;
+  --ink-900: #100f0c;
+
+  /* Semantic */
+  --success: #2f7d4f;
+  --success-bg: #e6f3eb;
+  --warning: #c98410;
+  --warning-bg: #fcf2dc;
+  --danger: #b3331a;
+  --danger-bg: #fbe3dd;
+  --info: #2a6f8e;
+  --info-bg: #e1eef5;
+
+  /* ---------- Aliases (semantic) ---------- */
+  --brand:        var(--terracotta-500);
+  --brand-hover:  var(--terracotta-600);
+  --brand-press:  var(--terracotta-700);
+  --brand-soft:   var(--terracotta-50);
+  --accent:       var(--amber-400);
+  --accent-soft:  var(--amber-50);
+
+  --bg:           var(--cream-50);
+  --bg-soft:      var(--cream-100);
+  --bg-muted:     var(--cream-200);
+  --surface:      #ffffff;
+
+  --fg:           var(--ink-800);     /* primary text */
+  --fg-1:         var(--ink-700);     /* slightly soft */
+  --fg-2:         var(--ink-500);     /* secondary text */
+  --fg-3:         var(--ink-400);     /* tertiary, captions */
+  --fg-on-brand:  #ffffff;
+
+  --border:       var(--ink-200);
+  --border-soft:  var(--ink-100);
+  --border-strong:var(--ink-300);
+
+  /* ---------- Type families ---------- */
+  --font-display: "Montserrat", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body:    "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ---------- Type scale (modular, ~1.2 / 1.25) ---------- */
+  --fs-xs:   12px;
+  --fs-sm:   14px;
+  --fs-base: 16px;
+  --fs-md:   18px;
+  --fs-lg:   20px;
+  --fs-xl:   24px;
+  --fs-2xl:  30px;
+  --fs-3xl:  38px;
+  --fs-4xl:  48px;
+  --fs-5xl:  60px;
+  --fs-6xl:  76px;
+
+  /* ---------- Weights ---------- */
+  --fw-light:    300;
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+  --fw-black:    800;
+
+  /* ---------- Line heights ---------- */
+  --lh-tight:  1.1;
+  --lh-snug:   1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed:1.7;
+
+  /* ---------- Tracking ---------- */
+  --tr-tight:  -0.02em;
+  --tr-normal: 0;
+  --tr-wide:   0.04em;
+  --tr-eyebrow:0.14em;
+
+  /* ---------- Spacing scale (4px base) ---------- */
+  --s-0:  0;
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+  --s-20: 80px;
+  --s-24: 96px;
+
+  /* ---------- Radii ---------- */
+  --r-xs:    4px;
+  --r-sm:    8px;
+  --r-md:    12px;   /* default for cards / inputs */
+  --r-lg:    18px;
+  --r-xl:    24px;
+  --r-pill:  999px;
+
+  /* ---------- Shadows ---------- */
+  --shadow-xs: 0 1px 2px rgba(67, 32, 16, 0.06);
+  --shadow-sm: 0 1px 3px rgba(67, 32, 16, 0.08), 0 1px 2px rgba(67, 32, 16, 0.04);
+  --shadow-md: 0 6px 16px rgba(67, 32, 16, 0.10), 0 2px 4px rgba(67, 32, 16, 0.05);
+  --shadow-lg: 0 18px 40px rgba(67, 32, 16, 0.14), 0 4px 10px rgba(67, 32, 16, 0.06);
+  --shadow-glow: 0 8px 28px rgba(211, 106, 44, 0.28);
+
+  /* ---------- Motion ---------- */
+  --ease-out:  cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast:  120ms;
+  --dur-base:  200ms;
+  --dur-slow:  360ms;
+
+  /* ---------- Layout ---------- */
+  --container:    1200px;
+  --container-sm:  900px;
+  --container-xs:  640px;
+}
+
+/* =============================================================
+   Semantic element styles
+   ============================================================= */
+
+.vt-h1, .vt-h2, .vt-h3, .vt-h4, .vt-eyebrow {
+  font-family: var(--font-display);
+  color: var(--fg);
+  margin: 0;
+}
+
+.vt-h1 {
+  font-size: var(--fs-5xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tight);
+}
+.vt-h2 {
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tight);
+}
+.vt-h3 {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+.vt-h4 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+.vt-eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.vt-p {
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-1);
+  margin: 0;
+}
+.vt-lead {
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-2);
+}
+.vt-small {
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+}
+.vt-caption {
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tr-wide);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.vt-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--bg-muted);
+  padding: 2px 6px;
+  border-radius: var(--r-xs);
+  color: var(--ink-700);
+}

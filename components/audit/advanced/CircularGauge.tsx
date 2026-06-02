@@ -64,7 +64,7 @@ export function CircularGauge({
           style={{
             color: scoreColor,
             fontFamily: VBT_FONT.display,
-            fontWeight: 400,
+            fontWeight: 800,
             fontSize: Math.round(size * 0.4),
             letterSpacing: "-0.02em",
             lineHeight: 0.95,
