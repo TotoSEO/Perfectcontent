@@ -24,7 +24,7 @@ import {
 } from "@/components/audit/advanced/SlideContent";
 import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
 import { DownloadIcon, PrinterIcon } from "@/components/audit/advanced/Icons";
-import { VBT, VBT_TYPO, VBT_FONT } from "@/lib/audit/brand";
+import { VBT, VBT_TYPO, VBT_FONT, hardShadow } from "@/lib/audit/brand";
 import type { AdvReport, AdvSlide as AdvSlideType, AdvSubcategory } from "@/lib/audit/advanced/types";
 
 type AuditOut = {
@@ -1022,16 +1022,26 @@ function collectIndexableUrls(audit: AuditOut): string[] {
 }
 
 function BigStat({ label, value }: { label: string; value: string | number }) {
+  // Sticker stat card : ink border + hard shadow (DS look).
   return (
-    <div className="min-w-0">
+    <div
+      className="min-w-0"
+      style={{
+        background: VBT.paper,
+        border: `1.5px solid ${VBT.ink}`,
+        borderRadius: 14,
+        boxShadow: hardShadow(3),
+        padding: "12px 14px",
+      }}
+    >
       <div
         className="tabular-nums"
         style={{
-          color: VBT.terracotta700,
+          color: VBT.terracotta600,
           fontFamily: VBT_FONT.display,
-          fontSize: 42,
-          fontWeight: 400,
-          letterSpacing: "-0.01em",
+          fontSize: 40,
+          fontWeight: 800,
+          letterSpacing: "-0.02em",
           lineHeight: 1,
         }}
       >
@@ -1040,11 +1050,11 @@ function BigStat({ label, value }: { label: string; value: string | number }) {
       <div
         className="uppercase truncate mt-1.5"
         style={{
-          color: VBT.zinc,
-          fontWeight: 600,
+          color: VBT.ink2,
+          fontWeight: 700,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.16em",
-          fontFamily: VBT_FONT.mono,
+          letterSpacing: "0.12em",
+          fontFamily: VBT_FONT.title,
         }}
         title={label}
       >
