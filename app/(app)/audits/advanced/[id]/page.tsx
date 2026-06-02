@@ -309,35 +309,54 @@ export default function AdvancedAuditPage() {
     setExporting(true);
     setExportErr(null);
     try {
-      // Re-hydrate full subcategories with issues for the export.
-      const fullSections = audit.summary.sections.map((s) => ({
-        ...s,
-        subcategories: s.subcategories.map((sub) => ({
-          ...sub,
-          issues_full: audit.issues!.categories[sub.id] || [],
-        })),
-      }));
-      const fullReport: AdvReport = {
-        ...audit.summary,
-        sections: fullSections,
-        slides: audit.summary.slides,
-        // Legacy audits saved before the diagnostics field was added :         // give the exporter a safe default so the Exclusions sheet
-        // still renders with zeros instead of crashing.
-        diagnostics: audit.summary.diagnostics || {
-          pagination_excluded_count: 0,
-          html_pages_count: audit.summary.html_count || 0,
-          indexable_html_count: 0,
-          contextual_links_count: 0,
-          editorial_links_count: 0,
-          empty_editorial_anchor_count: 0,
-        },
-      };
       const { exportAdvancedToXlsx } = await import("@/lib/audit/advanced/export");
-      await exportAdvancedToXlsx(fullReport, audit.name);
+      await exportAdvancedToXlsx(buildFullReport(), audit.name);
     } catch (e) {
       setExportErr(String(e));
     } finally {
       setExporting(false);
+    }
+  }
+
+  // Rebuild the full AdvReport (with hydrated issue rows) for the exporters.
+  // Both XLSX and Markdown exporters consume this shape.
+  function buildFullReport(): AdvReport {
+    const fullSections = audit!.summary!.sections.map((s) => ({
+      ...s,
+      subcategories: s.subcategories.map((sub) => ({
+        ...sub,
+        issues_full: audit!.issues!.categories[sub.id] || [],
+      })),
+    }));
+    return {
+      ...audit!.summary!,
+      sections: fullSections,
+      // Use the live (possibly edited) slides : capture user text edits +
+      // anchor exclusions in the export.
+      slides: slides,
+      diagnostics: audit!.summary!.diagnostics || {
+        pagination_excluded_count: 0,
+        html_pages_count: audit!.summary!.html_count || 0,
+        indexable_html_count: 0,
+        contextual_links_count: 0,
+        editorial_links_count: 0,
+        empty_editorial_anchor_count: 0,
+      },
+    };
+  }
+
+  const [exportingMd, setExportingMd] = useState(false);
+  async function exportMarkdown() {
+    if (!audit?.issues || !audit.summary) return;
+    setExportingMd(true);
+    setExportErr(null);
+    try {
+      const { exportAdvancedToMarkdown } = await import("@/lib/audit/advanced/export-md");
+      await exportAdvancedToMarkdown(buildFullReport(), audit.name);
+    } catch (e) {
+      setExportErr(`Échec export Markdown : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExportingMd(false);
     }
   }
 
@@ -562,6 +581,15 @@ export default function AdvancedAuditPage() {
               >
                 <DownloadIcon size={15} color="currentColor" />
                 {exporting ? "Export en cours…" : "Exporter le fichier XLSX"}
+              </button>
+              <button
+                onClick={exportMarkdown}
+                disabled={exportingMd || !audit.issues}
+                className="btn-secondary text-sm inline-flex items-center gap-2"
+                title="Exporte un .md complet (scores, slides, échantillons d'issues, priorités). Destiné à être relu par une IA pour un contrôle d'incohérences."
+              >
+                <DownloadIcon size={15} color="currentColor" />
+                {exportingMd ? "Export en cours…" : "Exporter en Markdown (IA)"}
               </button>
               <button onClick={deleteAudit} className="btn-ghost text-xs">Supprimer</button>
             </>
