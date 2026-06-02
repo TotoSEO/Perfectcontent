@@ -42,8 +42,14 @@ function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+// Convert a "% of problematic items" ratio (0..1) into a 0..100 score.
+// Calibration : 0 % bad → 100, 1 % → 97, 5 % → 85, 10 % → 71, 20 % → 49,
+// 50 % → 11, 100 % → 0. The curve is concave so the first issues hurt
+// more than the last ones (a 10 % broken-meta site is no longer "90/100,
+// looks fine" but 71/100, which matches consultant intuition).
 function scoreFromRatio(badRatio: number): number {
-  return Math.round(clamp(100 * (1 - clamp(badRatio, 0, 1))));
+  const r = clamp(badRatio, 0, 1);
+  return Math.round(100 * Math.pow(1 - r, 3.2));
 }
 
 // Build the recommendation slides for a section, chunked so each slide
@@ -426,7 +432,8 @@ function buildIndexabilityCrawl(
   const subNoindex: AdvSubcategory = {
     id: "noindex_pages",
     label: "Pages en noindex",
-    score: 100, // décorrélé : voir commentaire ci-dessus
+    score: 100,
+    weight: 0, // informational, never pulls the section score up or down // décorrélé : voir commentaire ci-dessus
     issues_full: noindexRows,
     columns: [
       { key: "indexability_status", label: "Raison", width: 35 },
@@ -461,12 +468,18 @@ function buildIndexabilityCrawl(
   const recoSlides = buildRecoSlides("indexability_crawl", "Recommandations : Indexabilité & crawl");
 
   const subcategories = [subRobots, subDepth, subHttp, subHreflang, subCanonical, subNoindex];
-  const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
+  const sectionScore = (() => {
+    // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
+    // does not dilute a real failure in another sub.
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "indexability_crawl",
     label: "Indexabilité & crawl",
     score: sectionScore,
-    weight: 20,
+    weight: 18,
     summary: `${tooDeep} pages > prof. 4 · ${s4 + s5} URLs en erreur · ${missingCanon} sans canonical · ${noindexRows.length} noindex`,
     subcategories,
   };
@@ -607,12 +620,18 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
   const recoSlides = buildRecoSlides("performance", "Recommandations : Performance");
 
   const subcategories = [subResp, subWeight];
-  const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
+  const sectionScore = (() => {
+    // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
+    // does not dilute a real failure in another sub.
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "performance",
     label: "Performance",
     score: sectionScore,
-    weight: 15,
+    weight: 14,
     summary: `${slow + verySlow} pages > 1 s TTFB · ${over2m} pages > 2 Mo HTML`,
     subcategories,
   };
@@ -675,7 +694,9 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
     if (mlen > 0 && mlen < 70) tmIssues.push(toRow(r.url, "low", { type: "Meta", reason: `Trop courte (${mlen}c)`, length: mlen }));
     if (mlen > 155) tmIssues.push(toRow(r.url, "low", { type: "Meta", reason: `Trop longue (${mlen}c)`, length: mlen }));
   }
-  if (titleSameH1) for (const line of titleSameH1.rows) tmIssues.push(toRow(line.url, "low", { type: "Title", reason: "Identique au H1" }));
+  // titleSameH1 is NOT pushed to tmIssues : its severity is "low" and it
+  // would inflate issues_count beyond what the KPIs add up to. The
+  // information stays surfaced via the section summary text below.
 
   const subTitlesMeta: AdvSubcategory = {
     id: "titles_meta_basic",
@@ -797,12 +818,18 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
   const recoSlides = buildRecoSlides("meta", "Recommandations : Balises & métadonnées");
 
   const subcategories = [subTitlesMeta, subTitleDup, subMetaDup, subH1Dup];
-  const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
+  const sectionScore = (() => {
+    // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
+    // does not dilute a real failure in another sub.
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "meta",
     label: "Balises & métadonnées",
     score: sectionScore,
-    weight: 15,
+    weight: 13,
     summary: `${titleMissing + metaMissing + h1Missing} balises manquantes · ${titleDupRows.length + metaDupRows.length + h1DupRows.length} doublons`,
     subcategories,
   };
@@ -907,7 +934,13 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
   const recoSlides = buildRecoSlides("structure", "Recommandations : Structure de contenu");
 
   const subcategories = [subHn, subHier];
-  const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
+  const sectionScore = (() => {
+    // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
+    // does not dilute a real failure in another sub.
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "structure",
     label: "Structure de contenu",
@@ -1081,7 +1114,9 @@ function buildLinking(
     label: "Liens rompus",
     // Broken links should be ZERO. Strict scoring : even a small ratio
     // (1% of pages with broken links) drops the score significantly.
-    score: scoreStrict(brokenIssues.length / Math.max(rows.length, 1), 0.005),
+    // Denominator = HTML pages (not the full crawl which includes JS/CSS/
+    // image assets). One broken link per page is the meaningful ratio.
+    score: scoreStrict(brokenIssues.length / Math.max(html.length, 1), 0.005),
     issues_full: brokenIssues,
     columns: [
       { key: "type", label: "Origine", width: 12 },
@@ -1102,10 +1137,14 @@ function buildLinking(
       { label: "Internes 4xx/5xx", value: internalTotal, tone: internalTotal > 0 ? "bad" : "ok" },
       { label: "Externes 4xx", value: external4xxTotal, tone: external4xxTotal > 0 ? "warn" : "ok" },
       { label: "Externes 5xx", value: external5xxTotal, tone: external5xxTotal > 0 ? "bad" : "ok" },
-      { label: "Total", value: brokenIssues.length, tone: brokenIssues.length > 0 ? "warn" : "ok" },
+      // Total = sum of unique-URL KPIs above (NOT row count), so the four
+      // KPIs are arithmetically consistent for the consultant.
+      { label: "Total", value: internalTotal + external4xxTotal + external5xxTotal, tone: (internalTotal + external4xxTotal + external5xxTotal) > 0 ? "warn" : "ok" },
     ],
     xlsx_sheet: brokenIssues.length > 0 ? subBroken.xlsx_sheet : undefined,
-    issues_count: brokenIssues.length,
+    // The pill in the slide header reads this : align it with the Total KPI
+    // so the same number appears in both places.
+    issues_count: internalTotal + external4xxTotal + external5xxTotal,
   };
 
   // ----- Liens internes 301 (chaînes de redirection) -----
@@ -1375,12 +1414,18 @@ function buildLinking(
   const recoSlides = buildRecoSlides("linking", "Recommandations : Maillage interne");
 
   const subcategories = [subOverview, subBroken, subRedirects, subHttp, subOrphans, ...subAnchor];
-  const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
+  const sectionScore = (() => {
+    // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
+    // does not dilute a real failure in another sub.
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "linking",
     label: "Maillage interne",
     score: sectionScore,
-    weight: 20,
+    weight: 18,
     summary: `${orphans} orphelines · ${brokenIssues.length} liens rompus · ${anchors ? `${anchors.total_links_filtered.toLocaleString("fr-FR")} liens contextuels analysés` : "ancres non analysées (liens_entrants_tous.csv manquant)"}`,
     subcategories,
   };
@@ -1646,12 +1691,18 @@ function buildImages(
   const recoSlides = buildRecoSlides("images", "Recommandations : Images");
 
   const subcategories = [subAlt, subSize, subWeight, subFormats];
-  const sectionScore = Math.round(subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length);
+  const sectionScore = (() => {
+    // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
+    // does not dilute a real failure in another sub.
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "images",
     label: "Images",
     score: sectionScore,
-    weight: 10,
+    weight: 9,
     summary: `${imagesList.length.toLocaleString("fr-FR")} images · ${altRows.length} sans alt · ${sizeAttrRows.length} sans dimensions · ${heavyCount + veryHeavy} > 100 Ko`,
     subcategories,
   };
@@ -1749,10 +1800,19 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
     : [];
   // Scores stay neutral (50) when the homepage couldn't be analysed : we
   // must not tank the global score on data we never actually fetched.
+  // Granular score (was binary 0 / 100). The recipe : 0 schemas = 30 (bad
+  // but not catastrophic), 1-2 = 60, 3-4 = 80, 5+ = 100. A site with only
+  // Organization shouldn't get 100 just because *one* schema exists.
+  const detectedScore = !homepageFetched
+    ? 50
+    : schemasFound.size >= 5 ? 100
+    : schemasFound.size >= 3 ? 80
+    : schemasFound.size >= 1 ? 60
+    : 30;
   const subDetected: AdvSubcategory = {
     id: "schemas_detected",
     label: "JSON-LD détectés",
-    score: !homepageFetched ? 50 : schemasFound.size > 0 ? 100 : 0,
+    score: detectedScore,
     issues_full: [],
     columns: [],
     xlsx_sheet: "Données structurées",
@@ -1773,14 +1833,16 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
   const recoSlides = buildRecoSlides("structured_data", "Recommandations : Données structurées");
 
   const subcategories = [subDetected, subMissing];
-  const sectionScore = Math.round(
-    subcategories.reduce((s, c) => s + c.score, 0) / subcategories.length,
-  );
+  const sectionScore = (() => {
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "structured_data",
     label: "Données structurées",
     score: sectionScore,
-    weight: 8,
+    weight: 7,
     summary: homepageFetched
       ? `${blocksCount} blocs JSON-LD · ${schemasFound.size} schémas distincts · ${missing.length} schémas critiques manquants`
       : "Page d'accueil non analysée automatiquement : à vérifier manuellement",
@@ -1960,17 +2022,31 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
   };
   const recoSlides = buildRecoSlides("geo", "Recommandations : Optimisation pour les IA (GEO)");
 
-  // Score: penalize blocked bots more than missing declarations
-  const botsScore = scoreFromRatio((blocked.length * 1 + Math.min(missing.length, 8) * 0.1) / 8);
-  const headersScore = subHeaders.score;
-  const llmsScore = llmsFetched ? 100 : 60;
-  const subcategories = [subBots, subHeaders];
-  const sectionScore = Math.round((botsScore + headersScore + llmsScore) / 3);
+  // ----- Per-subcategory scores (no double-computation, no orphan llms) ---
+  // We expose 3 subcategories so the section's score === avg(subs) is
+  // reproducible from the slide data. The previous implementation built
+  // botsScore with a different formula than subBots.score and averaged
+  // an llmsScore that wasn't backed by any subcategory : section/slide
+  // would disagree.
+  const subLlms: AdvSubcategory = {
+    id: "llms_txt",
+    label: "Fichier llms.txt",
+    score: llmsFetched ? 100 : 50,
+    issues_full: [],
+    columns: [],
+    xlsx_sheet: "llms.txt",
+  };
+  const subcategories = [subBots, subLlms, subHeaders];
+  const sectionScore = (() => {
+    const totalW = subcategories.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+    const sum = subcategories.reduce((a, c) => a + c.score * (c.weight ?? 1), 0);
+    return Math.round(sum / totalW);
+  })();
   const section: AdvSection = {
     id: "geo",
     label: "Optimisation pour les IA (GEO)",
     score: sectionScore,
-    weight: 12,
+    weight: 11,
     summary: `${declared.length}/${ALL_IA_BOTS.length} bots IA déclarés · llms.txt ${llmsFetched ? "présent" : "absent"} · ${sampled > 0 ? `${withEtag}/${sampled} ETag` : "headers non échantillonnés"}`,
     subcategories,
   };
@@ -1980,15 +2056,19 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
 
 // ---------- Priorities -----------------------------------------------------
 
+// Priority urgency multiplier per section. Derived from the section weight
+// (the same number that drives the global score) so the two systems can
+// never disagree on which section matters most. Normalised so the mean is
+// ~1.0 : a 14 % weight section gets a 1.0× multiplier.
 const SECTION_WEIGHT_FOR_PRIORITY: Record<string, number> = {
-  indexability_crawl: 1.2,
-  performance: 1.0,
-  meta: 0.9,
-  structure: 0.7,
-  linking: 1.1,
-  images: 0.7,
-  structured_data: 0.9,
-  geo: 1.0,
+  indexability_crawl: 18 / 12.5,  // 1.44
+  performance:        14 / 12.5,  // 1.12
+  meta:               13 / 12.5,  // 1.04
+  structure:          10 / 12.5,  // 0.80
+  linking:            18 / 12.5,  // 1.44
+  images:              9 / 12.5,  // 0.72
+  structured_data:     7 / 12.5,  // 0.56
+  geo:                11 / 12.5,  // 0.88
 };
 
 const SEV_WEIGHT: Record<string, number> = {

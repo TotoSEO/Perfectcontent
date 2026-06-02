@@ -276,6 +276,12 @@ export type AdvSubcategory = {
   id: string;
   label: string;
   score: number;
+  // Relative weight inside the parent section, used by the section score
+  // aggregation. Default 1 (equal weight). A subcategory pinned at score
+  // 100 for informational reasons (noindex_pages, schemas_detected when
+  // homepage didn't fetch…) should have weight 0 so it doesn't dilute
+  // the real signal.
+  weight?: number;
   // Issues full set (used in the XLSX). The slide gets a summary count + the
   // top items only for context.
   issues_full: AdvIssueRow[];
