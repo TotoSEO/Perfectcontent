@@ -1338,7 +1338,12 @@ function buildLinking(
       sub_id: "anchors_low_diversity",
       title: "URLs avec ancres de lien pas assez variées",
       description: DESC.anchor_low_diversity,
-      rows: lowDivRows.slice(0, 5),
+      // Pass the FULL candidate list, sorted worst-first. The slide picks
+      // the first 4 non-excluded ones at render time, so the consultant
+      // can dismiss off-topic pages (RGPD, mentions légales…) and the
+      // next-worst takes its place automatically.
+      rows: lowDivRows,
+      excluded_destinations: [],
       total_concerned: lowDivRows.length,
       xlsx_sheet: lowDivRows.length > 0 ? "Ancres peu variees" : undefined,
       issues_count: lowDivRows.length,
@@ -1915,7 +1920,7 @@ function buildGeo(rows: InternalRow[], res: SiteResources | null): { section: Ad
     section_id: "geo",
     sub_id: "http_headers",
     title: "Headers ETag & Last-Modified",
-    description: DESC_EXT.http_headers + `\n\nMéthode : nous envoyons 5 requêtes HEAD (page d'accueil + 4 URLs du sitemap) et comptons combien renvoient un ETag et un Last-Modified. Si le serveur ne les renvoie sur aucune des 5 URLs testées, la configuration manque au niveau CDN ou framework et la conclusion vaut pour l'ensemble du site.`,
+    description: DESC_EXT.http_headers,
     kpis: sampled === 0
       ? [
           // The server-side HEAD sampling did not return (WAF, timeout,
@@ -2349,9 +2354,21 @@ export function analyzeAdvanced(
     });
   }
 
-  const prioritySlide: AdvSlide = {
+  // Priority page is split in TWO slides : (1) kanban lanes by urgency,
+  // (2) AI consultant synthesis. Splitting keeps both readable ; the
+  // single-slide layout was cramming the lanes and clipping the AI text.
+  const prioritySlideKanban: AdvSlide = {
     kind: "priority",
+    view: "kanban",
     title: "Priorisation des corrections",
+    items: priorities,
+    ai_summary: null,
+    ai_summary_error: null,
+  };
+  const prioritySlideSynthesis: AdvSlide = {
+    kind: "priority",
+    view: "synthesis",
+    title: "Priorisation : synthèse consultant",
     items: priorities,
     ai_summary: null,
     ai_summary_error: null,
@@ -2376,7 +2393,8 @@ export function analyzeAdvanced(
     ...slImg,
     ...slSD,
     ...slGeo,
-    prioritySlide,
+    prioritySlideKanban,
+    prioritySlideSynthesis,
   ];
 
   const diagnostics: AdvReport["diagnostics"] = {

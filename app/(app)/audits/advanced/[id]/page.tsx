@@ -423,6 +423,34 @@ export default function AdvancedAuditPage() {
     });
   }
 
+  // Toggle a destination URL in the anchor-low-diversity slide's exclusion
+  // list. Excluded URLs are skipped in the visible top-4 ; the next-worst
+  // URL takes their place. Persisted on "Enregistrer les modifications".
+  function toggleAnchorExclusion(index: number, destination: string) {
+    if (!editMode) {
+      // First click in non-edit mode : enter edit mode so the user sees
+      // the exclusion footer + can save. We seed editedSlides from the
+      // current slides (same logic as the manual "Modifier" button).
+      const clone: AdvSlideType[] = JSON.parse(JSON.stringify(slides));
+      for (const s of clone) {
+        if (s.kind === "cover") s.audit_name = "";
+      }
+      setEditedSlides(clone);
+      setEditMode(true);
+    }
+    setEditedSlides((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      const s = next[index];
+      if (s?.kind !== "anchor-low-diversity") return prev;
+      const current = new Set(s.excluded_destinations || []);
+      if (current.has(destination)) current.delete(destination);
+      else current.add(destination);
+      next[index] = { ...s, excluded_destinations: [...current] };
+      return next;
+    });
+  }
+
   async function saveEdits() {
     if (!audit?.summary || !editedSlides) return;
     setSavingEdits(true);
@@ -579,7 +607,7 @@ export default function AdvancedAuditPage() {
                 index={i}
                 total={total}
                 variant="cover"
-                footer={audit.source_filename ? `Source : ${audit.source_filename}` : "Audit technique avancé SEO"}
+                footer="Audit technique avancé SEO"
               >
                 <div className="flex-1 grid grid-cols-12 gap-10 min-h-0 items-center">
                   <div className="col-span-7 min-w-0 space-y-6">
@@ -617,11 +645,18 @@ export default function AdvancedAuditPage() {
                       style={{
                         fontFamily: VBT_FONT.display,
                         fontWeight: 800,
-                        fontSize: 66,
-                        letterSpacing: "-0.015em",
+                        fontSize: 60,
+                        letterSpacing: "-0.02em",
                         color: VBT.ink,
                         wordBreak: "break-word",
+                        // 2-line cap so a long client name (3+ lines) never
+                        // pushes the BigStat row out of the slide box.
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
                       }}
+                      title={audit.name}
                     >
                       {audit.name}
                     </h1>
@@ -648,11 +683,9 @@ export default function AdvancedAuditPage() {
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-4 gap-5 pt-3">
+                    <div className="grid grid-cols-2 gap-5 pt-3" style={{ maxWidth: 460 }}>
                       <BigStat label="URLs analysées" value={s.url_count.toLocaleString("fr-FR")} />
-                      <BigStat label="Catégories" value={s.sections_count} />
-                      <BigStat label="Problèmes" value={totalIssues.toLocaleString("fr-FR")} />
-                      <BigStat label="Slides" value={total} />
+                      <BigStat label="Catégories de problèmes" value={s.sections_count} />
                     </div>
                   </div>
                   {/* Right column : hero circular gauge (4.12) */}
@@ -895,7 +928,11 @@ export default function AdvancedAuditPage() {
                 }
                 footer={sec?.label}
               >
-                <AnchorLowDiversityBody slide={s} />
+                <AnchorLowDiversityBody
+                  slide={s}
+                  editMode={editMode}
+                  onExclude={(dest) => toggleAnchorExclusion(i, dest)}
+                />
               </AdvSlide>
             );
           }
