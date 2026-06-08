@@ -20,6 +20,7 @@ import {
   RobotsImprovedBody,
   SitemapOverviewBody,
   SitemapGapsBody,
+  SitemapSfBody,
   PageSpeedBody,
   CustomSlideBody,
 } from "@/components/audit/advanced/SlideContent";
@@ -88,6 +89,9 @@ export default function AdvancedAuditPage() {
     error: string | null;
   } | null>(null);
   const [sitemapErr, setSitemapErr] = useState<string | null>(null);
+  const [sitemapSfBusy, setSitemapSfBusy] = useState(false);
+  const [sitemapSfAi, setSitemapSfAi] = useState<{ overview: string; recommendation: string } | null>(null);
+  const [sitemapSfErr, setSitemapSfErr] = useState<string | null>(null);
 
   // ── In-app slide editor ────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false);
@@ -174,10 +178,19 @@ export default function AdvancedAuditPage() {
         });
         continue;
       }
+      if (s.kind === "sitemap-sf") {
+        out.push({
+          ...s,
+          ai_overview: sitemapSfAi?.overview ?? s.ai_overview,
+          ai_recommendation: sitemapSfAi?.recommendation ?? s.ai_recommendation,
+          ai_error: sitemapSfErr,
+        });
+        continue;
+      }
       out.push(s);
     }
     return out;
-  }, [baseSlides, audit, aiSummary, aiErr, synthAi, synthErr, robotsAi, robotsErr, sitemapAi, sitemapErr]);
+  }, [baseSlides, audit, aiSummary, aiErr, synthAi, synthErr, robotsAi, robotsErr, sitemapAi, sitemapErr, sitemapSfAi, sitemapSfErr]);
   const total = slides.length;
 
   const totalIssues = useMemo(() => {
@@ -302,6 +315,36 @@ export default function AdvancedAuditPage() {
       setSitemapErr(e instanceof Error ? e.message : String(e));
     } finally {
       setSitemapBusy(false);
+    }
+  }
+
+  async function generateSitemapSfAnalysis() {
+    if (!audit?.summary) return;
+    const sfSlide = (audit.summary.slides as AdvSlideType[]).find((s) => s.kind === "sitemap-sf") as
+      | Extract<AdvSlideType, { kind: "sitemap-sf" }>
+      | undefined;
+    if (!sfSlide) return;
+    setSitemapSfBusy(true);
+    setSitemapSfErr(null);
+    try {
+      const res = await api<{ overview: string; recommendation: string }>("/srv/audits/sitemap-sf-analysis", {
+        method: "POST",
+        json: {
+          domain: audit.summary.domain,
+          content_url_count: sfSlide.content_url_count,
+          indexable_count: sfSlide.indexable_count,
+          non_indexable_count: sfSlide.non_indexable_count,
+          non_200_count: sfSlide.non_200_count,
+          sitemap_file_count: sfSlide.sitemap_file_count,
+          breakdown: sfSlide.breakdown,
+        },
+        timeoutMs: 60_000,
+      });
+      setSitemapSfAi({ overview: res.overview, recommendation: res.recommendation });
+    } catch (e) {
+      setSitemapSfErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSitemapSfBusy(false);
     }
   }
 
@@ -848,6 +891,30 @@ export default function AdvancedAuditPage() {
               </AdvSlide>
             );
           }
+          if (s.kind === "sitemap-sf") {
+            const tone: "ok" | "warn" | "bad" =
+              s.issues_count === 0 ? "ok" :
+              s.issues_count > 200 ? "bad" : "warn";
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="Sitemap.xml"
+                subtitle="Indexabilité & crawl"
+                rightHeader={
+                  <SectionPill tone={tone}>
+                    {s.issues_count > 0
+                      ? `${s.issues_count.toLocaleString("fr-FR")} URLs à corriger`
+                      : "Sitemap propre"}
+                  </SectionPill>
+                }
+                footer="Indexabilité & crawl"
+              >
+                <SitemapSfBody slide={s} onRequestAi={generateSitemapSfAnalysis} busy={sitemapSfBusy} />
+              </AdvSlide>
+            );
+          }
           if (s.kind === "pagespeed") {
             const tone: "ok" | "warn" | "bad" =
               s.performance_score == null ? "warn" :
@@ -1141,12 +1208,13 @@ function BigStat({ label, value }: { label: string; value: string | number }) {
         {value}
       </div>
       <div
-        className="uppercase truncate mt-1.5"
+        className="uppercase mt-1.5"
         style={{
           color: VBT.ink2,
           fontWeight: 700,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.12em",
+          letterSpacing: "0.1em",
+          lineHeight: 1.25,
           fontFamily: VBT_FONT.title,
         }}
         title={label}
@@ -1249,6 +1317,10 @@ function editableFields(slide: AdvSlideType): EditField[] {
     case "sitemap-overview":
       f.push({ key: "ai_overview", label: "Analyse du sitemap", value: str("ai_overview"), multiline: true });
       break;
+    case "sitemap-sf":
+      f.push({ key: "ai_overview", label: "Analyse du sitemap", value: str("ai_overview"), multiline: true });
+      f.push({ key: "ai_recommendation", label: "Enjeu & action à mener", value: str("ai_recommendation"), multiline: true });
+      break;
     case "sitemap-gaps":
       f.push({ key: "ai_gaps_summary", label: "Résumé des absences", value: str("ai_gaps_summary"), multiline: true });
       break;
@@ -1283,6 +1355,7 @@ const KIND_LABEL: Record<string, string> = {
   "robots-improved": "Robots.txt amélioré",
   "sitemap-overview": "Sitemap",
   "sitemap-gaps": "Sitemap (absences)",
+  "sitemap-sf": "Sitemap",
   pagespeed: "PageSpeed Insights",
   reco: "Recommandations",
   priority: "Priorisation",

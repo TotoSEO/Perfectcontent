@@ -9,6 +9,7 @@ import { parseInterneHtmlCsv, inferDomain } from "@/lib/audit/advanced/parse-int
 import { parseIssuesZip, type IssuesParseResult } from "@/lib/audit/advanced/parse-issues";
 import { parseAnchorsCsv, type AnchorsParseResult } from "@/lib/audit/advanced/parse-anchors";
 import { parseImagesAllCsv, type ImagesAllParseResult } from "@/lib/audit/advanced/parse-images-all";
+import { parseSitemapsCsv, type SitemapSfStats } from "@/lib/audit/advanced/parse-sitemaps";
 import { analyzeAdvanced } from "@/lib/audit/advanced/analyze";
 import type { AdvReport, AdvSlide, AdvIssueRow, PageSpeedResult } from "@/lib/audit/advanced/types";
 
@@ -96,6 +97,11 @@ export default function NewAdvancedAuditPage() {
   const [pageSpeedUrl1, setPageSpeedUrl1] = useState("");
   const [pageSpeedUrl2, setPageSpeedUrl2] = useState("");
 
+  // Optional Screaming Frog "Sitemaps" export (sitemaps_tous.csv) : the
+  // authoritative source for the sitemap slide (supersedes the URL fetch).
+  const [sitemapFile, setSitemapFile] = useState<File | null>(null);
+  const [sitemapSf, setSitemapSf] = useState<SitemapSfStats | null>(null);
+
   const [stage, setStage] = useState<Stage>("idle");
   const [err, setErr] = useState<string | null>(null);
 
@@ -132,10 +138,11 @@ export default function NewAdvancedAuditPage() {
         robots_txt_pasted: hasRobots === "yes" ? robotsContent.trim() || null : null,
         sitemap_url: sitemapUrl.trim() || null,
         pagespeed_urls: [pageSpeedUrl1, pageSpeedUrl2].map((u) => u.trim()).filter(Boolean),
+        sitemap_sf: sitemapSf,
       });
       setReport(r);
     },
-    [internalFile, internalStats, hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2],
+    [internalFile, internalStats, hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2, sitemapSf],
   );
 
   // Re-run the analyzer whenever the robots / sitemap user-provided fields
@@ -147,7 +154,7 @@ export default function NewAdvancedAuditPage() {
       reanalyze(internalRows, issuesResult, anchorsResult, imagesResult, siteResources);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2]);
+  }, [hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2, sitemapSf]);
 
   // File 1
   const onPickInternal = useCallback(async (f: File) => {
@@ -323,6 +330,23 @@ export default function NewAdvancedAuditPage() {
 
     return { ...src, slides, sections };
   }
+
+  // Optional file : Screaming Frog "Sitemaps" export.
+  const onPickSitemap = useCallback(async (f: File) => {
+    setErr(null);
+    setSitemapFile(f);
+    setStage("analyzing");
+    try {
+      // Parse + store ; the dedicated useEffect re-runs the analyzer with the
+      // fresh sitemapSf value once it lands in state.
+      const { stats } = await parseSitemapsCsv(f);
+      setSitemapSf(stats);
+    } catch (e) {
+      setErr(`Échec lecture sitemaps_tous.csv : ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setStage("idle");
+    }
+  }, []);
 
   async function save() {
     if (!report) return;
@@ -625,6 +649,35 @@ export default function NewAdvancedAuditPage() {
             L&apos;extracteur déplie automatiquement les sitemap-index. Compare aux URLs indexables
             du crawl pour repérer les pages absentes.
           </p>
+        </div>
+
+        {/* Screaming Frog "Sitemaps" export — authoritative, supersedes the fetch */}
+        <div className="space-y-2 pt-1 border-t border-zinc-800">
+          <span className="label">Rapport sitemap Screaming Frog (recommandé)</span>
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
+            Export <code className="text-accent-200">sitemaps_tous.csv</code> (onglet Sitemaps → Tous).
+            Nécessite d&apos;avoir configuré l&apos;URL du sitemap dans la config du crawl, puis
+            «&nbsp;Analyse du crawl → Commencer&nbsp;». Données 100&nbsp;% fiables : l&apos;IA ne fait
+            qu&apos;interpréter et proposer l&apos;action. Remplace le fetch ci-dessus.
+          </p>
+          <label className="btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onPickSitemap(f); }}
+            />
+            {sitemapFile ? "Remplacer le fichier" : "Choisir sitemaps_tous.csv"}
+          </label>
+          {sitemapSf && (
+            <div className="text-[11px] text-emerald-400">
+              ✓ {sitemapSf.content_url_count.toLocaleString("fr-FR")} URLs dans le sitemap ·{" "}
+              {sitemapSf.sitemap_file_count} sous-sitemaps ·{" "}
+              <span className={sitemapSf.problems.length > 0 ? "text-amber-400" : "text-emerald-400"}>
+                {sitemapSf.problems.length.toLocaleString("fr-FR")} à corriger
+              </span>
+            </div>
+          )}
         </div>
       </section>
 

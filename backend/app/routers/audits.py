@@ -950,19 +950,31 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
     sm_breakdown_txt = ", ".join(f"{lbl}: {n}" for lbl, n in sm_breakdown) or "(vide)"
     gap_txt = ", ".join(f"{g['label']}: {g['count']}" for g in gap_breakdown[:6]) or "(aucun)"
 
+    # Sitemap-vs-crawl excess : when the sitemap lists notably MORE URLs than
+    # the crawl found indexable, that's a real signal (stale entries, URLs the
+    # crawl couldn't reach, non-indexable or removed pages) the consultant
+    # wants flagged. Computed deterministically so the LLM can't miss it.
+    excess = max(0, len(sitemap_urls) - len(indexable))
+    excess_pct = round(excess / max(len(indexable), 1) * 100)
+
     system = (
         "Tu es un consultant SEO senior français. Tu rédiges l'analyse d'un sitemap.xml pour une slide d'audit. "
         "Tu retournes UNIQUEMENT un objet JSON sans Markdown autour. Schéma :\n"
         "{\n"
-        '  "overview": "string",     // 2 a 4 phrases courtes : volume d\'URLs, typologies dominantes, structure sitemap-index ou non\n'
+        '  "overview": "string",     // 2 a 4 phrases courtes : volume d\'URLs, typologies dominantes, structure sitemap-index ou non, et ECART eventuel avec le crawl\n'
         '  "gaps_summary": "string"   // 2 a 4 phrases si des URLs sont absentes ; sinon null\n'
         "}\n"
         "REGLES ANTI-HALLUCINATION STRICTES :\n"
         "1. Tu n'utilises QUE les chiffres et les libelles de chemins fournis ci-dessous. "
         "INTERDICTION d'inventer une section, un dossier ou un type de page qui n'est pas dans les listes donnees. "
-        "Si un chemin s'appelle /questions/, tu ecris /questions/, tu ne le renommes pas en /faq/ ni en autre chose.\n"
+        "Si un chemin s'appelle /questions/, tu ecris /questions/, tu ne le renommes pas en /faq/ ni en autre chose. "
+        "Ces libelles sont des PREFIXES d'URL (premier segment de chemin), PAS des noms de sous-sitemaps : "
+        "ne parle pas de « sitemap /crm/ » mais de « pages sous /crm/ ».\n"
         "2. INTERDICTION d'inventer des chiffres : reprends exactement ceux fournis.\n"
         "3. Si la repartition des absences est vide ou « (aucun) », gaps_summary doit etre null.\n"
+        "4. Si le sitemap contient nettement PLUS d'URLs que les URLs indexables du crawl (ecart fourni ci-dessous), "
+        "tu DOIS le signaler dans overview : cela peut indiquer des URLs obsoletes, non explorees, non indexables "
+        "ou supprimees encore listees dans le sitemap. Reste factuel, ne sur-dramatise pas.\n"
         "Regles editoriales : pas de Markdown, pas de tirets cadratins, pas d'asterisques, pas d'anglais, "
         "phrases courtes (25 mots max). Tu peux rester general si les libelles ne sont pas parlants, "
         "mais tu ne dois JAMAIS citer un chemin absent des listes."
@@ -974,6 +986,7 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
         f"Repartition du sitemap par chemin (libelles EXACTS a reutiliser tels quels) : {sm_breakdown_txt}\n"
         f"Derniere modification : {last_modified or 'inconnue'}\n"
         f"URLs indexables (crawl) : {len(indexable)}\n"
+        f"Ecart sitemap - indexables crawl : {excess} URLs de plus dans le sitemap ({excess_pct} %)\n"
         f"URLs indexables ABSENTES du sitemap : {len(missing)}\n"
         f"Repartition des absences par chemin (libelles EXACTS a reutiliser tels quels) : {gap_txt}\n"
     )
@@ -994,6 +1007,11 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
             f"Le sitemap contient {len(sitemap_urls)} URLs, réparties principalement sur {sm_breakdown_txt}. "
             f"Dernière modification : {last_modified or 'non communiquée'}."
         )
+        if excess > len(indexable) * 0.1 and excess > 20:
+            overview += (
+                f" Le sitemap liste {excess} URLs de plus que les {len(indexable)} URLs indexables "
+                f"du crawl : à vérifier (URLs obsolètes, non explorées ou non indexables)."
+            )
         gaps_summary = (
             f"{len(missing)} URLs indexables du crawl ne figurent pas dans le sitemap. "
             f"Sections principalement absentes : {gap_txt}."
@@ -1010,6 +1028,103 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
         gap_breakdown=gap_breakdown,
         last_modified=last_modified,
     )
+
+
+# ---- Sitemap analysis from the Screaming Frog export (authoritative) ------
+
+
+class SitemapSfIn(BaseModel):
+    """Figures extracted client-side from the Screaming Frog 'Sitemaps'
+    export (sitemaps_tous.csv). The AI only interprets these exact numbers;
+    it never re-fetches or invents paths/counts."""
+    domain: str | None = None
+    content_url_count: int
+    indexable_count: int
+    non_indexable_count: int
+    non_200_count: int
+    sitemap_file_count: int
+    breakdown: list[dict] = []  # [{label, count}]
+
+
+class SitemapSfOut(BaseModel):
+    overview: str         # 2-3 sentences interpreting the figures
+    recommendation: str   # 2-3 sentences : the stake + the concrete action
+    cost_usd: float
+
+
+@router.post("/sitemap-sf-analysis", response_model=SitemapSfOut)
+async def sitemap_sf_analysis(payload: SitemapSfIn) -> SitemapSfOut:
+    """Interpretation + action plan for the sitemap, from the SF figures.
+
+    Action-plan audit : we show the problem, explain why it matters, and how
+    to fix it. Costs ~0.002 $ (Haiku 4.5).
+    """
+    from app.services.llm import HAIKU, complete
+    import json as _json
+
+    breakdown_txt = ", ".join(
+        f"{b.get('label', '?')}: {b.get('count', 0)}" for b in payload.breakdown
+    ) or "(aucun problème)"
+    conforming = max(0, payload.indexable_count)
+    problems_total = sum(int(b.get("count", 0)) for b in payload.breakdown)
+
+    system = (
+        "Tu es un consultant SEO senior français. Tu rédiges l'analyse du sitemap.xml d'un "
+        "client pour une slide d'audit AVEC PLAN D'ACTION. Le client doit comprendre le problème, "
+        "l'enjeu, et comment le résoudre. "
+        "Tu retournes UNIQUEMENT un objet JSON sans Markdown autour. Schéma :\n"
+        "{\n"
+        '  "overview": "string",        // 2 a 3 phrases : que contient le sitemap, sa structure, et le constat principal\n'
+        '  "recommendation": "string"    // 2 a 3 phrases : l\'enjeu SEO concret + l\'action a mener\n'
+        "}\n"
+        "REGLES STRICTES :\n"
+        "1. Tu n'utilises QUE les chiffres fournis. INTERDICTION d'inventer un chiffre, un chemin, "
+        "un dossier ou un nom de sous-sitemap. Ne cite AUCUNE URL ni section nominative.\n"
+        "2. Un sitemap ne doit contenir que des URLs finales, indexables, en code 200. Explique "
+        "pourquoi les URLs redirigees / canonisees / noindex / bloquees / en erreur n'ont rien a y "
+        "faire (signaux contradictoires, gaspillage de budget de crawl).\n"
+        "3. Si problems_total vaut 0, felicite brievement : le sitemap est propre, et recommendation "
+        "se limite a maintenir cette hygiene.\n"
+        "Regles editoriales : pas de Markdown, pas d'asterisques, pas de tirets cadratins, pas "
+        "d'anglais, phrases courtes (25 mots max), ton factuel."
+    )
+    user_msg = (
+        f"Domaine : {payload.domain or 'inconnu'}\n"
+        f"URLs de pages dans le sitemap : {payload.content_url_count}\n"
+        f"Structure : sitemap-index avec {payload.sitemap_file_count} sous-sitemaps\n"
+        f"URLs conformes (indexables, 200) : {conforming}\n"
+        f"URLs non indexables presentes dans le sitemap : {payload.non_indexable_count}\n"
+        f"URLs en code non-200 dans le sitemap : {payload.non_200_count}\n"
+        f"Total URLs problematiques : {problems_total}\n"
+        f"Repartition des problemes : {breakdown_txt}\n"
+    )
+    try:
+        resp = await complete(system=system, user=user_msg, model=HAIKU, max_tokens=420, temperature=0.2)
+        txt = resp.text.strip()
+        if txt.startswith("```"):
+            txt = txt.strip("`").lstrip("json").strip()
+        data = _json.loads(txt)
+        return SitemapSfOut(
+            overview=str(data.get("overview", "")).strip(),
+            recommendation=str(data.get("recommendation", "")).strip(),
+            cost_usd=resp.cost,
+        )
+    except _json.JSONDecodeError:
+        # Deterministic fallback so the slide is never empty.
+        overview = (
+            f"Le sitemap référence {payload.content_url_count} URLs de pages via "
+            f"{payload.sitemap_file_count} sous-sitemaps. {conforming} sont conformes "
+            f"(indexables, code 200) et {problems_total} posent problème ({breakdown_txt})."
+        )
+        recommendation = (
+            "Un sitemap ne doit lister que des URLs finales indexables en code 200. "
+            "Régénérez-le en retirant les URLs redirigées, canonisées, en noindex, bloquées ou en erreur."
+            if problems_total else
+            "Le sitemap est propre : maintenez cette hygiène à chaque mise en production."
+        )
+        return SitemapSfOut(overview=overview, recommendation=recommendation, cost_usd=0.0)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"AI sitemap analysis failed: {exc}")
 
 
 # =========================================================================
@@ -1132,6 +1247,25 @@ async def pagespeed(payload: PageSpeedIn) -> PageSpeedOut:
                 msg = err.get("message", msg)
             except Exception:  # noqa: BLE001
                 pass
+            # Quota / rate-limit : the keyless PSI quota is SHARED across every
+            # caller on the same egress IP (here : the serverless host), so it
+            # can already be exhausted even on a first personal run. Point the
+            # user at the fix (configure their own free API key).
+            low = msg.lower()
+            if r.status_code == 429 or "quota" in low or "rate limit" in low:
+                if not settings.pagespeed_api_key:
+                    msg = (
+                        "Quota PageSpeed Insights dépassé. L'API sans clé partage un quota "
+                        "global : configure une clé gratuite PAGESPEED_API_KEY (console Google "
+                        "Cloud, API « PageSpeed Insights » activée) pour disposer de ton propre "
+                        "quota (25 000 requêtes/jour)."
+                    )
+                else:
+                    msg = (
+                        "Quota PageSpeed Insights dépassé pour ta clé API. Vérifie que l'API "
+                        "« PageSpeed Insights » est bien activée dans ton projet Google Cloud, "
+                        "ou réessaie plus tard."
+                    )
             return PageSpeedOut(url=payload.url, strategy=payload.strategy, fetched=False, error=msg)
         data = r.json()
     except Exception as exc:  # noqa: BLE001

@@ -273,6 +273,24 @@ export type AdvSlide =
       error: string | null;
     }
   | {
+      // Sitemap.xml analysis driven by the Screaming Frog "Sitemaps" export
+      // (sitemaps_tous.csv) : every figure is authoritative (no fetch, no
+      // guess). The AI only writes the interpretation + the action to take.
+      kind: "sitemap-sf";
+      content_url_count: number;
+      indexable_count: number;
+      non_indexable_count: number;
+      non_200_count: number;
+      sitemap_file_count: number;
+      breakdown: { label: string; count: number }[];
+      issues_count: number;
+      xlsx_sheet?: string;
+      // Lazy-filled by the viewer (one Claude Haiku call).
+      ai_overview: string | null;        // interpretation of the figures
+      ai_recommendation: string | null;  // the stake + how to fix (action plan)
+      ai_error: string | null;
+    }
+  | {
       // Sitemap.xml analysis — fetched server-side then summarised by AI.
       kind: "sitemap-overview";
       sitemap_url: string;

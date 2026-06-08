@@ -224,6 +224,19 @@ function slideToMd(slide: AdvSlide): string {
       }
       return lines.join("\n");
 
+    case "sitemap-sf":
+      lines.push(`### Sitemap.xml (données Screaming Frog)`);
+      lines.push("", `- URLs de pages dans le sitemap : ${slide.content_url_count.toLocaleString("fr-FR")}`);
+      lines.push(`- Conformes (indexables, 200) : ${slide.indexable_count.toLocaleString("fr-FR")}`);
+      lines.push(`- Non conformes à corriger : ${slide.issues_count.toLocaleString("fr-FR")}`);
+      if (slide.breakdown.length) {
+        lines.push("", "| Problème | URLs |", "| --- | --- |");
+        for (const b of slide.breakdown) lines.push(`| ${b.label} | ${b.count} |`);
+      }
+      if (slide.ai_overview) lines.push("", slide.ai_overview);
+      if (slide.ai_recommendation) lines.push("", `**Enjeu & action :** ${slide.ai_recommendation}`);
+      return lines.join("\n");
+
     case "reco":
       lines.push(`### ${slide.title}`);
       for (const g of slide.groups) {

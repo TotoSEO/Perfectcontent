@@ -24,6 +24,7 @@ import type {
 } from "./types";
 import type { AnchorsParseResult } from "./parse-anchors";
 import type { ImagesAllParseResult } from "./parse-images-all";
+import type { SitemapSfStats } from "./parse-sitemaps";
 
 const COLORS = {
   ok: VBT.good,
@@ -2142,6 +2143,7 @@ const SEV_WEIGHT: Record<string, number> = {
 // others are deep (refactor structure/content).
 const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
   robots_sitemap: "quick-win",
+  sitemap_sf: "quick-win",
   http_codes: "medium",
   hreflang: "medium",
   canonical: "quick-win",
@@ -2384,6 +2386,10 @@ export type AdvancedAnalyzeOpts = {
   // Up to two URLs to run through PageSpeed Insights. Each produces a
   // placeholder "pagespeed" slide filled from the PSI API at save time.
   pagespeed_urls?: string[];
+  // Parsed Screaming Frog "Sitemaps" export (sitemaps_tous.csv). When
+  // present, it drives the authoritative sitemap slide + XLSX sheet and
+  // supersedes the fetch-based sitemap analysis.
+  sitemap_sf?: SitemapSfStats | null;
 };
 
 export function analyzeAdvanced(
@@ -2407,6 +2413,49 @@ export function analyzeAdvanced(
   const { section: secGeo, slides: slGeo } = buildGeo(rows, opts.site_resources);
 
   const sections = [secIdx, secPerf, secMeta, secStruct, secLink, secImg, secSD, secGeo];
+
+  // ----- Sitemap.xml (Screaming Frog authoritative data) -----
+  // When the SF "Sitemaps" export is provided, build a dedicated slide +
+  // XLSX subcategory in the indexability section from the exact figures.
+  const sfStats = opts.sitemap_sf;
+  let sitemapSfSlide: AdvSlide | null = null;
+  if (sfStats && sfStats.content_url_count > 0) {
+    const problemRows: AdvIssueRow[] = sfStats.problems.map((p) =>
+      toRow(p.url, p.severity, { problem: p.problem, http: p.http }),
+    );
+    const subSitemapSf: AdvSubcategory = {
+      id: "sitemap_sf",
+      label: "Sitemap.xml",
+      score: scoreFromRatio(problemRows.length / Math.max(sfStats.content_url_count, 1)),
+      // Excluded from the section score aggregation (the indexability score
+      // is already established) but kept actionable for the priority list.
+      weight: 0,
+      issues_full: problemRows,
+      columns: [
+        { key: "problem", label: "Problème", width: 32 },
+        { key: "http", label: "Code HTTP", width: 12 },
+        { key: "url", label: "URL", width: 70 },
+      ],
+      xlsx_sheet: "Sitemap",
+      why: "Un sitemap ne doit lister que des URLs finales, indexables et en code 200. Les URLs redirigées, canonisées, en noindex, bloquées ou en erreur envoient des signaux contradictoires à Google et gaspillent le budget de crawl.",
+      how_to_fix: "Régénérer le sitemap pour n'y conserver que les URLs canoniques indexables (code 200), et en retirer les URLs problématiques listées ici.",
+    };
+    secIdx.subcategories.push(subSitemapSf);
+    sitemapSfSlide = {
+      kind: "sitemap-sf",
+      content_url_count: sfStats.content_url_count,
+      indexable_count: sfStats.indexable_count,
+      non_indexable_count: sfStats.non_indexable_count,
+      non_200_count: sfStats.non_200_count,
+      sitemap_file_count: sfStats.sitemap_file_count,
+      breakdown: sfStats.breakdown.map((b) => ({ label: b.label, count: b.count })),
+      issues_count: problemRows.length,
+      xlsx_sheet: problemRows.length > 0 ? "Sitemap" : undefined,
+      ai_overview: null,
+      ai_recommendation: null,
+      ai_error: null,
+    };
+  }
 
   // Attach client-facing guidance (why + how to fix) to every subcategory
   // so the XLSX sheets are self-explanatory when handed to a client.
@@ -2481,9 +2530,11 @@ export function analyzeAdvanced(
     });
   }
 
+  // Fetch-based sitemap slides : ONLY when the SF export wasn't provided
+  // (the SF data supersedes them).
   const sitemapSlides: AdvSlide[] = [];
   const smUrl = (opts.sitemap_url || "").trim();
-  if (smUrl) {
+  if (smUrl && !sitemapSfSlide) {
     sitemapSlides.push({
       kind: "sitemap-overview",
       sitemap_url: smUrl,
@@ -2528,7 +2579,8 @@ export function analyzeAdvanced(
   // section title. Splice them in at index 2.
   const idxSlides = [...slIdx];
   const injectAt = Math.min(2, idxSlides.length);
-  idxSlides.splice(injectAt, 0, ...robotsSlides, ...sitemapSlides);
+  const sitemapSlidesToInject = sitemapSfSlide ? [sitemapSfSlide] : sitemapSlides;
+  idxSlides.splice(injectAt, 0, ...robotsSlides, ...sitemapSlidesToInject);
 
   const slides: AdvSlide[] = [
     coverSlide,
