@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     fal_api_key: str = ""
+    # Optional Google PageSpeed Insights API key. The API works without one
+    # but is heavily rate-limited; a free key (console.cloud.google.com)
+    # raises the quota. When empty we call PSI keyless.
+    pagespeed_api_key: str = ""
 
     cost_hard_cap_default: float = 1.00
     mock_external: bool = Field(default=False)

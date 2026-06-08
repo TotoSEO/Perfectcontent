@@ -246,6 +246,22 @@ function slideToMd(slide: AdvSlide): string {
       }
       return lines.join("\n");
 
+    case "pagespeed":
+      lines.push(`### PageSpeed Insights — ${slide.url}`);
+      lines.push("", `- Stratégie : ${slide.strategy}`);
+      if (slide.performance_score != null) lines.push(`- Score performance : ${slide.performance_score}/100`);
+      if (slide.fcp) lines.push(`- FCP : ${slide.fcp.display}`);
+      if (slide.lcp) lines.push(`- LCP : ${slide.lcp.display}`);
+      if (slide.error) lines.push(`- Erreur : ${slide.error}`);
+      if (slide.top_issues.length) {
+        lines.push("", "**Principaux problèmes :**");
+        for (const it of slide.top_issues) lines.push(`- ${it.title}${it.display ? ` (${it.display})` : ""}`);
+      }
+      if (slide.total_issues > slide.top_issues.length) {
+        lines.push("", `_+ ${slide.total_issues - slide.top_issues.length} autres problèmes dans le fichier XLSX._`);
+      }
+      return lines.join("\n");
+
     case "custom":
       lines.push(`### ${slide.title}`);
       if (slide.eyebrow) lines.push(`_${slide.eyebrow}_`);

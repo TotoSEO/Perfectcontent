@@ -5,6 +5,7 @@ import { BarChart, DonutChart, Histogram } from "../Charts";
 import { SectionPill } from "./AdvSlide";
 import { RecoIcon, iconForReco } from "./RecoIcons";
 import { RadarChart } from "./RadarChart";
+import { CircularGauge } from "./CircularGauge";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
@@ -2700,6 +2701,122 @@ export function SitemapGapsBody({
               ))}
             </ul>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// PAGESPEED INSIGHTS — score gauge + FCP/LCP + top problems (one per page)
+// ===========================================================================
+
+export function PageSpeedBody({
+  slide,
+}: {
+  slide: Extract<AdvSlide, { kind: "pagespeed" }>;
+}) {
+  // Error / not-yet-fetched fallback : keep the slide readable even when the
+  // PSI API failed at creation time.
+  if (!slide.fetched || slide.performance_score == null) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
+        <ZapIcon size={28} color={VBT.terracotta500} />
+        <div style={{ color: VBT.ink, fontFamily: VBT_FONT.title, fontWeight: 700, fontSize: VBT_TYPO.subhead }}>
+          Analyse PageSpeed indisponible
+        </div>
+        <div style={{ color: VBT.inkSoft, fontSize: VBT_TYPO.bodySm, maxWidth: 560, lineHeight: 1.5 }}>
+          {slide.error
+            ? `L'API Google PageSpeed Insights n'a pas répondu : ${slide.error}`
+            : "Le résultat PageSpeed n'a pas pu être récupéré pour cette page."}
+        </div>
+      </div>
+    );
+  }
+
+  const metricTone = (score: number | null): "ok" | "warn" | "bad" | "info" =>
+    score == null ? "info" : score >= 0.9 ? "ok" : score >= 0.5 ? "warn" : "bad";
+
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      {/* Left : score gauge + FCP / LCP */}
+      <div className="col-span-5 flex flex-col items-center justify-center gap-5 min-w-0">
+        <CircularGauge score={slide.performance_score} size={210} thickness={16} label="Performance" />
+        <div className="grid grid-cols-2 gap-3 w-full">
+          <MiniStat label="FCP" value={slide.fcp?.display || "—"} tone={metricTone(slide.fcp?.score ?? null)} />
+          <MiniStat label="LCP" value={slide.lcp?.display || "—"} tone={metricTone(slide.lcp?.score ?? null)} />
+        </div>
+      </div>
+
+      {/* Right : top problems + XLSX pointer */}
+      <div className="col-span-7 flex flex-col gap-4 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <ZapIcon size={12} color={VBT.terracotta500} />
+          Principaux problèmes (mobile)
+        </div>
+
+        {slide.top_issues.length > 0 ? (
+          <ul className="space-y-2.5">
+            {slide.top_issues.map((it, i) => (
+              <li
+                key={i}
+                className="flex items-start gap-3 min-w-0"
+                style={{
+                  background: VBT.paper,
+                  border: `1.5px solid ${VBT.ink}`,
+                  borderRadius: 12,
+                  boxShadow: hardShadow(2),
+                  padding: "10px 12px",
+                }}
+              >
+                <span
+                  className="shrink-0 inline-flex items-center justify-center tabular-nums"
+                  style={{
+                    width: 22, height: 22, borderRadius: 999,
+                    background: VBT.terracotta500, color: VBT.paper,
+                    border: `1.5px solid ${VBT.ink}`,
+                    fontWeight: 800, fontSize: VBT_TYPO.caption,
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <div className="min-w-0">
+                  <div
+                    className="truncate"
+                    style={{ color: VBT.ink, fontFamily: VBT_FONT.title, fontWeight: 700, fontSize: VBT_TYPO.bodySm }}
+                    title={it.title}
+                  >
+                    {it.title}
+                  </div>
+                  {it.display && (
+                    <div style={{ color: VBT.terracotta700, fontSize: VBT_TYPO.caption, fontFamily: VBT_FONT.mono }}>
+                      {it.display}
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <NoIssuesBlock />
+        )}
+
+        <div className="mt-auto flex items-center justify-between gap-3 flex-wrap">
+          <div style={{ color: VBT.inkSoft, fontSize: VBT_TYPO.caption, fontFamily: VBT_FONT.body }}>
+            {slide.total_issues > 3
+              ? `+ ${slide.total_issues - 3} autre${slide.total_issues - 3 > 1 ? "s" : ""} problème${slide.total_issues - 3 > 1 ? "s" : ""}. La suite dans le fichier XLSX.`
+              : "Détail complet dans le fichier XLSX."}
+          </div>
+          {slide.xlsx_sheet && <XlsxRefBadge sheet={slide.xlsx_sheet} />}
         </div>
       </div>
     </div>
