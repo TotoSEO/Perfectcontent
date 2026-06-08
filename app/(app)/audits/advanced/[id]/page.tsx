@@ -1141,12 +1141,13 @@ function BigStat({ label, value }: { label: string; value: string | number }) {
         {value}
       </div>
       <div
-        className="uppercase truncate mt-1.5"
+        className="uppercase mt-1.5"
         style={{
           color: VBT.ink2,
           fontWeight: 700,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.12em",
+          letterSpacing: "0.1em",
+          lineHeight: 1.25,
           fontFamily: VBT_FONT.title,
         }}
         title={label}

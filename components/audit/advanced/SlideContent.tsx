@@ -934,7 +934,7 @@ export function AnchorLowDiversityBody({
   return (
     <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
       {/* LEFT : top 4 table */}
-      <div className="col-span-8 flex flex-col gap-3 min-w-0 min-h-0">
+      <div className="col-span-8 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
         <div className="flex items-center justify-between gap-3 min-w-0">
           <div
             className="uppercase flex items-center gap-2"
@@ -961,7 +961,7 @@ export function AnchorLowDiversityBody({
           <NoIssuesBlock />
         ) : (
           <div
-            className="rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0"
+            className="rounded-xl overflow-hidden flex flex-col min-w-0 min-h-0 flex-1"
             style={{
               border: `1.5px solid ${VBT.ink}`,
               background: VBT.paper,
@@ -1089,6 +1089,7 @@ export function AnchorLowDiversityBody({
         )}
 
         <div
+          className="shrink-0"
           style={{
             color: VBT.ink2,
             fontSize: VBT_TYPO.micro,
@@ -1102,8 +1103,9 @@ export function AnchorLowDiversityBody({
         {/* Edit-mode footer : list of excluded URLs with un-exclude buttons */}
         {editMode && excluded.size > 0 && (
           <div
-            className="flex flex-wrap items-center gap-2"
+            className="flex flex-wrap items-center gap-2 shrink-0 overflow-y-auto"
             style={{
+              maxHeight: 90,
               padding: "8px 12px",
               background: VBT.cream100,
               border: `1.5px dashed ${VBT.ink}`,
@@ -2027,9 +2029,9 @@ export function SynthesisRadarBody({
   return (
     <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
       {/* LEFT — intro + best/worst */}
-      <div className="col-span-6 flex flex-col gap-4 min-w-0 min-h-0 overflow-hidden">
+      <div className="col-span-6 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
         <div
-          className="uppercase flex items-center gap-2"
+          className="uppercase flex items-center gap-2 shrink-0"
           style={{
             color: VBT.terracotta600,
             fontWeight: 700,
@@ -2044,19 +2046,18 @@ export function SynthesisRadarBody({
 
         {hasAi ? (
           <>
-            {/* Intro paragraph : two-sentence qualitative angle.
-                Clamp at 5 lines as a safety net (the prompt caps at 35-45
-                words = ~3 lines at this size). Slightly smaller font than
-                body so the eye reads it as the "kicker" of the slide while
-                the radar carries the data weight. */}
+            {/* Intro paragraph : two-sentence qualitative angle. Clamp高 enough
+                that the full ~45-50 word intro is always visible ; the
+                best/worst blocks below are compact so everything fits. */}
             <div
+              className="shrink-0"
               style={{
                 color: VBT.ink,
                 fontFamily: VBT_FONT.body,
-                fontSize: VBT_TYPO.bodySm + 1,
-                lineHeight: 1.55,
+                fontSize: VBT_TYPO.bodySm,
+                lineHeight: 1.5,
                 display: "-webkit-box",
-                WebkitLineClamp: 5,
+                WebkitLineClamp: 9,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
               }}
@@ -2158,31 +2159,32 @@ function BestWorstBlock({
       : { fg: VBT.bad, bg: "#e9b3a4", chip: "#e9b3a4" };
   return (
     <div
+      className="shrink-0"
       style={{
         background: VBT.paper,
         border: `1.5px solid ${VBT.ink}`,
         borderRadius: 14,
-        boxShadow: hardShadow(3),
-        padding: "12px 14px",
+        boxShadow: hardShadow(2.5),
+        padding: "8px 12px",
       }}
     >
       <div
-        className="uppercase mb-2 inline-flex items-center"
+        className="uppercase mb-1.5 inline-flex items-center"
         style={{
           color: VBT.ink,
           background: palette.bg,
           border: `1.5px solid ${VBT.ink}`,
           borderRadius: 999,
-          padding: "3px 10px",
+          padding: "2px 9px",
           fontWeight: 800,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.08em",
           fontFamily: VBT_FONT.title,
         }}
       >
         {title}
       </div>
-      <div className="flex flex-wrap gap-2 mt-1">
+      <div className="flex flex-wrap gap-1.5">
         {items.map((item, i) => (
           <span
             key={i}
@@ -2192,7 +2194,7 @@ function BestWorstBlock({
               background: VBT.cream100,
               border: `1.5px solid ${VBT.ink}`,
               borderRadius: 999,
-              padding: "3px 10px",
+              padding: "2px 9px",
               fontWeight: 700,
               fontSize: VBT_TYPO.caption,
               fontFamily: VBT_FONT.title,
@@ -2225,14 +2227,15 @@ function FilePanel({ raw, label }: { raw: string; label: string }) {
   const visibleLines = truncated ? allLines.slice(0, FILE_PANEL_MAX_LINES) : allLines;
   const visibleText = visibleLines.join("\n");
   const n = visibleLines.length || 1;
-  // Pick a font size that comfortably fills the ~640px tall panel body
-  // (line-height 1.35) without overflow. Linear ladder.
+  // Pick a font size that comfortably fills the panel body without
+  // overflow. Tightened ladder + line-height so a ~30-line improved
+  // robots.txt fits entirely (the last line was being clipped before).
   const fontSize =
-    n <= 18 ? 13 :
-    n <= 26 ? 12 :
-    n <= 34 ? 11 :
-    n <= 44 ? 10 :
-    n <= 54 ? 9 : 8;
+    n <= 16 ? 13 :
+    n <= 22 ? 12 :
+    n <= 28 ? 11 :
+    n <= 36 ? 10 :
+    n <= 46 ? 9 : 8;
   return (
     <div
       className="rounded-xl flex flex-col min-w-0 min-h-0 overflow-hidden w-full"
@@ -2281,10 +2284,10 @@ function FilePanel({ raw, label }: { raw: string; label: string }) {
         className="flex-1 min-h-0 overflow-hidden whitespace-pre-wrap"
         style={{
           margin: 0,
-          padding: "12px 14px",
+          padding: "10px 14px",
           fontFamily: VBT_FONT.mono,
           fontSize,
-          lineHeight: 1.35,
+          lineHeight: 1.3,
           color: VBT.ink,
           background: "#fdfaf4",
         }}

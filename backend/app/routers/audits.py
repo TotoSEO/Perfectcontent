@@ -950,19 +950,31 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
     sm_breakdown_txt = ", ".join(f"{lbl}: {n}" for lbl, n in sm_breakdown) or "(vide)"
     gap_txt = ", ".join(f"{g['label']}: {g['count']}" for g in gap_breakdown[:6]) or "(aucun)"
 
+    # Sitemap-vs-crawl excess : when the sitemap lists notably MORE URLs than
+    # the crawl found indexable, that's a real signal (stale entries, URLs the
+    # crawl couldn't reach, non-indexable or removed pages) the consultant
+    # wants flagged. Computed deterministically so the LLM can't miss it.
+    excess = max(0, len(sitemap_urls) - len(indexable))
+    excess_pct = round(excess / max(len(indexable), 1) * 100)
+
     system = (
         "Tu es un consultant SEO senior français. Tu rédiges l'analyse d'un sitemap.xml pour une slide d'audit. "
         "Tu retournes UNIQUEMENT un objet JSON sans Markdown autour. Schéma :\n"
         "{\n"
-        '  "overview": "string",     // 2 a 4 phrases courtes : volume d\'URLs, typologies dominantes, structure sitemap-index ou non\n'
+        '  "overview": "string",     // 2 a 4 phrases courtes : volume d\'URLs, typologies dominantes, structure sitemap-index ou non, et ECART eventuel avec le crawl\n'
         '  "gaps_summary": "string"   // 2 a 4 phrases si des URLs sont absentes ; sinon null\n'
         "}\n"
         "REGLES ANTI-HALLUCINATION STRICTES :\n"
         "1. Tu n'utilises QUE les chiffres et les libelles de chemins fournis ci-dessous. "
         "INTERDICTION d'inventer une section, un dossier ou un type de page qui n'est pas dans les listes donnees. "
-        "Si un chemin s'appelle /questions/, tu ecris /questions/, tu ne le renommes pas en /faq/ ni en autre chose.\n"
+        "Si un chemin s'appelle /questions/, tu ecris /questions/, tu ne le renommes pas en /faq/ ni en autre chose. "
+        "Ces libelles sont des PREFIXES d'URL (premier segment de chemin), PAS des noms de sous-sitemaps : "
+        "ne parle pas de « sitemap /crm/ » mais de « pages sous /crm/ ».\n"
         "2. INTERDICTION d'inventer des chiffres : reprends exactement ceux fournis.\n"
         "3. Si la repartition des absences est vide ou « (aucun) », gaps_summary doit etre null.\n"
+        "4. Si le sitemap contient nettement PLUS d'URLs que les URLs indexables du crawl (ecart fourni ci-dessous), "
+        "tu DOIS le signaler dans overview : cela peut indiquer des URLs obsoletes, non explorees, non indexables "
+        "ou supprimees encore listees dans le sitemap. Reste factuel, ne sur-dramatise pas.\n"
         "Regles editoriales : pas de Markdown, pas de tirets cadratins, pas d'asterisques, pas d'anglais, "
         "phrases courtes (25 mots max). Tu peux rester general si les libelles ne sont pas parlants, "
         "mais tu ne dois JAMAIS citer un chemin absent des listes."
@@ -974,6 +986,7 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
         f"Repartition du sitemap par chemin (libelles EXACTS a reutiliser tels quels) : {sm_breakdown_txt}\n"
         f"Derniere modification : {last_modified or 'inconnue'}\n"
         f"URLs indexables (crawl) : {len(indexable)}\n"
+        f"Ecart sitemap - indexables crawl : {excess} URLs de plus dans le sitemap ({excess_pct} %)\n"
         f"URLs indexables ABSENTES du sitemap : {len(missing)}\n"
         f"Repartition des absences par chemin (libelles EXACTS a reutiliser tels quels) : {gap_txt}\n"
     )
@@ -994,6 +1007,11 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
             f"Le sitemap contient {len(sitemap_urls)} URLs, réparties principalement sur {sm_breakdown_txt}. "
             f"Dernière modification : {last_modified or 'non communiquée'}."
         )
+        if excess > len(indexable) * 0.1 and excess > 20:
+            overview += (
+                f" Le sitemap liste {excess} URLs de plus que les {len(indexable)} URLs indexables "
+                f"du crawl : à vérifier (URLs obsolètes, non explorées ou non indexables)."
+            )
         gaps_summary = (
             f"{len(missing)} URLs indexables du crawl ne figurent pas dans le sitemap. "
             f"Sections principalement absentes : {gap_txt}."
@@ -1132,6 +1150,25 @@ async def pagespeed(payload: PageSpeedIn) -> PageSpeedOut:
                 msg = err.get("message", msg)
             except Exception:  # noqa: BLE001
                 pass
+            # Quota / rate-limit : the keyless PSI quota is SHARED across every
+            # caller on the same egress IP (here : the serverless host), so it
+            # can already be exhausted even on a first personal run. Point the
+            # user at the fix (configure their own free API key).
+            low = msg.lower()
+            if r.status_code == 429 or "quota" in low or "rate limit" in low:
+                if not settings.pagespeed_api_key:
+                    msg = (
+                        "Quota PageSpeed Insights dépassé. L'API sans clé partage un quota "
+                        "global : configure une clé gratuite PAGESPEED_API_KEY (console Google "
+                        "Cloud, API « PageSpeed Insights » activée) pour disposer de ton propre "
+                        "quota (25 000 requêtes/jour)."
+                    )
+                else:
+                    msg = (
+                        "Quota PageSpeed Insights dépassé pour ta clé API. Vérifie que l'API "
+                        "« PageSpeed Insights » est bien activée dans ton projet Google Cloud, "
+                        "ou réessaie plus tard."
+                    )
             return PageSpeedOut(url=payload.url, strategy=payload.strategy, fetched=False, error=msg)
         data = r.json()
     except Exception as exc:  # noqa: BLE001
