@@ -25,6 +25,7 @@ import type {
 import type { AnchorsParseResult } from "./parse-anchors";
 import type { ImagesAllParseResult } from "./parse-images-all";
 import type { SitemapSfStats } from "./parse-sitemaps";
+import type { StructuredSfStats } from "./parse-structured";
 
 const COLORS = {
   ok: VBT.good,
@@ -1429,6 +1430,59 @@ function buildLinking(
 
     subAnchor.push(subAnchorsLowDiv);
 
+    // ---- Per-link detail for the flagged destinations (XLSX only) ----
+    // For every over-optimised destination, list each EDITORIAL inbound link
+    // (page that sends it + the anchor used) so the consultant can go and
+    // diversify them one by one. Template CTAs, image links, card/button
+    // wrappers and "lire aussi" blocks are excluded (same editorial filter as
+    // the ranking), so the sheet stays clean : only real in-body hyperlinks.
+    const flagged = new Map(lowDivRows.map((r) => [r.destination, r]));
+    const detailRows: AdvIssueRow[] = [];
+    for (const r of anchors.rows) {
+      const f = flagged.get(r.destination);
+      if (!f) continue;
+      if (r.is_template_cta || r.is_image_link || r.is_card_like || r.is_button_like) continue;
+      const anchorText = (r.anchor || "").trim();
+      if (!anchorText) continue;
+      const isDominant = anchorText.toLowerCase() === f.anchor.toLowerCase();
+      detailRows.push({
+        url: r.destination,
+        severity: isDominant ? (f.ratio_pct >= 80 ? "high" : "medium") : "low",
+        source: r.source,
+        anchor: anchorText,
+      } as AdvIssueRow);
+    }
+    // Group by destination (worst-first), dominant-anchor links first inside
+    // each group : the consultant reads "this page, these are the links to fix".
+    detailRows.sort((a, b) => {
+      const fa = flagged.get(String(a.url));
+      const fb = flagged.get(String(b.url));
+      const ra = fa?.ratio_pct ?? 0;
+      const rb = fb?.ratio_pct ?? 0;
+      if (rb !== ra) return rb - ra;
+      if (a.url !== b.url) return String(a.url).localeCompare(String(b.url));
+      const sa = a.severity === "low" ? 1 : 0;
+      const sb = b.severity === "low" ? 1 : 0;
+      return sa - sb;
+    });
+    if (detailRows.length > 0) {
+      subAnchor.push({
+        id: "anchors_low_diversity_detail",
+        label: "Ancres peu variées : détail par lien",
+        score: 100,
+        weight: 0,  // already scored via the summary subcategory
+        issues_full: detailRows,
+        columns: [
+          { key: "url", label: "URL qui reçoit les liens", width: 70 },
+          { key: "source", label: "Page qui envoie le lien", width: 70 },
+          { key: "anchor", label: "Ancre du lien", width: 40 },
+        ],
+        xlsx_sheet: "Ancres peu variees (detail)",
+        why: "Pour chaque page sur-optimisée, voici les liens internes éditoriaux qui pointent vers elle. Les lignes en sévérité élevée/moyenne utilisent l'ancre dominante : ce sont celles à reformuler en priorité.",
+        how_to_fix: "Reformuler une partie de ces ancres avec des variantes naturelles et descriptives (synonymes, formulations longue traîne) au lieu de répéter la même expression exacte.",
+      });
+    }
+
     // Single anchor slide : low diversity. (The "empty anchors" slide was
     // removed : it was confusing and low-value.)
     slidesAnchor.push({
@@ -1912,6 +1966,92 @@ function buildStructuredData(res: SiteResources | null): { section: AdvSection; 
   return { section, slides: [cover, slideDetected, ...recoSlides] };
 }
 
+// High-value schema types that drive rich results (stars, price, FAQ…). Used
+// to keep the structured-data score honest when none of them are present.
+const HIGH_VALUE_SCHEMAS = new Set([
+  "product", "offer", "aggregaterating", "review", "faqpage",
+  "localbusiness", "event", "recipe", "howto", "jobposting",
+]);
+
+function buildStructuredDataSf(stats: StructuredSfStats): { section: AdvSection; slides: AdvSlide[] } {
+  const cover: AdvSlide = {
+    kind: "section-cover",
+    section_id: "structured_data",
+    title: SECTION_COVER.structured_data.title,
+    eyebrow: "Partie 7 / 8",
+    icon: SECTION_COVER.structured_data.icon,
+    bullets: SECTION_COVER.structured_data.bullets,
+  };
+
+  // Full per-page detail for the XLSX (the authoritative inventory).
+  const detailRows: AdvIssueRow[] = stats.pages.map((p) => ({
+    url: p.url,
+    severity: p.errors > 0 ? "high" : p.warnings > 0 ? "medium" : "info",
+    type_count: p.types.length,
+    errors: p.errors,
+    warnings: p.warnings,
+    types: p.types.join(", ") || "(aucune)",
+  } as AdvIssueRow));
+
+  // Score : coverage (pages carrying structured data) minus an error penalty,
+  // capped when none of the rich-result-driving types are present anywhere.
+  const coverage = stats.page_count > 0 ? stats.pages_with_data / stats.page_count : 0;
+  let score = Math.round(coverage * 100);
+  if (stats.pages_with_errors > 0) {
+    score = Math.max(0, score - Math.round((stats.pages_with_errors / Math.max(stats.page_count, 1)) * 30));
+  }
+  const hasHighValue = stats.type_inventory.some((t) => HIGH_VALUE_SCHEMAS.has(t.type.toLowerCase()));
+  if (!hasHighValue) score = Math.min(score, 75);
+
+  const subDetail: AdvSubcategory = {
+    id: "structured_sf",
+    label: "Données structurées par page",
+    score,
+    weight: 1,
+    issues_full: detailRows,
+    columns: [
+      { key: "type_count", label: "Nb types", width: 10 },
+      { key: "errors", label: "Erreurs", width: 10 },
+      { key: "warnings", label: "Avertissements", width: 14 },
+      { key: "types", label: "Types schema.org détectés", width: 80 },
+      { key: "url", label: "URL", width: 70 },
+    ],
+    xlsx_sheet: "Données structurées",
+    why: "Les données structurées (schema.org) décrivent le contenu aux moteurs et débloquent les rich results (étoiles d'avis, prix, FAQ, fil d'Ariane). Mal couvertes ou incomplètes, le site perd en visibilité enrichie et en éligibilité aux moteurs IA.",
+    how_to_fix: "Compléter les types manquants sur les pages stratégiques (prix via Offer, avis via AggregateRating, etc.) et corriger les erreurs de validation signalées.",
+  };
+
+  const recoSlides = buildRecoSlides("structured_data", "Recommandations : Données structurées");
+
+  const slide: AdvSlide = {
+    kind: "structured-sf",
+    page_count: stats.page_count,
+    pages_with_data: stats.pages_with_data,
+    total_errors: stats.total_errors,
+    total_warnings: stats.total_warnings,
+    pages_with_errors: stats.pages_with_errors,
+    distinct_types: stats.distinct_types,
+    top_types: stats.type_inventory.slice(0, 12),
+    strategic: stats.strategic.map((s) => ({ url: s.url, types: s.types })),
+    issues_count: detailRows.length,
+    xlsx_sheet: detailRows.length > 0 ? "Données structurées" : undefined,
+    ai_overview: null,
+    ai_recommendations: [],
+    ai_error: null,
+  };
+
+  const section: AdvSection = {
+    id: "structured_data",
+    label: "Données structurées",
+    score,
+    weight: 7,
+    summary: `${stats.distinct_types} types schema.org · ${stats.pages_with_data}/${stats.page_count} pages couvertes · ${stats.total_errors} erreurs`,
+    subcategories: [subDetail],
+  };
+
+  return { section, slides: [cover, slide, ...recoSlides] };
+}
+
 // ---------- GEO (Generative Engine Optimization) section --------------------
 
 const ALL_IA_BOTS = [
@@ -2182,6 +2322,11 @@ const INFORMATIONAL_SUB_IDS = new Set([
   "noindex_pages",
   "schemas_detected",
   "pagespeed",
+  // Detail sheet : the priority is already raised by the summary subcategory.
+  "anchors_low_diversity_detail",
+  // Full per-page inventory : the action plan lives on the slide, not the
+  // priority kanban (1 000+ rows would otherwise dominate it).
+  "structured_sf",
 ]);
 
 function buildPriorities(sections: AdvSection[]): PriorityItem[] {
@@ -2390,6 +2535,9 @@ export type AdvancedAnalyzeOpts = {
   // present, it drives the authoritative sitemap slide + XLSX sheet and
   // supersedes the fetch-based sitemap analysis.
   sitemap_sf?: SitemapSfStats | null;
+  // Parsed Screaming Frog "Données structurées" export. When present, drives
+  // the authoritative structured-data section (supersedes the homepage fetch).
+  structured_sf?: StructuredSfStats | null;
 };
 
 export function analyzeAdvanced(
@@ -2409,7 +2557,9 @@ export function analyzeAdvanced(
   //  • Données structurées (JSON-LD) : analyses the homepage HTML
   //  • Optimisation pour les IA (GEO) : bots IA in robots.txt, llms.txt,
   //    JS rendering, ETag/Last-Modified headers
-  const { section: secSD, slides: slSD } = buildStructuredData(opts.site_resources);
+  const { section: secSD, slides: slSD } = opts.structured_sf
+    ? buildStructuredDataSf(opts.structured_sf)
+    : buildStructuredData(opts.site_resources);
   const { section: secGeo, slides: slGeo } = buildGeo(rows, opts.site_resources);
 
   const sections = [secIdx, secPerf, secMeta, secStruct, secLink, secImg, secSD, secGeo];

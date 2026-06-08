@@ -2885,6 +2885,140 @@ export function SitemapSfBody({
 }
 
 // ===========================================================================
+// STRUCTURED DATA (Screaming Frog inventory) — type inventory + AI reasoning
+// ===========================================================================
+
+export function StructuredSfBody({
+  slide,
+  onRequestAi,
+  busy,
+}: {
+  slide: Extract<AdvSlide, { kind: "structured-sf" }>;
+  onRequestAi: () => void;
+  busy: boolean;
+}) {
+  const hasAi = !!slide.ai_overview;
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      {/* LEFT — AI reasoning : état des lieux + plan d'action */}
+      <div className="col-span-7 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2 shrink-0"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <SparklesIcon size={12} color={VBT.terracotta500} />
+          Analyse des données structurées (IA)
+        </div>
+
+        {hasAi ? (
+          <div className="flex flex-col gap-3 min-h-0 overflow-hidden">
+            <div
+              className="shrink-0"
+              style={{
+                color: VBT.ink,
+                fontFamily: VBT_FONT.body,
+                fontSize: VBT_TYPO.bodySm,
+                lineHeight: 1.5,
+                display: "-webkit-box",
+                WebkitLineClamp: 5,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {slide.ai_overview}
+            </div>
+            {slide.ai_recommendations.length > 0 && (
+              <div className="min-h-0 overflow-hidden">
+                <AiBulletList title="À enrichir / ajouter / corriger" items={slide.ai_recommendations} tone="warn" />
+              </div>
+            )}
+          </div>
+        ) : slide.ai_error ? (
+          <div style={{ color: VBT.sigRed, fontSize: VBT_TYPO.bodySm }}>
+            Échec de l&apos;analyse : {slide.ai_error}
+            <div className="mt-2">
+              <button
+                onClick={onRequestAi}
+                disabled={busy}
+                className="rounded-lg"
+                style={{ background: VBT.terracotta500, color: VBT.paper, padding: "8px 14px", fontWeight: 600, fontSize: VBT_TYPO.caption, cursor: busy ? "wait" : "pointer" }}
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col gap-3 justify-center">
+            <p style={{ color: VBT.inkSoft, fontSize: VBT_TYPO.bodySm, lineHeight: 1.55 }}>
+              L&apos;IA va croiser l&apos;inventaire des types schema.org avec l&apos;intention des pages
+              stratégiques pour identifier ce qui peut être enrichi (prix, avis, FAQ…), ce qui manque
+              et où, et les éventuelles erreurs à corriger.
+            </p>
+            <button
+              onClick={onRequestAi}
+              disabled={busy}
+              className="rounded-lg self-start"
+              style={{ background: VBT.terracotta500, color: VBT.paper, padding: "10px 16px", fontWeight: 600, fontSize: VBT_TYPO.caption, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}
+            >
+              {busy ? "Analyse en cours…" : "Lancer l'analyse IA"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT — authoritative inventory */}
+      <div className="col-span-5 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
+        <div className="grid grid-cols-3 gap-2 shrink-0">
+          <MiniStat label="Types distincts" value={slide.distinct_types.toLocaleString("fr-FR")} tone="info" />
+          <MiniStat label="Pages couvertes" value={slide.pages_with_data.toLocaleString("fr-FR")} tone="ok" />
+          <MiniStat
+            label="Erreurs"
+            value={slide.total_errors.toLocaleString("fr-FR")}
+            tone={slide.total_errors > 0 ? "bad" : "ok"}
+          />
+        </div>
+        <div
+          className="rounded-xl flex-1 min-h-0 overflow-hidden flex flex-col"
+          style={{ background: VBT.paper, border: `1.5px solid ${VBT.ink}`, padding: "10px 12px" }}
+        >
+          <div
+            className="uppercase mb-2 shrink-0"
+            style={{ color: VBT.terracotta700, fontWeight: 700, fontSize: VBT_TYPO.micro, letterSpacing: "0.14em", fontFamily: VBT_FONT.mono }}
+          >
+            Types schema.org les plus présents
+          </div>
+          <ul className="space-y-1.5 min-h-0 overflow-hidden">
+            {slide.top_types.slice(0, 8).map((t, i) => (
+              <li
+                key={i}
+                className="flex items-center justify-between gap-3 min-w-0"
+                style={{ fontSize: VBT_TYPO.bodySm, color: VBT.ink, fontFamily: VBT_FONT.body }}
+              >
+                <span className="truncate min-w-0" style={{ fontFamily: VBT_FONT.mono }}>{t.type}</span>
+                <span className="tabular-nums shrink-0" style={{ color: VBT.ink2, fontWeight: 700 }}>
+                  {t.pages.toLocaleString("fr-FR")}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {slide.xlsx_sheet && (
+            <div className="mt-auto pt-2 shrink-0">
+              <XlsxRefBadge sheet={slide.xlsx_sheet} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
 // PAGESPEED INSIGHTS — score gauge + FCP/LCP + top problems (one per page)
 // ===========================================================================
 

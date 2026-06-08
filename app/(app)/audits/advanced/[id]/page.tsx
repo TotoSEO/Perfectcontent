@@ -21,6 +21,7 @@ import {
   SitemapOverviewBody,
   SitemapGapsBody,
   SitemapSfBody,
+  StructuredSfBody,
   PageSpeedBody,
   CustomSlideBody,
 } from "@/components/audit/advanced/SlideContent";
@@ -92,6 +93,9 @@ export default function AdvancedAuditPage() {
   const [sitemapSfBusy, setSitemapSfBusy] = useState(false);
   const [sitemapSfAi, setSitemapSfAi] = useState<{ overview: string; recommendation: string } | null>(null);
   const [sitemapSfErr, setSitemapSfErr] = useState<string | null>(null);
+  const [structBusy, setStructBusy] = useState(false);
+  const [structAi, setStructAi] = useState<{ overview: string; recommendations: string[] } | null>(null);
+  const [structErr, setStructErr] = useState<string | null>(null);
 
   // ── In-app slide editor ────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false);
@@ -187,10 +191,19 @@ export default function AdvancedAuditPage() {
         });
         continue;
       }
+      if (s.kind === "structured-sf") {
+        out.push({
+          ...s,
+          ai_overview: structAi?.overview ?? s.ai_overview,
+          ai_recommendations: structAi?.recommendations ?? s.ai_recommendations,
+          ai_error: structErr,
+        });
+        continue;
+      }
       out.push(s);
     }
     return out;
-  }, [baseSlides, audit, aiSummary, aiErr, synthAi, synthErr, robotsAi, robotsErr, sitemapAi, sitemapErr, sitemapSfAi, sitemapSfErr]);
+  }, [baseSlides, audit, aiSummary, aiErr, synthAi, synthErr, robotsAi, robotsErr, sitemapAi, sitemapErr, sitemapSfAi, sitemapSfErr, structAi, structErr]);
   const total = slides.length;
 
   const totalIssues = useMemo(() => {
@@ -348,6 +361,37 @@ export default function AdvancedAuditPage() {
     }
   }
 
+  async function generateStructuredAnalysis() {
+    if (!audit?.summary) return;
+    const slide = (audit.summary.slides as AdvSlideType[]).find((s) => s.kind === "structured-sf") as
+      | Extract<AdvSlideType, { kind: "structured-sf" }>
+      | undefined;
+    if (!slide) return;
+    setStructBusy(true);
+    setStructErr(null);
+    try {
+      const res = await api<{ overview: string; recommendations: string[] }>("/srv/audits/structured-analysis", {
+        method: "POST",
+        json: {
+          domain: audit.summary.domain,
+          page_count: slide.page_count,
+          pages_with_data: slide.pages_with_data,
+          total_errors: slide.total_errors,
+          total_warnings: slide.total_warnings,
+          distinct_types: slide.distinct_types,
+          top_types: slide.top_types,
+          strategic: slide.strategic,
+        },
+        timeoutMs: 90_000,
+      });
+      setStructAi({ overview: res.overview, recommendations: res.recommendations });
+    } catch (e) {
+      setStructErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStructBusy(false);
+    }
+  }
+
   async function exportXlsx() {
     if (!audit?.issues || !audit.summary) return;
     setExporting(true);
@@ -454,7 +498,12 @@ export default function AdvancedAuditPage() {
     setEditedSlides((prev) => {
       if (!prev) return prev;
       const next = [...prev];
-      next[index] = { ...next[index], [key]: value } as AdvSlideType;
+      // Some AI fields are string arrays (bullet lists) edited as one line
+      // per item in a textarea : split them back into an array on save.
+      const v: string | string[] = ARRAY_FIELD_KEYS.has(key)
+        ? value.split("\n").map((l) => l.trim()).filter(Boolean)
+        : value;
+      next[index] = { ...next[index], [key]: v } as AdvSlideType;
       return next;
     });
   }
@@ -915,6 +964,28 @@ export default function AdvancedAuditPage() {
               </AdvSlide>
             );
           }
+          if (s.kind === "structured-sf") {
+            const tone: "ok" | "warn" | "bad" =
+              s.total_errors > 0 ? "bad" :
+              s.distinct_types >= 5 ? "ok" : "warn";
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="Données structurées"
+                subtitle="schema.org"
+                rightHeader={
+                  <SectionPill tone={tone}>
+                    {s.distinct_types} types · {s.total_errors} erreur{s.total_errors > 1 ? "s" : ""}
+                  </SectionPill>
+                }
+                footer="Données structurées"
+              >
+                <StructuredSfBody slide={s} onRequestAi={generateStructuredAnalysis} busy={structBusy} />
+              </AdvSlide>
+            );
+          }
           if (s.kind === "pagespeed") {
             const tone: "ok" | "warn" | "bad" =
               s.performance_score == null ? "warn" :
@@ -1286,10 +1357,15 @@ type EditField = { key: string; label: string; value: string; multiline: boolean
 // Returns the editable plain-text fields for a given slide kind. We only
 // expose free-text the consultant would want to tweak ; structural data
 // (KPIs, tables, charts) stays derived from the crawl.
+// AI fields stored as string arrays (bullet lists) but edited as a textarea
+// (one item per line). updateSlideField splits them back into an array.
+const ARRAY_FIELD_KEYS = new Set(["ai_issues", "ai_improvements", "ai_recommendations"]);
+
 function editableFields(slide: AdvSlideType): EditField[] {
   const f: EditField[] = [];
   const s = slide as unknown as Record<string, unknown>;
   const str = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : "");
+  const arr = (k: string) => (Array.isArray(s[k]) ? (s[k] as string[]).join("\n") : "");
   switch (slide.kind) {
     case "custom":
       f.push({ key: "eyebrow", label: "Sur-titre", value: str("eyebrow"), multiline: false });
@@ -1310,9 +1386,11 @@ function editableFields(slide: AdvSlideType): EditField[] {
     case "robots-current":
       f.push({ key: "title", label: "Titre", value: str("title"), multiline: false });
       f.push({ key: "ai_overview", label: "Analyse du robots.txt", value: str("ai_overview"), multiline: true });
+      f.push({ key: "ai_issues", label: "Problèmes détectés (une ligne par point)", value: arr("ai_issues"), multiline: true });
       break;
     case "robots-improved":
       f.push({ key: "improved_content", label: "robots.txt recommandé", value: str("improved_content"), multiline: true });
+      f.push({ key: "ai_improvements", label: "Améliorations clés (une ligne par point)", value: arr("ai_improvements"), multiline: true });
       break;
     case "sitemap-overview":
       f.push({ key: "ai_overview", label: "Analyse du sitemap", value: str("ai_overview"), multiline: true });
@@ -1320,6 +1398,10 @@ function editableFields(slide: AdvSlideType): EditField[] {
     case "sitemap-sf":
       f.push({ key: "ai_overview", label: "Analyse du sitemap", value: str("ai_overview"), multiline: true });
       f.push({ key: "ai_recommendation", label: "Enjeu & action à mener", value: str("ai_recommendation"), multiline: true });
+      break;
+    case "structured-sf":
+      f.push({ key: "ai_overview", label: "État des lieux", value: str("ai_overview"), multiline: true });
+      f.push({ key: "ai_recommendations", label: "Recommandations (une ligne par point)", value: arr("ai_recommendations"), multiline: true });
       break;
     case "sitemap-gaps":
       f.push({ key: "ai_gaps_summary", label: "Résumé des absences", value: str("ai_gaps_summary"), multiline: true });
@@ -1356,6 +1438,7 @@ const KIND_LABEL: Record<string, string> = {
   "sitemap-overview": "Sitemap",
   "sitemap-gaps": "Sitemap (absences)",
   "sitemap-sf": "Sitemap",
+  "structured-sf": "Données structurées",
   pagespeed: "PageSpeed Insights",
   reco: "Recommandations",
   priority: "Priorisation",

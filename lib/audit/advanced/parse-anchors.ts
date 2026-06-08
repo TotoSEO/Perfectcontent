@@ -113,6 +113,11 @@ const CARD_PATH_FRAGMENTS = [
   "article", "card", "post", "blog-item", "blog__item", "blog_card",
   "post-card", "post__card", "product-card", "product__card",
   "tile", "thumbnail", "preview", "listing", "list__item",
+  // "Lire aussi" / "Articles similaires" / "Sur le même sujet" template
+  // blocks repeated across every article : NOT editorial in-body anchors.
+  "related", "lire-aussi", "lire_aussi", "see-also", "see_also",
+  "similar", "recommend", "suggested", "more-articles", "autres-articles",
+  "vous-aimerez", "a-lire", "sur-le-meme", "meme-sujet", "read-also",
 ];
 
 // CSS-path / link-path fragments that indicate the link is styled as a
