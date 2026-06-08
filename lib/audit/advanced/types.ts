@@ -254,6 +254,27 @@ export type AdvSlide =
       ai_improvements: string[];    // 3-6 changes between current and improved
     }
   | {
+      // Structured data analysis driven by the Screaming Frog "Données
+      // structurées" export (donnees_structurees_tous.csv) : authoritative
+      // site-wide schema.org type inventory. The AI reasons over it (what to
+      // enrich, what's missing and where, what to fix) — not a quick verdict.
+      kind: "structured-sf";
+      page_count: number;
+      pages_with_data: number;
+      total_errors: number;
+      total_warnings: number;
+      pages_with_errors: number;
+      distinct_types: number;
+      top_types: { type: string; pages: number }[];
+      strategic: { url: string; types: string[] }[];
+      issues_count: number;
+      xlsx_sheet?: string;
+      // Lazy-filled by the viewer (one Claude Sonnet call : real reasoning).
+      ai_overview: string | null;
+      ai_recommendations: string[];
+      ai_error: string | null;
+    }
+  | {
       // PageSpeed Insights result for ONE analysed page. Two of these are
       // emitted (one per URL the consultant enters). All fields except url
       // / strategy are filled at audit-creation time from the PSI API ;

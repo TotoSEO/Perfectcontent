@@ -1127,6 +1127,86 @@ async def sitemap_sf_analysis(payload: SitemapSfIn) -> SitemapSfOut:
         raise HTTPException(500, f"AI sitemap analysis failed: {exc}")
 
 
+# ---- Structured data analysis (Screaming Frog inventory) ------------------
+
+
+class StructuredIn(BaseModel):
+    """Site-wide schema.org inventory from the SF structured-data export.
+    The AI reasons over the type inventory + a few strategic pages."""
+    domain: str | None = None
+    page_count: int
+    pages_with_data: int
+    total_errors: int
+    total_warnings: int
+    distinct_types: int
+    top_types: list[dict] = []   # [{type, pages}]
+    strategic: list[dict] = []   # [{url, types: [..]}]
+
+
+class StructuredOut(BaseModel):
+    overview: str
+    recommendations: list[str]
+    cost_usd: float
+
+
+@router.post("/structured-analysis", response_model=StructuredOut)
+async def structured_analysis(payload: StructuredIn) -> StructuredOut:
+    """Deep, reasoned analysis of the site's structured data.
+
+    Uses Sonnet (not Haiku) because the user wants real analysis : what's
+    present, what to enrich, what's missing and WHERE, what to fix — based on
+    the actual schema.org types per strategic page. Costs ~0.01-0.02 $.
+    """
+    from app.services.llm import SONNET, complete, extract_json
+
+    inv_txt = ", ".join(f"{t.get('type')}: {t.get('pages')} pages" for t in payload.top_types) or "(aucun)"
+    strat_lines = "\n".join(
+        f"- {p.get('url')} → {', '.join(p.get('types', [])) or '(aucune donnée structurée)'}"
+        for p in payload.strategic[:10]
+    ) or "(aucune page stratégique fournie)"
+
+    system = (
+        "Tu es un consultant SEO senior français, expert des données structurées schema.org et "
+        "des rich results Google. Tu produis l'analyse d'un AUDIT AVEC PLAN D'ACTION : le client doit "
+        "comprendre ce qu'il a, ce qui manque, POURQUOI c'est un enjeu, et QUOI faire concrètement et OÙ.\n"
+        "On te donne l'inventaire EXACT des types schema.org du site (issu de Screaming Frog) et la liste "
+        "des types présents sur quelques pages stratégiques. RAISONNE vraiment : croise les intentions de "
+        "page (accueil, page produit/solution, landing transactionnelle, article, contact) avec les types "
+        "présents et ceux attendus.\n"
+        "Exemples de raisonnement attendu : une page produit/transactionnelle sans Offer n'expose pas le prix "
+        "en SERP ; sans AggregateRating/Review elle n'a pas les étoiles d'avis ; une page de questions sans "
+        "FAQPage rate les People Also Ask ; un établissement physique sans LocalBusiness rate le Local Pack.\n"
+        "Tu retournes UNIQUEMENT un objet JSON, sans Markdown autour. Schéma :\n"
+        "{\n"
+        '  "overview": "string",            // 3 a 4 phrases : etat des lieux factuel (types presents, couverture, points forts)\n'
+        '  "recommendations": ["string"]    // 4 a 7 actions CONCRETES et priorisees : quoi ajouter/enrichir/corriger ET sur quel type de page (cite les chemins reels fournis)\n'
+        "}\n"
+        "REGLES STRICTES : n'invente AUCUN type ni chemin absent des donnees fournies. Reste factuel. "
+        "Chaque recommandation = une action precise (le type schema a ajouter + l'enjeu en quelques mots + "
+        "ou l'appliquer). Pas de Markdown, pas d'asterisques, pas de tirets cadratins, pas d'anglais inutile, "
+        "phrases courtes."
+    )
+    user_msg = (
+        f"Domaine : {payload.domain or 'inconnu'}\n"
+        f"Pages analysees : {payload.page_count} (dont {payload.pages_with_data} avec donnees structurees)\n"
+        f"Types schema.org distincts sur le site : {payload.distinct_types}\n"
+        f"Erreurs de validation : {payload.total_errors} · Avertissements : {payload.total_warnings}\n"
+        f"Inventaire des types (type: nb de pages) : {inv_txt}\n\n"
+        f"Pages strategiques et leurs types schema.org :\n{strat_lines}\n"
+    )
+    try:
+        resp = await complete(system=system, user=user_msg, model=SONNET, max_tokens=1300, temperature=0.3)
+        data = extract_json(resp.text)
+        recs = [str(x).strip() for x in (data.get("recommendations") or []) if str(x).strip()][:8]
+        return StructuredOut(
+            overview=str(data.get("overview", "")).strip(),
+            recommendations=recs,
+            cost_usd=resp.cost,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"AI structured-data analysis failed: {exc}")
+
+
 # =========================================================================
 # PageSpeed Insights : performance score (mobile) + Core Web Vitals
 # (FCP / LCP) + the actionable opportunities for a single page. Called

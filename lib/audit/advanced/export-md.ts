@@ -237,6 +237,22 @@ function slideToMd(slide: AdvSlide): string {
       if (slide.ai_recommendation) lines.push("", `**Enjeu & action :** ${slide.ai_recommendation}`);
       return lines.join("\n");
 
+    case "structured-sf":
+      lines.push(`### Données structurées (Screaming Frog)`);
+      lines.push("", `- Pages analysées : ${slide.page_count.toLocaleString("fr-FR")} (dont ${slide.pages_with_data.toLocaleString("fr-FR")} avec données)`);
+      lines.push(`- Types schema.org distincts : ${slide.distinct_types}`);
+      lines.push(`- Erreurs : ${slide.total_errors} · Avertissements : ${slide.total_warnings}`);
+      if (slide.top_types.length) {
+        lines.push("", "| Type | Pages |", "| --- | --- |");
+        for (const t of slide.top_types) lines.push(`| ${t.type} | ${t.pages} |`);
+      }
+      if (slide.ai_overview) lines.push("", slide.ai_overview);
+      if (slide.ai_recommendations.length) {
+        lines.push("", "**Recommandations :**");
+        for (const r of slide.ai_recommendations) lines.push(`- ${r}`);
+      }
+      return lines.join("\n");
+
     case "reco":
       lines.push(`### ${slide.title}`);
       for (const g of slide.groups) {

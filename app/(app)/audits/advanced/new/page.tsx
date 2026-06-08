@@ -10,6 +10,7 @@ import { parseIssuesZip, type IssuesParseResult } from "@/lib/audit/advanced/par
 import { parseAnchorsCsv, type AnchorsParseResult } from "@/lib/audit/advanced/parse-anchors";
 import { parseImagesAllCsv, type ImagesAllParseResult } from "@/lib/audit/advanced/parse-images-all";
 import { parseSitemapsCsv, type SitemapSfStats } from "@/lib/audit/advanced/parse-sitemaps";
+import { parseStructuredCsv, type StructuredSfStats } from "@/lib/audit/advanced/parse-structured";
 import { analyzeAdvanced } from "@/lib/audit/advanced/analyze";
 import type { AdvReport, AdvSlide, AdvIssueRow, PageSpeedResult } from "@/lib/audit/advanced/types";
 
@@ -102,6 +103,11 @@ export default function NewAdvancedAuditPage() {
   const [sitemapFile, setSitemapFile] = useState<File | null>(null);
   const [sitemapSf, setSitemapSf] = useState<SitemapSfStats | null>(null);
 
+  // Optional Screaming Frog "Données structurées" export : authoritative
+  // schema.org inventory (supersedes the homepage JSON-LD fetch).
+  const [structuredFile, setStructuredFile] = useState<File | null>(null);
+  const [structuredSf, setStructuredSf] = useState<StructuredSfStats | null>(null);
+
   const [stage, setStage] = useState<Stage>("idle");
   const [err, setErr] = useState<string | null>(null);
 
@@ -139,10 +145,11 @@ export default function NewAdvancedAuditPage() {
         sitemap_url: sitemapUrl.trim() || null,
         pagespeed_urls: [pageSpeedUrl1, pageSpeedUrl2].map((u) => u.trim()).filter(Boolean),
         sitemap_sf: sitemapSf,
+        structured_sf: structuredSf,
       });
       setReport(r);
     },
-    [internalFile, internalStats, hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2, sitemapSf],
+    [internalFile, internalStats, hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2, sitemapSf, structuredSf],
   );
 
   // Re-run the analyzer whenever the robots / sitemap user-provided fields
@@ -154,7 +161,7 @@ export default function NewAdvancedAuditPage() {
       reanalyze(internalRows, issuesResult, anchorsResult, imagesResult, siteResources);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2, sitemapSf]);
+  }, [hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2, sitemapSf, structuredSf]);
 
   // File 1
   const onPickInternal = useCallback(async (f: File) => {
@@ -343,6 +350,21 @@ export default function NewAdvancedAuditPage() {
       setSitemapSf(stats);
     } catch (e) {
       setErr(`Échec lecture sitemaps_tous.csv : ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setStage("idle");
+    }
+  }, []);
+
+  // Optional file : Screaming Frog "Données structurées" export.
+  const onPickStructured = useCallback(async (f: File) => {
+    setErr(null);
+    setStructuredFile(f);
+    setStage("analyzing");
+    try {
+      const { stats } = await parseStructuredCsv(f);
+      setStructuredSf(stats);
+    } catch (e) {
+      setErr(`Échec lecture donnees_structurees_tous.csv : ${e instanceof Error ? e.message : e}`);
     } finally {
       setStage("idle");
     }
@@ -718,6 +740,38 @@ export default function NewAdvancedAuditPage() {
           Optionnel. Laisse vide pour ne pas inclure de slides PageSpeed. L&apos;analyse ajoute
           quelques dizaines de secondes au lancement (on attend le retour de l&apos;API).
         </p>
+      </section>
+
+      {/* === Structured data (Screaming Frog export) === */}
+      <section className="card p-5 space-y-3">
+        <div>
+          <h2 className="label">🧩 Données structurées (Screaming Frog)</h2>
+          <p className="text-xs text-zinc-500 mt-1 leading-relaxed max-w-2xl">
+            Export <code className="text-accent-200">donnees_structurees_tous.csv</code> (nécessite
+            l&apos;extraction « Données structurées » + validation schema.org activée dans le crawl).
+            Donne l&apos;inventaire réel des types schema.org par page ; l&apos;IA croise ensuite ces
+            données avec l&apos;intention des pages stratégiques pour proposer enrichissements, ajouts
+            et corrections. Remplace l&apos;analyse limitée de la seule page d&apos;accueil.
+          </p>
+        </div>
+        <label className="btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) onPickStructured(f); }}
+          />
+          {structuredFile ? "Remplacer le fichier" : "Choisir donnees_structurees_tous.csv"}
+        </label>
+        {structuredSf && (
+          <div className="text-[11px] text-emerald-400">
+            ✓ {structuredSf.page_count.toLocaleString("fr-FR")} pages ·{" "}
+            {structuredSf.distinct_types} types schema.org ·{" "}
+            <span className={structuredSf.total_errors > 0 ? "text-amber-400" : "text-emerald-400"}>
+              {structuredSf.total_errors.toLocaleString("fr-FR")} erreurs
+            </span>
+          </div>
+        )}
       </section>
 
       {busy && (
