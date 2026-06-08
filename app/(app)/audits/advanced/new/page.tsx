@@ -10,7 +10,7 @@ import { parseIssuesZip, type IssuesParseResult } from "@/lib/audit/advanced/par
 import { parseAnchorsCsv, type AnchorsParseResult } from "@/lib/audit/advanced/parse-anchors";
 import { parseImagesAllCsv, type ImagesAllParseResult } from "@/lib/audit/advanced/parse-images-all";
 import { analyzeAdvanced } from "@/lib/audit/advanced/analyze";
-import type { AdvReport } from "@/lib/audit/advanced/types";
+import type { AdvReport, AdvSlide, AdvIssueRow, PageSpeedResult } from "@/lib/audit/advanced/types";
 
 type Stage =
   | "idle"
@@ -20,6 +20,7 @@ type Stage =
   | "parsing-images"
   | "fetching-site"
   | "analyzing"
+  | "pagespeed"
   | "saving";
 
 // No artificial row cap any more : the XLSX is a client deliverable and
@@ -89,6 +90,12 @@ export default function NewAdvancedAuditPage() {
   const [robotsContent, setRobotsContent] = useState("");
   const [sitemapUrl, setSitemapUrl] = useState("");
 
+  // Two URLs to run through PageSpeed Insights (mobile). Each produces a
+  // dedicated slide (score + FCP/LCP + top problems) filled from the PSI
+  // API when the audit is launched.
+  const [pageSpeedUrl1, setPageSpeedUrl1] = useState("");
+  const [pageSpeedUrl2, setPageSpeedUrl2] = useState("");
+
   const [stage, setStage] = useState<Stage>("idle");
   const [err, setErr] = useState<string | null>(null);
 
@@ -124,10 +131,11 @@ export default function NewAdvancedAuditPage() {
         pagination_excluded: internalStats?.pagination_skipped ?? 0,
         robots_txt_pasted: hasRobots === "yes" ? robotsContent.trim() || null : null,
         sitemap_url: sitemapUrl.trim() || null,
+        pagespeed_urls: [pageSpeedUrl1, pageSpeedUrl2].map((u) => u.trim()).filter(Boolean),
       });
       setReport(r);
     },
-    [internalFile, internalStats, hasRobots, robotsContent, sitemapUrl],
+    [internalFile, internalStats, hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2],
   );
 
   // Re-run the analyzer whenever the robots / sitemap user-provided fields
@@ -139,7 +147,7 @@ export default function NewAdvancedAuditPage() {
       reanalyze(internalRows, issuesResult, anchorsResult, imagesResult, siteResources);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRobots, robotsContent, sitemapUrl]);
+  }, [hasRobots, robotsContent, sitemapUrl, pageSpeedUrl1, pageSpeedUrl2]);
 
   // File 1
   const onPickInternal = useCallback(async (f: File) => {
@@ -241,11 +249,95 @@ export default function NewAdvancedAuditPage() {
     }
   }, [internalRows, issuesResult, anchorsResult, siteResources, reanalyze]);
 
+  // Run PageSpeed Insights for every "pagespeed" placeholder slide, then fold
+  // the results back into a fresh report : fill each slide (score / FCP / LCP
+  // / top 3 problems) and the shared "pagespeed" subcategory (full problem
+  // list, exported to its dedicated XLSX sheet). Returns the report untouched
+  // when there is no PageSpeed slide.
+  async function runPagespeed(src: AdvReport): Promise<AdvReport> {
+    const psSlides = src.slides.filter((s): s is Extract<AdvSlide, { kind: "pagespeed" }> => s.kind === "pagespeed");
+    if (psSlides.length === 0) return src;
+
+    setStage("pagespeed");
+    const results = await Promise.all(
+      psSlides.map(async (s): Promise<PageSpeedResult> => {
+        try {
+          return await api<PageSpeedResult>("/srv/audits/pagespeed", {
+            method: "POST",
+            json: { url: s.url, strategy: s.strategy || "mobile" },
+            timeoutMs: 70_000,
+          });
+        } catch (e) {
+          return {
+            url: s.url, final_url: null, strategy: s.strategy || "mobile",
+            fetched: false, performance_score: null, fcp: null, lcp: null,
+            metrics: [], opportunities: [],
+            error: e instanceof Error ? e.message : String(e),
+          };
+        }
+      }),
+    );
+    const byUrl = new Map(results.map((r) => [r.url, r]));
+
+    const sevOf = (score: number | null): AdvIssueRow["severity"] =>
+      score == null || score < 0.5 ? "high" : score < 0.75 ? "medium" : "low";
+
+    // Build the aggregated problem rows for the XLSX sheet (both pages).
+    const psRows: AdvIssueRow[] = [];
+    for (const r of results) {
+      for (const o of r.opportunities) {
+        psRows.push({
+          url: r.url,
+          severity: sevOf(o.score),
+          problem: o.title,
+          economy: o.display || (o.savings_ms > 0 ? `${Math.round(o.savings_ms)} ms` : ""),
+          detail: o.description,
+        });
+      }
+    }
+
+    const slides = src.slides.map((s) => {
+      if (s.kind !== "pagespeed") return s;
+      const r = byUrl.get(s.url);
+      if (!r) return s;
+      return {
+        ...s,
+        fetched: r.fetched,
+        performance_score: r.performance_score,
+        fcp: r.fcp,
+        lcp: r.lcp,
+        metrics: r.metrics,
+        top_issues: r.opportunities.slice(0, 3).map((o) => ({ title: o.title, display: o.display })),
+        total_issues: r.opportunities.length,
+        xlsx_sheet: psRows.length > 0 ? "PageSpeed Insights" : undefined,
+        error: r.error,
+      } as AdvSlide;
+    });
+
+    const sections = src.sections.map((sec) => ({
+      ...sec,
+      subcategories: sec.subcategories.map((sub) =>
+        sub.id === "pagespeed" ? { ...sub, issues_full: psRows } : sub,
+      ),
+    }));
+
+    return { ...src, slides, sections };
+  }
+
   async function save() {
     if (!report) return;
-    setStage("saving");
     setErr(null);
+    let finalReport: AdvReport;
     try {
+      finalReport = await runPagespeed(report);
+    } catch (e) {
+      setErr(`Échec de l'analyse PageSpeed Insights : ${e instanceof Error ? e.message : e}`);
+      setStage("idle");
+      return;
+    }
+    setStage("saving");
+    try {
+      const report = finalReport;
       const subs = report.sections.flatMap((s) => s.subcategories);
       const capped: Record<string, typeof subs[number]["issues_full"]> = {};
       let truncated = 0;
@@ -536,6 +628,45 @@ export default function NewAdvancedAuditPage() {
         </div>
       </section>
 
+      {/* === PageSpeed Insights : two URLs to benchmark (mobile) === */}
+      <section className="card p-5 space-y-4">
+        <div>
+          <h2 className="label">⚡ PageSpeed Insights</h2>
+          <p className="text-xs text-zinc-500 mt-1 leading-relaxed max-w-2xl">
+            Renseigne deux URLs (l&apos;accueil et une page interne représentative, par exemple).
+            Au lancement de l&apos;audit, chacune est analysée via l&apos;API Google PageSpeed Insights
+            (mobile) : score de performance, FCP, LCP et principaux problèmes. Le détail complet
+            part dans le fichier XLSX.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block space-y-1.5">
+            <span className="label">URL page 1</span>
+            <input
+              type="url"
+              value={pageSpeedUrl1}
+              onChange={(e) => setPageSpeedUrl1(e.target.value)}
+              placeholder="https://example.com/"
+              className="input"
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="label">URL page 2</span>
+            <input
+              type="url"
+              value={pageSpeedUrl2}
+              onChange={(e) => setPageSpeedUrl2(e.target.value)}
+              placeholder="https://example.com/une-page-interne"
+              className="input"
+            />
+          </label>
+        </div>
+        <p className="text-[11px] text-zinc-500">
+          Optionnel. Laisse vide pour ne pas inclure de slides PageSpeed. L&apos;analyse ajoute
+          quelques dizaines de secondes au lancement (on attend le retour de l&apos;API).
+        </p>
+      </section>
+
       {busy && (
         <div className="card p-4 text-sm text-zinc-300 flex items-center gap-3">
           <div className="w-3 h-3 rounded-full bg-accent-500 animate-pulse" />
@@ -545,6 +676,7 @@ export default function NewAdvancedAuditPage() {
           {stage === "parsing-images" && "Lecture de images_tous.csv…"}
           {stage === "fetching-site" && "Récupération du robots.txt / sitemap.xml / llms.txt…"}
           {stage === "analyzing" && "Calcul du rapport…"}
+          {stage === "pagespeed" && "Analyse PageSpeed Insights des pages (mobile)… cela peut prendre 30 à 60 s."}
           {stage === "saving" && "Enregistrement…"}
         </div>
       )}

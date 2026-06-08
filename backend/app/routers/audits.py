@@ -1010,3 +1010,205 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
         gap_breakdown=gap_breakdown,
         last_modified=last_modified,
     )
+
+
+# =========================================================================
+# PageSpeed Insights : performance score (mobile) + Core Web Vitals
+# (FCP / LCP) + the actionable opportunities for a single page. Called
+# once per analysed URL by the advanced-audit creation flow, before the
+# audit is persisted. The Google PSI API is free (keyless or with an
+# optional API key) so no Claude / paid call is involved here.
+# =========================================================================
+
+
+class PageSpeedIn(BaseModel):
+    url: str
+    strategy: str = "mobile"  # "mobile" (default, mobile-first) or "desktop"
+
+    @field_validator("url")
+    @classmethod
+    def _check_url(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("url is empty")
+        if not v.startswith(("http://", "https://")):
+            v = "https://" + v.lstrip("/")
+        return v
+
+    @field_validator("strategy")
+    @classmethod
+    def _check_strategy(cls, v: str) -> str:
+        v = (v or "mobile").strip().lower()
+        return v if v in ("mobile", "desktop") else "mobile"
+
+
+class PageSpeedMetricOut(BaseModel):
+    id: str
+    label: str
+    display: str        # human-readable value, e.g. "2,1 s" or "0,02"
+    score: float | None  # 0..1 (Lighthouse audit score), null when unscored
+
+
+class PageSpeedOpportunityOut(BaseModel):
+    id: str
+    title: str          # audit title, e.g. "Différer les images hors écran"
+    display: str        # displayValue, e.g. "Économie estimée de 1,2 s" (may be "")
+    description: str     # plain-text audit description (markdown stripped)
+    savings_ms: float    # estimated savings in ms (0 when none)
+    score: float | None  # 0..1, lower = bigger problem
+
+
+class PageSpeedOut(BaseModel):
+    url: str
+    final_url: str | None = None
+    strategy: str
+    fetched: bool
+    performance_score: int | None = None  # 0..100
+    fcp: PageSpeedMetricOut | None = None
+    lcp: PageSpeedMetricOut | None = None
+    metrics: list[PageSpeedMetricOut] = []
+    opportunities: list[PageSpeedOpportunityOut] = []
+    error: str | None = None
+
+
+# Lighthouse metric audit ids : these are the timing metrics, NOT the
+# actionable "opportunities", so we exclude them from the problem list.
+_PSI_METRIC_IDS = {
+    "first-contentful-paint",
+    "largest-contentful-paint",
+    "total-blocking-time",
+    "cumulative-layout-shift",
+    "speed-index",
+    "interactive",
+    "max-potential-fid",
+    "first-meaningful-paint",
+    "server-response-time",
+}
+
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+
+
+def _strip_markdown(text: str) -> str:
+    """Lighthouse descriptions are markdown ([text](url), backticks…).
+    Flatten them to plain text for the slide + XLSX."""
+    if not text:
+        return ""
+    text = _MD_LINK_RE.sub(r"\1", text)          # [label](url) -> label
+    text = text.replace("`", "")                  # inline code ticks
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+@router.post("/pagespeed", response_model=PageSpeedOut)
+async def pagespeed(payload: PageSpeedIn) -> PageSpeedOut:
+    """Run Google PageSpeed Insights (Lighthouse, performance category) on a
+    single URL and return the score + FCP/LCP + the actionable opportunities.
+
+    Keyless by default; uses PAGESPEED_API_KEY when configured for a higher
+    quota. One URL per call so each stays well under the serverless timeout.
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
+    params = {
+        "url": payload.url,
+        "strategy": payload.strategy,
+        "category": "performance",
+    }
+    if settings.pagespeed_api_key:
+        params["key"] = settings.pagespeed_api_key
+
+    try:
+        async with httpx.AsyncClient(timeout=55.0, follow_redirects=True) as client:
+            r = await client.get(
+                "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+                params=params,
+            )
+        if r.status_code != 200:
+            # Surface the Google error message when present.
+            msg = f"HTTP {r.status_code}"
+            try:
+                err = r.json().get("error", {})
+                msg = err.get("message", msg)
+            except Exception:  # noqa: BLE001
+                pass
+            return PageSpeedOut(url=payload.url, strategy=payload.strategy, fetched=False, error=msg)
+        data = r.json()
+    except Exception as exc:  # noqa: BLE001
+        return PageSpeedOut(url=payload.url, strategy=payload.strategy, fetched=False, error=str(exc))
+
+    lh = data.get("lighthouseResult") or {}
+    audits: dict = lh.get("audits") or {}
+    perf_cat = (lh.get("categories") or {}).get("performance") or {}
+
+    score = perf_cat.get("score")
+    performance_score = round(score * 100) if isinstance(score, (int, float)) else None
+
+    def _metric(aid: str, label: str) -> PageSpeedMetricOut | None:
+        a = audits.get(aid)
+        if not a:
+            return None
+        return PageSpeedMetricOut(
+            id=aid,
+            label=label,
+            display=str(a.get("displayValue") or ""),
+            score=a.get("score"),
+        )
+
+    fcp = _metric("first-contentful-paint", "FCP")
+    lcp = _metric("largest-contentful-paint", "LCP")
+    metrics = [
+        m for m in (
+            fcp,
+            lcp,
+            _metric("total-blocking-time", "TBT"),
+            _metric("cumulative-layout-shift", "CLS"),
+            _metric("speed-index", "Speed Index"),
+        )
+        if m is not None
+    ]
+
+    # Build the actionable problem list from the performance auditRefs :
+    # everything that scored below 0.9 and isn't a raw timing metric.
+    opportunities: list[PageSpeedOpportunityOut] = []
+    for ref in perf_cat.get("auditRefs", []):
+        aid = ref.get("id")
+        if not aid or aid in _PSI_METRIC_IDS:
+            continue
+        a = audits.get(aid)
+        if not a:
+            continue
+        mode = a.get("scoreDisplayMode")
+        if mode in ("notApplicable", "informative", "manual", "error"):
+            continue
+        a_score = a.get("score")
+        if a_score is None or a_score >= 0.9:
+            continue
+        details = a.get("details") or {}
+        savings = details.get("overallSavingsMs")
+        if savings is None:
+            savings = a.get("numericValue") if a.get("numericUnit") == "millisecond" else None
+        opportunities.append(
+            PageSpeedOpportunityOut(
+                id=aid,
+                title=str(a.get("title") or ""),
+                display=str(a.get("displayValue") or ""),
+                description=_strip_markdown(str(a.get("description") or "")),
+                savings_ms=float(savings) if isinstance(savings, (int, float)) else 0.0,
+                score=a_score,
+            )
+        )
+    # Worst first : biggest estimated savings, then lowest score.
+    opportunities.sort(key=lambda o: (-o.savings_ms, o.score if o.score is not None else 1.0))
+
+    return PageSpeedOut(
+        url=payload.url,
+        final_url=lh.get("finalUrl") or lh.get("requestedUrl"),
+        strategy=payload.strategy,
+        fetched=performance_score is not None,
+        performance_score=performance_score,
+        fcp=fcp,
+        lcp=lcp,
+        metrics=metrics,
+        opportunities=opportunities[:60],
+    )

@@ -20,6 +20,7 @@ import {
   RobotsImprovedBody,
   SitemapOverviewBody,
   SitemapGapsBody,
+  PageSpeedBody,
   CustomSlideBody,
 } from "@/components/audit/advanced/SlideContent";
 import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
@@ -847,6 +848,31 @@ export default function AdvancedAuditPage() {
               </AdvSlide>
             );
           }
+          if (s.kind === "pagespeed") {
+            const tone: "ok" | "warn" | "bad" =
+              s.performance_score == null ? "warn" :
+              s.performance_score >= 90 ? "ok" :
+              s.performance_score >= 50 ? "warn" : "bad";
+            let host = s.url;
+            try { host = new URL(s.url).hostname + new URL(s.url).pathname; } catch { /* keep raw */ }
+            return (
+              <AdvSlide
+                key={i}
+                index={i}
+                total={total}
+                title="PageSpeed Insights"
+                subtitle={host}
+                rightHeader={
+                  s.performance_score != null
+                    ? <SectionPill tone={tone}>Performance {s.performance_score}/100</SectionPill>
+                    : <SectionPill tone="warn">Non disponible</SectionPill>
+                }
+                footer="Performance"
+              >
+                <PageSpeedBody slide={s} />
+              </AdvSlide>
+            );
+          }
           if (s.kind === "section-cover") {
             const sectionIndex = audit.summary!.sections.findIndex((x) => x.id === s.section_id);
             const part = `Partie ${sectionIndex + 1} sur ${audit.summary!.sections.length}`;
@@ -1071,7 +1097,9 @@ function collectIndexableUrls(audit: AuditOut): string[] {
   const sources = [
     "canonical",
     "depth",
-    "titles_meta_basic",
+    "title_length",      // new split sheet (was "titles_meta_basic")
+    "metadesc_length",
+    "titles_meta_basic", // kept for older audits
     "internal_linking_overview",
     "orphan_pages",
   ];
@@ -1255,6 +1283,7 @@ const KIND_LABEL: Record<string, string> = {
   "robots-improved": "Robots.txt amélioré",
   "sitemap-overview": "Sitemap",
   "sitemap-gaps": "Sitemap (absences)",
+  pagespeed: "PageSpeed Insights",
   reco: "Recommandations",
   priority: "Priorisation",
   custom: "Slide libre",

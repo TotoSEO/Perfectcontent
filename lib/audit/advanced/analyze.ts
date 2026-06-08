@@ -495,7 +495,7 @@ function buildIndexabilityCrawl(
 
 // ---------- Performance section --------------------------------------------
 
-function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: AdvSlide[] } {
+function buildPerformance(rows: InternalRow[], pagespeedUrls: string[] = []): { section: AdvSection; slides: AdvSlide[] } {
   const html = rows.filter(isHtml);
   const total = html.length || 1;
 
@@ -608,6 +608,44 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
       : "Aucune page ne dépasse la limite Googlebot ✓",
   };
 
+  // ----- PageSpeed Insights -----
+  // Two URLs are entered at import time. We emit one placeholder slide per
+  // URL here (score / FCP / LCP / problems filled at save time from the PSI
+  // API) plus a single shared subcategory that collects every detected
+  // problem across both pages into the dedicated XLSX sheet.
+  const psUrls = pagespeedUrls.map((u) => u.trim()).filter(Boolean);
+  const pagespeedSlides: AdvSlide[] = psUrls.map((url) => ({
+    kind: "pagespeed",
+    url,
+    strategy: "mobile",
+    fetched: false,
+    performance_score: null,
+    fcp: null,
+    lcp: null,
+    metrics: [],
+    top_issues: [],
+    total_issues: 0,
+    error: null,
+  }));
+  const subPagespeed: AdvSubcategory | null = psUrls.length > 0 ? {
+    id: "pagespeed",
+    label: "PageSpeed Insights",
+    score: 100,
+    // Informational : filled after the audit is built, so it must not
+    // dilute the deterministic performance score computed from the crawl.
+    weight: 0,
+    issues_full: [],  // populated at save time from the PSI API response
+    columns: [
+      { key: "problem", label: "Problème", width: 45 },
+      { key: "economy", label: "Gain estimé", width: 22 },
+      { key: "detail", label: "Détail", width: 90 },
+      { key: "url", label: "Page analysée", width: 55 },
+    ],
+    xlsx_sheet: "PageSpeed Insights",
+    why: "Le score PageSpeed (Lighthouse, mobile) et les Core Web Vitals (FCP, LCP) reflètent l'expérience de chargement réelle : un score faible pénalise le référencement et le taux de conversion.",
+    how_to_fix: "Traiter les problèmes par gain estimé décroissant : optimisation des images, suppression des ressources bloquantes, mise en cache, réduction du JavaScript inutilisé.",
+  } : null;
+
   // Section cover & reco
   const cover: AdvSlide = {
     kind: "section-cover",
@@ -619,7 +657,7 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
   };
   const recoSlides = buildRecoSlides("performance", "Recommandations : Performance");
 
-  const subcategories = [subResp, subWeight];
+  const subcategories = [subResp, subWeight, ...(subPagespeed ? [subPagespeed] : [])];
   const sectionScore = (() => {
     // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
     // does not dilute a real failure in another sub.
@@ -635,7 +673,10 @@ function buildPerformance(rows: InternalRow[]): { section: AdvSection; slides: A
     summary: `${slow + verySlow} pages > 1 s TTFB · ${over2m} pages > 2 Mo HTML`,
     subcategories,
   };
-  return { section, slides: [cover, slideResp, slideWeight, ...recoSlides] };
+  // PageSpeed slides sit right after the loading-time / HTML-weight slides
+  // (the "TTFB / temps de chargement" discussion the consultant referenced),
+  // before the performance recommendations.
+  return { section, slides: [cover, slideResp, slideWeight, ...pagespeedSlides, ...recoSlides] };
 }
 
 // ---------- Meta section ---------------------------------------------------
@@ -698,23 +739,40 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
   // would inflate issues_count beyond what the KPIs add up to. The
   // information stays surfaced via the section summary text below.
 
-  const subTitlesMeta: AdvSubcategory = {
-    id: "titles_meta_basic",
-    label: "Titles & meta",
-    score: scoreFromRatio((titleMissing * 1 + metaMissing * 0.5 + (titleSameH1?.rows.length || 0) * 0.2) / Math.max(html.length, 1)),
-    issues_full: tmIssues,
+  // Title and meta description are two distinct concerns : they get one
+  // dedicated XLSX sheet each ("Long. Title" / "Long. Metadesc.") instead
+  // of a single combined "Titles & meta" tab. Each row already carries a
+  // `type` discriminator, so we just partition the issue list.
+  const titleLenIssues = tmIssues.filter((r) => r.type === "Title");
+  const metaLenIssues = tmIssues.filter((r) => r.type === "Meta");
+  const subTitleLen: AdvSubcategory = {
+    id: "title_length",
+    label: "Balises title",
+    score: scoreFromRatio((titleMissing * 1 + (titleShort + titleLong) * 0.3 + (titleSameH1?.rows.length || 0) * 0.2) / Math.max(html.length, 1)),
+    issues_full: titleLenIssues,
     columns: [
-      { key: "type", label: "Type", width: 12 },
       { key: "reason", label: "Problème", width: 35 },
       { key: "length", label: "Long.", width: 10 },
       { key: "url", label: "URL", width: 60 },
     ],
-    xlsx_sheet: "Titles & meta",
+    xlsx_sheet: "Long. Title",
+  };
+  const subMetaLen: AdvSubcategory = {
+    id: "metadesc_length",
+    label: "Meta descriptions",
+    score: scoreFromRatio((metaMissing * 0.7 + (metaShort + metaLong) * 0.3) / Math.max(html.length, 1)),
+    issues_full: metaLenIssues,
+    columns: [
+      { key: "reason", label: "Problème", width: 35 },
+      { key: "length", label: "Long.", width: 10 },
+      { key: "url", label: "URL", width: 60 },
+    ],
+    xlsx_sheet: "Long. Metadesc.",
   };
   const slideTitlesMeta: AdvSlide = {
     kind: "data",
     section_id: "meta",
-    sub_id: "titles_meta_basic",
+    sub_id: "title_length",
     title: "Balises title & meta description",
     description: DESC.titles_meta,
     kpis: [
@@ -723,7 +781,8 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
       { label: "Meta manquante", value: metaMissing, tone: metaMissing > 0 ? "warn" : "ok" },
       { label: "Meta hors gabarit", value: metaShort + metaLong, tone: metaShort + metaLong > 0 ? "warn" : "ok" },
     ],
-    xlsx_sheet: tmIssues.length > 0 ? subTitlesMeta.xlsx_sheet : undefined,
+    // Two distinct tabs now back this slide : point the badge at both.
+    xlsx_sheet: tmIssues.length > 0 ? "Long. Title / Long. Metadesc." : undefined,
     issues_count: tmIssues.length,
   };
 
@@ -817,7 +876,7 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
   };
   const recoSlides = buildRecoSlides("meta", "Recommandations : Balises & métadonnées");
 
-  const subcategories = [subTitlesMeta, subTitleDup, subMetaDup, subH1Dup];
+  const subcategories = [subTitleLen, subMetaLen, subTitleDup, subMetaDup, subH1Dup];
   const sectionScore = (() => {
     // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
     // does not dilute a real failure in another sub.
@@ -2090,7 +2149,8 @@ const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
   depth: "deep",
   response_time: "deep",
   html_weight: "medium",
-  titles_meta_basic: "medium",
+  title_length: "medium",
+  metadesc_length: "medium",
   title_duplicate: "medium",
   meta_duplicate: "medium",
   h1_duplicate: "medium",
@@ -2119,6 +2179,7 @@ const SUB_EFFORT: Record<string, "quick-win" | "medium" | "deep"> = {
 const INFORMATIONAL_SUB_IDS = new Set([
   "noindex_pages",
   "schemas_detected",
+  "pagespeed",
 ]);
 
 function buildPriorities(sections: AdvSection[]): PriorityItem[] {
@@ -2226,9 +2287,13 @@ const SUB_GUIDE: Record<string, { why: string; fix: string }> = {
     why: "Au-delà de 2 Mo de HTML, Googlebot tronque la page et peut manquer du contenu et des liens situés en bas du code.",
     fix: "Alléger le DOM, différer le JavaScript non critique, retirer le HTML inutilisé et le contenu masqué. Cible : moins de 1 Mo.",
   },
-  titles_meta_basic: {
-    why: "Un title ou une meta description manquant / hors gabarit réduit le taux de clic (CTR) en page de résultats Google.",
-    fix: "Rédiger un title unique de 30 à 60 caractères et une meta description de 70 à 155 caractères, propres à chaque page.",
+  title_length: {
+    why: "Un title manquant ou hors gabarit (trop court / trop long) réduit le taux de clic (CTR) en page de résultats Google et peut être réécrit par Google.",
+    fix: "Rédiger un title unique de 30 à 60 caractères, propre à chaque page et reflétant son intention de recherche.",
+  },
+  metadesc_length: {
+    why: "Une meta description manquante ou hors gabarit (trop courte / trop longue) est souvent tronquée ou réécrite par Google, ce qui pénalise le taux de clic.",
+    fix: "Rédiger une meta description incitative de 70 à 155 caractères, propre à chaque page.",
   },
   title_duplicate: {
     why: "Des balises title identiques empêchent Google de distinguer les pages entre elles et diluent leur pertinence respective.",
@@ -2316,6 +2381,9 @@ export type AdvancedAnalyzeOpts = {
   // sitemap.xml AI-analysis slides.
   robots_txt_pasted?: string | null;
   sitemap_url?: string | null;
+  // Up to two URLs to run through PageSpeed Insights. Each produces a
+  // placeholder "pagespeed" slide filled from the PSI API at save time.
+  pagespeed_urls?: string[];
 };
 
 export function analyzeAdvanced(
@@ -2326,7 +2394,7 @@ export function analyzeAdvanced(
   const htmlCount = rows.filter(isHtml).length;
 
   const { section: secIdx, slides: slIdx } = buildIndexabilityCrawl(rows, issues, opts.site_resources);
-  const { section: secPerf, slides: slPerf } = buildPerformance(rows);
+  const { section: secPerf, slides: slPerf } = buildPerformance(rows, opts.pagespeed_urls ?? []);
   const { section: secMeta, slides: slMeta } = buildMeta(rows, issues);
   const { section: secStruct, slides: slStruct } = buildStructure(rows, issues);
   const { section: secLink, slides: slLink } = buildLinking(rows, issues, opts.anchors);

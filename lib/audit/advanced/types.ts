@@ -49,6 +49,40 @@ export type AnchorDestinationSummary = {
   dominant_anchor_pct: number; // 0..100
 };
 
+// ---- PageSpeed Insights (Google Lighthouse) ----
+// Fetched server-side once per analysed URL at audit-creation time (before
+// the audit is persisted). The full opportunity list is exported to the
+// dedicated "PageSpeed Insights" XLSX sheet; the slide shows the score,
+// FCP / LCP and the top 3 problems only.
+export type PageSpeedMetric = {
+  id: string;
+  label: string;
+  display: string;       // "2,1 s", "0,02"…
+  score: number | null;  // 0..1
+};
+
+export type PageSpeedOpportunity = {
+  id: string;
+  title: string;
+  display: string;       // "Économie estimée de 1,2 s" (may be "")
+  description: string;
+  savings_ms: number;
+  score: number | null;
+};
+
+export type PageSpeedResult = {
+  url: string;
+  final_url: string | null;
+  strategy: string;
+  fetched: boolean;
+  performance_score: number | null;  // 0..100
+  fcp: PageSpeedMetric | null;
+  lcp: PageSpeedMetric | null;
+  metrics: PageSpeedMetric[];
+  opportunities: PageSpeedOpportunity[];
+  error: string | null;
+};
+
 // Slide kinds : drives rendering in the viewer.
 export type AdvSlide =
   | {
@@ -218,6 +252,25 @@ export type AdvSlide =
       domain: string | null;
       improved_content: string;     // the recommended cleaned robots.txt
       ai_improvements: string[];    // 3-6 changes between current and improved
+    }
+  | {
+      // PageSpeed Insights result for ONE analysed page. Two of these are
+      // emitted (one per URL the consultant enters). All fields except url
+      // / strategy are filled at audit-creation time from the PSI API ;
+      // until then they stay at their empty defaults (fetched=false).
+      kind: "pagespeed";
+      url: string;
+      strategy: string;                 // "mobile" / "desktop"
+      fetched: boolean;
+      performance_score: number | null; // 0..100
+      fcp: PageSpeedMetric | null;
+      lcp: PageSpeedMetric | null;
+      metrics: PageSpeedMetric[];
+      // Top 3 problems shown on the slide. The full list lives in the XLSX.
+      top_issues: { title: string; display: string }[];
+      total_issues: number;
+      xlsx_sheet?: string;              // "PageSpeed Insights" once issues exist
+      error: string | null;
     }
   | {
       // Sitemap.xml analysis — fetched server-side then summarised by AI.
