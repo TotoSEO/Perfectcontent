@@ -2711,6 +2711,180 @@ export function SitemapGapsBody({
 }
 
 // ===========================================================================
+// SITEMAP (Screaming Frog data) — authoritative figures + AI action plan
+// ===========================================================================
+
+export function SitemapSfBody({
+  slide,
+  onRequestAi,
+  busy,
+}: {
+  slide: Extract<AdvSlide, { kind: "sitemap-sf" }>;
+  onRequestAi: () => void;
+  busy: boolean;
+}) {
+  const hasAi = !!slide.ai_overview;
+  return (
+    <div className="flex-1 grid grid-cols-12 gap-8 min-h-0 overflow-hidden">
+      {/* LEFT — AI interpretation + action plan */}
+      <div className="col-span-7 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
+        <div
+          className="uppercase flex items-center gap-2 shrink-0"
+          style={{
+            color: VBT.terracotta600,
+            fontWeight: 700,
+            fontSize: VBT_TYPO.micro,
+            letterSpacing: "0.18em",
+            fontFamily: VBT_FONT.mono,
+          }}
+        >
+          <SparklesIcon size={12} color={VBT.terracotta500} />
+          Analyse du sitemap (données Screaming Frog)
+        </div>
+
+        {hasAi ? (
+          <div className="flex flex-col gap-3 min-h-0 overflow-hidden">
+            <div
+              style={{
+                color: VBT.ink,
+                fontFamily: VBT_FONT.body,
+                fontSize: VBT_TYPO.bodySm,
+                lineHeight: 1.5,
+                display: "-webkit-box",
+                WebkitLineClamp: 6,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {slide.ai_overview}
+            </div>
+            {slide.ai_recommendation && (
+              <div
+                className="rounded-xl"
+                style={{
+                  background: "#fcf2dc",
+                  border: "1px solid #efd07f",
+                  padding: "10px 13px",
+                }}
+              >
+                <div
+                  className="uppercase mb-1.5 flex items-center gap-2"
+                  style={{
+                    color: VBT.sigOrange,
+                    fontWeight: 800,
+                    fontSize: VBT_TYPO.micro,
+                    letterSpacing: "0.14em",
+                    fontFamily: VBT_FONT.title,
+                  }}
+                >
+                  <HammerIcon size={12} color={VBT.sigOrange} />
+                  Enjeu & action à mener
+                </div>
+                <div
+                  style={{
+                    color: VBT.inkSoft,
+                    fontFamily: VBT_FONT.body,
+                    fontSize: VBT_TYPO.bodySm,
+                    lineHeight: 1.5,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 5,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {slide.ai_recommendation}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : slide.ai_error ? (
+          <div style={{ color: VBT.sigRed, fontSize: VBT_TYPO.bodySm }}>
+            Échec de l&apos;analyse : {slide.ai_error}
+            <div className="mt-2">
+              <button
+                onClick={onRequestAi}
+                disabled={busy}
+                className="rounded-lg"
+                style={{ background: VBT.terracotta500, color: VBT.paper, padding: "8px 14px", fontWeight: 600, fontSize: VBT_TYPO.caption, cursor: busy ? "wait" : "pointer" }}
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col gap-3 justify-center">
+            <p style={{ color: VBT.inkSoft, fontSize: VBT_TYPO.bodySm, lineHeight: 1.55 }}>
+              Les chiffres ci-contre proviennent directement de Screaming Frog. L&apos;IA va
+              les interpréter et formuler l&apos;enjeu SEO ainsi que l&apos;action à mener.
+            </p>
+            <button
+              onClick={onRequestAi}
+              disabled={busy}
+              className="rounded-lg self-start"
+              style={{ background: VBT.terracotta500, color: VBT.paper, padding: "10px 16px", fontWeight: 600, fontSize: VBT_TYPO.caption, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}
+            >
+              {busy ? "Analyse en cours…" : "Lancer l'analyse IA"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT — authoritative figures + problem breakdown */}
+      <div className="col-span-5 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden">
+        <div className="grid grid-cols-3 gap-2 shrink-0">
+          <MiniStat label="URLs sitemap" value={slide.content_url_count.toLocaleString("fr-FR")} tone="info" />
+          <MiniStat label="Conformes" value={slide.indexable_count.toLocaleString("fr-FR")} tone="ok" />
+          <MiniStat
+            label="À corriger"
+            value={slide.issues_count.toLocaleString("fr-FR")}
+            tone={slide.issues_count > 0 ? "bad" : "ok"}
+          />
+        </div>
+        <div
+          className="rounded-xl flex-1 min-h-0 overflow-hidden flex flex-col"
+          style={{ background: VBT.paper, border: `1.5px solid ${VBT.ink}`, padding: "10px 12px" }}
+        >
+          <div
+            className="uppercase mb-2 shrink-0"
+            style={{ color: VBT.terracotta700, fontWeight: 700, fontSize: VBT_TYPO.micro, letterSpacing: "0.14em", fontFamily: VBT_FONT.mono }}
+          >
+            URLs à retirer du sitemap
+          </div>
+          {slide.breakdown.length === 0 ? (
+            <div style={{ color: VBT.good, fontSize: VBT_TYPO.bodySm, fontWeight: 600 }}>
+              Aucune URL non conforme : sitemap propre ✓
+            </div>
+          ) : (
+            <ul className="space-y-1.5 min-h-0 overflow-hidden">
+              {slide.breakdown.slice(0, 7).map((b, i) => (
+                <li
+                  key={i}
+                  className="flex items-center justify-between gap-3 min-w-0"
+                  style={{ fontSize: VBT_TYPO.bodySm, color: VBT.ink, fontFamily: VBT_FONT.body }}
+                >
+                  <span className="truncate min-w-0">{b.label}</span>
+                  <span
+                    className="tabular-nums shrink-0"
+                    style={{ color: VBT.bad, fontWeight: 800, fontFamily: VBT_FONT.title }}
+                  >
+                    {b.count.toLocaleString("fr-FR")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {slide.xlsx_sheet && slide.issues_count > 0 && (
+            <div className="mt-auto pt-2 shrink-0">
+              <XlsxRefBadge sheet={slide.xlsx_sheet} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
 // PAGESPEED INSIGHTS — score gauge + FCP/LCP + top problems (one per page)
 // ===========================================================================
 

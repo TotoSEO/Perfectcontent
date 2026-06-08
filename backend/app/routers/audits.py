@@ -1030,6 +1030,103 @@ async def sitemap_analysis(payload: SitemapAnalysisIn) -> SitemapAnalysisOut:
     )
 
 
+# ---- Sitemap analysis from the Screaming Frog export (authoritative) ------
+
+
+class SitemapSfIn(BaseModel):
+    """Figures extracted client-side from the Screaming Frog 'Sitemaps'
+    export (sitemaps_tous.csv). The AI only interprets these exact numbers;
+    it never re-fetches or invents paths/counts."""
+    domain: str | None = None
+    content_url_count: int
+    indexable_count: int
+    non_indexable_count: int
+    non_200_count: int
+    sitemap_file_count: int
+    breakdown: list[dict] = []  # [{label, count}]
+
+
+class SitemapSfOut(BaseModel):
+    overview: str         # 2-3 sentences interpreting the figures
+    recommendation: str   # 2-3 sentences : the stake + the concrete action
+    cost_usd: float
+
+
+@router.post("/sitemap-sf-analysis", response_model=SitemapSfOut)
+async def sitemap_sf_analysis(payload: SitemapSfIn) -> SitemapSfOut:
+    """Interpretation + action plan for the sitemap, from the SF figures.
+
+    Action-plan audit : we show the problem, explain why it matters, and how
+    to fix it. Costs ~0.002 $ (Haiku 4.5).
+    """
+    from app.services.llm import HAIKU, complete
+    import json as _json
+
+    breakdown_txt = ", ".join(
+        f"{b.get('label', '?')}: {b.get('count', 0)}" for b in payload.breakdown
+    ) or "(aucun problème)"
+    conforming = max(0, payload.indexable_count)
+    problems_total = sum(int(b.get("count", 0)) for b in payload.breakdown)
+
+    system = (
+        "Tu es un consultant SEO senior français. Tu rédiges l'analyse du sitemap.xml d'un "
+        "client pour une slide d'audit AVEC PLAN D'ACTION. Le client doit comprendre le problème, "
+        "l'enjeu, et comment le résoudre. "
+        "Tu retournes UNIQUEMENT un objet JSON sans Markdown autour. Schéma :\n"
+        "{\n"
+        '  "overview": "string",        // 2 a 3 phrases : que contient le sitemap, sa structure, et le constat principal\n'
+        '  "recommendation": "string"    // 2 a 3 phrases : l\'enjeu SEO concret + l\'action a mener\n'
+        "}\n"
+        "REGLES STRICTES :\n"
+        "1. Tu n'utilises QUE les chiffres fournis. INTERDICTION d'inventer un chiffre, un chemin, "
+        "un dossier ou un nom de sous-sitemap. Ne cite AUCUNE URL ni section nominative.\n"
+        "2. Un sitemap ne doit contenir que des URLs finales, indexables, en code 200. Explique "
+        "pourquoi les URLs redirigees / canonisees / noindex / bloquees / en erreur n'ont rien a y "
+        "faire (signaux contradictoires, gaspillage de budget de crawl).\n"
+        "3. Si problems_total vaut 0, felicite brievement : le sitemap est propre, et recommendation "
+        "se limite a maintenir cette hygiene.\n"
+        "Regles editoriales : pas de Markdown, pas d'asterisques, pas de tirets cadratins, pas "
+        "d'anglais, phrases courtes (25 mots max), ton factuel."
+    )
+    user_msg = (
+        f"Domaine : {payload.domain or 'inconnu'}\n"
+        f"URLs de pages dans le sitemap : {payload.content_url_count}\n"
+        f"Structure : sitemap-index avec {payload.sitemap_file_count} sous-sitemaps\n"
+        f"URLs conformes (indexables, 200) : {conforming}\n"
+        f"URLs non indexables presentes dans le sitemap : {payload.non_indexable_count}\n"
+        f"URLs en code non-200 dans le sitemap : {payload.non_200_count}\n"
+        f"Total URLs problematiques : {problems_total}\n"
+        f"Repartition des problemes : {breakdown_txt}\n"
+    )
+    try:
+        resp = await complete(system=system, user=user_msg, model=HAIKU, max_tokens=420, temperature=0.2)
+        txt = resp.text.strip()
+        if txt.startswith("```"):
+            txt = txt.strip("`").lstrip("json").strip()
+        data = _json.loads(txt)
+        return SitemapSfOut(
+            overview=str(data.get("overview", "")).strip(),
+            recommendation=str(data.get("recommendation", "")).strip(),
+            cost_usd=resp.cost,
+        )
+    except _json.JSONDecodeError:
+        # Deterministic fallback so the slide is never empty.
+        overview = (
+            f"Le sitemap référence {payload.content_url_count} URLs de pages via "
+            f"{payload.sitemap_file_count} sous-sitemaps. {conforming} sont conformes "
+            f"(indexables, code 200) et {problems_total} posent problème ({breakdown_txt})."
+        )
+        recommendation = (
+            "Un sitemap ne doit lister que des URLs finales indexables en code 200. "
+            "Régénérez-le en retirant les URLs redirigées, canonisées, en noindex, bloquées ou en erreur."
+            if problems_total else
+            "Le sitemap est propre : maintenez cette hygiène à chaque mise en production."
+        )
+        return SitemapSfOut(overview=overview, recommendation=recommendation, cost_usd=0.0)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"AI sitemap analysis failed: {exc}")
+
+
 # =========================================================================
 # PageSpeed Insights : performance score (mobile) + Core Web Vitals
 # (FCP / LCP) + the actionable opportunities for a single page. Called
