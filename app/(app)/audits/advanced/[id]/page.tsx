@@ -28,7 +28,7 @@ import {
 import { CircularGauge } from "@/components/audit/advanced/CircularGauge";
 import { DownloadIcon, PrinterIcon } from "@/components/audit/advanced/Icons";
 import { VBT, VBT_TYPO, VBT_FONT, hardShadow } from "@/lib/audit/brand";
-import type { AdvReport, AdvSlide as AdvSlideType, AdvSubcategory } from "@/lib/audit/advanced/types";
+import type { AdvReport, AdvSlide as AdvSlideType, AdvSubcategory, PriorityItem } from "@/lib/audit/advanced/types";
 
 type AuditOut = {
   id: string;
@@ -211,6 +211,31 @@ export default function AdvancedAuditPage() {
     return Object.values(audit.issues.categories || {}).reduce((acc, cur) => acc + (cur?.length || 0), 0);
   }, [audit]);
 
+  // Persist AI-generated fields back to the audit so they survive a reload
+  // (otherwise the consultant pays to regenerate every time). Non-fatal :
+  // the local state still shows the result if the PATCH fails.
+  async function persistSlides(newSlides: AdvSlideType[]) {
+    if (!audit?.summary) return;
+    const newSummary = { ...audit.summary, slides: newSlides };
+    try {
+      await api(`/srv/audits/${id}`, { method: "PATCH", json: { summary: newSummary }, timeoutMs: 60_000 });
+      await mutate({ ...audit, summary: newSummary }, { revalidate: false });
+    } catch {
+      /* keep local state ; persistence is best-effort */
+    }
+  }
+
+  // Apply a patch to every stored slide matching `kind` and persist.
+  function persistKind<K extends AdvSlideType["kind"]>(
+    kind: K,
+    patch: (s: Extract<AdvSlideType, { kind: K }>) => AdvSlideType,
+  ) {
+    if (!audit?.summary) return;
+    const stored = (audit.summary.slides as AdvSlideType[]) || [];
+    const next = stored.map((s) => (s.kind === kind ? patch(s as Extract<AdvSlideType, { kind: K }>) : s));
+    void persistSlides(next);
+  }
+
   async function generateAiSummary() {
     if (!audit?.summary) return;
     setAiBusy(true);
@@ -234,6 +259,7 @@ export default function AdvancedAuditPage() {
         timeoutMs: 60_000,
       });
       setAiSummary(res.summary);
+      persistKind("priority", (s) => ({ ...s, ai_summary: res.summary, ai_summary_error: null }));
     } catch (e) {
       setAiErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -257,6 +283,7 @@ export default function AdvancedAuditPage() {
         timeoutMs: 45_000,
       });
       setSynthAi({ intro: res.intro, best: res.best, worst: res.worst });
+      persistKind("synthesis-radar", (s) => ({ ...s, ai_intro: res.intro, ai_best: res.best, ai_worst: res.worst, ai_intro_error: null }));
     } catch (e) {
       setSynthErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -284,6 +311,20 @@ export default function AdvancedAuditPage() {
         timeoutMs: 90_000,
       });
       setRobotsAi(res);
+      // Persist both robots slides in a single PATCH.
+      if (audit?.summary) {
+        const stored = (audit.summary.slides as AdvSlideType[]) || [];
+        const next = stored.map((s) => {
+          if (s.kind === "robots-current") {
+            return { ...s, ai_overview: res.current_analysis, ai_issues: res.issues, ai_is_good: res.is_good, ai_error: null };
+          }
+          if (s.kind === "robots-improved") {
+            return { ...s, improved_content: res.improved_content ?? s.improved_content, ai_improvements: res.improvements };
+          }
+          return s;
+        });
+        void persistSlides(next);
+      }
     } catch (e) {
       setRobotsErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -324,6 +365,19 @@ export default function AdvancedAuditPage() {
         timeoutMs: 90_000,
       });
       setSitemapAi(res);
+      if (audit?.summary) {
+        const stored = (audit.summary.slides as AdvSlideType[]) || [];
+        const next = stored.map((s) => {
+          if (s.kind === "sitemap-overview") {
+            return { ...s, ai_overview: res.overview, url_count: res.sitemap_url_count, indexable_count: res.indexable_count, missing_count: res.missing_count, last_modified: res.last_modified, ai_error: res.error };
+          }
+          if (s.kind === "sitemap-gaps") {
+            return { ...s, missing_count: res.missing_count, ai_gaps_summary: res.gaps_summary, breakdown: res.gap_breakdown };
+          }
+          return s;
+        });
+        void persistSlides(next);
+      }
     } catch (e) {
       setSitemapErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -354,6 +408,7 @@ export default function AdvancedAuditPage() {
         timeoutMs: 60_000,
       });
       setSitemapSfAi({ overview: res.overview, recommendation: res.recommendation });
+      persistKind("sitemap-sf", (s) => ({ ...s, ai_overview: res.overview, ai_recommendation: res.recommendation, ai_error: null }));
     } catch (e) {
       setSitemapSfErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -385,6 +440,7 @@ export default function AdvancedAuditPage() {
         timeoutMs: 90_000,
       });
       setStructAi({ overview: res.overview, recommendations: res.recommendations });
+      persistKind("structured-sf", (s) => ({ ...s, ai_overview: res.overview, ai_recommendations: res.recommendations, ai_error: null }));
     } catch (e) {
       setStructErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -507,6 +563,25 @@ export default function AdvancedAuditPage() {
       return next;
     });
   }
+  // Re-rank priority items by urgency (critical→low) so the numbering always
+  // reflects the lanes and shifts when an item is added/removed.
+  function reRankPriorities(items: PriorityItem[]): PriorityItem[] {
+    const order: Record<PriorityItem["urgency"], number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    return [...items]
+      .sort((a, b) => order[a.urgency] - order[b.urgency])
+      .map((it, i) => ({ ...it, rank: i + 1 }));
+  }
+  function updateSlideItems(index: number, items: PriorityItem[]) {
+    setEditedSlides((prev) => {
+      if (!prev) return prev;
+      const s = prev[index];
+      if (s?.kind !== "priority") return prev;
+      const next = [...prev];
+      next[index] = { ...s, items: reRankPriorities(items) } as AdvSlideType;
+      return next;
+    });
+  }
+
   function deleteSlide(index: number) {
     setEditedSlides((prev) => (prev ? prev.filter((_, i) => i !== index) : prev));
   }
@@ -1213,6 +1288,7 @@ export default function AdvancedAuditPage() {
                   onDelete={deleteSlide}
                   onMove={moveSlide}
                   onAddAfter={addCustomAfter}
+                  onItems={updateSlideItems}
                 />
               )}
             </div>
@@ -1453,6 +1529,7 @@ function SlideEditorCard({
   onDelete,
   onMove,
   onAddAfter,
+  onItems,
 }: {
   slide: AdvSlideType;
   index: number;
@@ -1461,9 +1538,11 @@ function SlideEditorCard({
   onDelete: (index: number) => void;
   onMove: (index: number, dir: -1 | 1) => void;
   onAddAfter: (index: number) => void;
+  onItems: (index: number, items: PriorityItem[]) => void;
 }) {
   const fields = editableFields(slide);
   const canDelete = slide.kind !== "cover";
+  const isPriority = slide.kind === "priority";
   return (
     <div className="card border-accent-600/30 bg-[#16161a] p-4 mt-2 mb-2 space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1501,7 +1580,7 @@ function SlideEditorCard({
         </div>
       </div>
 
-      {fields.length === 0 ? (
+      {fields.length === 0 && !isPriority ? (
         <p className="text-xs text-zinc-500 italic">
           Cette slide n&apos;a pas de texte libre éditable (contenu dérivé du crawl). Tu peux la déplacer, la supprimer, ou ajouter une slide de texte.
         </p>
@@ -1530,6 +1609,104 @@ function SlideEditorCard({
           ))}
         </div>
       )}
+
+      {isPriority && (
+        <PriorityItemsEditor
+          items={(slide as Extract<AdvSlideType, { kind: "priority" }>).items}
+          onChange={(items) => onItems(index, items)}
+        />
+      )}
+    </div>
+  );
+}
+
+const URGENCY_OPTIONS: { value: PriorityItem["urgency"]; label: string }[] = [
+  { value: "critical", label: "Critique" },
+  { value: "high", label: "Haute" },
+  { value: "medium", label: "Moyenne" },
+  { value: "low", label: "Basse" },
+];
+const EFFORT_OPTIONS: { value: PriorityItem["effort"]; label: string }[] = [
+  { value: "quick-win", label: "Action rapide" },
+  { value: "medium", label: "Effort modéré" },
+  { value: "deep", label: "Chantier de fond" },
+];
+
+function PriorityItemsEditor({
+  items,
+  onChange,
+}: {
+  items: PriorityItem[];
+  onChange: (items: PriorityItem[]) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [urgency, setUrgency] = useState<PriorityItem["urgency"]>("high");
+  const [affected, setAffected] = useState("");
+  const [effort, setEffort] = useState<PriorityItem["effort"]>("medium");
+
+  function addItem() {
+    const t = title.trim();
+    if (!t) return;
+    const aff = parseInt(affected.replace(/\D/g, ""), 10) || 0;
+    const newItem: PriorityItem = {
+      rank: 0, // re-ranked by the parent
+      section_id: "custom",
+      sub_id: `custom-${Date.now()}`,
+      title: t,
+      urgency,
+      rationale: `${aff.toLocaleString("fr-FR")} URLs concernées · ajout manuel.`,
+      affected: aff,
+      effort,
+      impact: "medium",
+    };
+    onChange([...items, newItem]);
+    setTitle(""); setAffected("");
+  }
+
+  return (
+    <div className="space-y-2.5 border-t border-zinc-800 pt-3">
+      <span className="label text-[11px]">Éléments du plan d&apos;action ({items.length})</span>
+      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+        {items.map((it, i) => (
+          <div key={it.sub_id + i} className="flex items-center gap-2 bg-[#1c1c20] rounded-lg px-2.5 py-1.5">
+            <span className="text-[10px] tabular-nums text-zinc-500 w-5 shrink-0">#{it.rank}</span>
+            <span className="text-[11px] text-zinc-400 shrink-0 w-16 truncate">{URGENCY_OPTIONS.find((u) => u.value === it.urgency)?.label}</span>
+            <span className="text-[12px] text-zinc-200 flex-1 min-w-0 truncate" title={it.title}>{it.title}</span>
+            <span className="text-[10px] tabular-nums text-zinc-500 shrink-0">{it.affected.toLocaleString("fr-FR")}</span>
+            <button
+              onClick={() => onChange(items.filter((_, j) => j !== i))}
+              className="btn-ghost text-xs px-1.5 py-0.5 text-red-300 hover:text-red-200 shrink-0"
+              title="Supprimer cet élément"
+            >🗑</button>
+          </div>
+        ))}
+      </div>
+      {/* Add form : responsive grid, stacks on narrow widths */}
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+        <label className="block space-y-1 min-w-0">
+          <span className="label text-[10px]">Sujet</span>
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex : Balises title à réécrire" className="input w-full text-[12px]" />
+        </label>
+        <label className="block space-y-1">
+          <span className="label text-[10px]">Urgence</span>
+          <select value={urgency} onChange={(e) => setUrgency(e.target.value as PriorityItem["urgency"])} className="input text-[12px]">
+            {URGENCY_OPTIONS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+          </select>
+        </label>
+        <label className="block space-y-1">
+          <span className="label text-[10px]"># URLs</span>
+          <input type="number" value={affected} onChange={(e) => setAffected(e.target.value)} placeholder="0" className="input text-[12px] w-20" />
+        </label>
+        <label className="block space-y-1">
+          <span className="label text-[10px]">Effort</span>
+          <select value={effort} onChange={(e) => setEffort(e.target.value as PriorityItem["effort"])} className="input text-[12px]">
+            {EFFORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <button onClick={addItem} disabled={!title.trim()} className="btn-secondary text-xs disabled:opacity-40">
+        ＋ Ajouter au plan d&apos;action
+      </button>
     </div>
   );
 }

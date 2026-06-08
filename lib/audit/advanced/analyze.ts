@@ -117,6 +117,7 @@ export type SiteResources = NonNullable<AdvReport["site_resources"]>;
 function buildRobotsSitemap(
   res: SiteResources | null,
   internalIssues: ParsedIssue[],
+  sfPresent: boolean = false,
 ): {
   sub: AdvSubcategory;
   slide: AdvSlide;
@@ -149,8 +150,14 @@ function buildRobotsSitemap(
     { label: "robots.txt", value: robotsValue, tone: notFetched ? "warn" : robotsExists ? "ok" : "bad" },
     { label: "sitemap.xml", value: sitemapValue, tone: notFetched ? "warn" : sitemapExists ? "ok" : "bad" },
     { label: "Sitemap dans robots", value: sitemapRefValue, tone: notFetched ? "warn" : sitemapRef ? "ok" : "warn" },
-    { label: "URLs dans sitemap", value: sitemapUrls != null ? sitemapUrls.toLocaleString("fr-FR") : ", ", tone: "info" },
-    { label: "Doublons sitemap", value: sitemapDuplicates, tone: sitemapDuplicates > 0 ? "warn" : "ok" },
+    // When the Screaming Frog sitemap export is provided, the dedicated
+    // "Sitemap.xml" slide carries the authoritative page count. We drop the
+    // raw fetched count + duplicates here to avoid a confusing discrepancy
+    // (e.g. 1 369 entrées XML brutes vs 1 143 pages HTML réelles).
+    ...(sfPresent ? [] : [
+      { label: "URLs dans sitemap", value: sitemapUrls != null ? sitemapUrls.toLocaleString("fr-FR") : ", ", tone: "info" as const },
+      { label: "Doublons sitemap", value: sitemapDuplicates, tone: sitemapDuplicates > 0 ? "warn" as const : "ok" as const },
+    ]),
     { label: "Pages bloquées robots.txt", value: blockedCount, tone: blockedCount > 0 ? "warn" : "ok" },
   ];
 
@@ -204,6 +211,7 @@ function buildIndexabilityCrawl(
   rows: InternalRow[],
   issues: ParsedIssue[],
   res: SiteResources | null,
+  sfPresent: boolean = false,
 ): { section: AdvSection; slides: AdvSlide[] } {
   const html = rows.filter(isHtml);
   const total = html.length || 1;
@@ -213,13 +221,13 @@ function buildIndexabilityCrawl(
     kind: "section-cover",
     section_id: "indexability_crawl",
     title: SECTION_COVER.indexability_crawl.title,
-    eyebrow: "Partie 1 / 6",
+    eyebrow: "Partie 1 / 8",
     icon: SECTION_COVER.indexability_crawl.icon,
     bullets: SECTION_COVER.indexability_crawl.bullets,
   };
 
   // ----- Robots & sitemap (uses res)
-  const { sub: subRobots, slide: slideRobots } = buildRobotsSitemap(res, issues);
+  const { sub: subRobots, slide: slideRobots } = buildRobotsSitemap(res, issues, sfPresent);
 
   // ----- Depth
   const depthBins: Record<number, number> = {};
@@ -256,8 +264,8 @@ function buildIndexabilityCrawl(
     description: DESC.depth,
     kpis: [
       { label: "Profondeur max", value: maxDepth, tone: maxDepth > 5 ? "bad" : "ok" },
-      { label: "Pages > prof. 4", value: tooDeep, tone: tooDeep > 0 ? "warn" : "ok" },
       { label: "Pages prof. 0-3", value: histogramKeys.slice(0, 4).reduce((s, k) => s + (depthBins[k] ?? 0), 0), tone: "ok" },
+      { label: "Pages prof. 4", value: depthBins[4] ?? 0, tone: (depthBins[4] ?? 0) > 0 ? "warn" : "ok" },
       { label: "Pages prof. 5+", value: tooDeep, tone: tooDeep > 0 ? "bad" : "ok" },
     ],
     chart: {
@@ -320,7 +328,7 @@ function buildIndexabilityCrawl(
         { label: "200", value: s2, color: COLORS.ok },
         { label: "3xx", value: s3, color: COLORS.warn },
         { label: "4xx", value: s4, color: COLORS.bad },
-        { label: "5xx", value: s5, color: COLORS.bad },
+        { label: "5xx", value: s5, color: VBT.brick600 },
       ].filter((s) => s.value > 0),
     },
     xlsx_sheet: httpIssues.length > 0 ? subHttp.xlsx_sheet : undefined,
@@ -372,6 +380,9 @@ function buildIndexabilityCrawl(
   let missingCanon = 0, selfCanon = 0, crossCanon = 0;
   const noCanonRows: AdvIssueRow[] = [];
   for (const r of html) {
+    // Only real pages (HTTP 200). 301/404 have an empty canonical by nature,
+    // counting them inflated "Sans canonical" with non-pages.
+    if (r.status_code !== 200) continue;
     const c = (r.canonical || "").trim();
     if (!c) {
       missingCanon++;
@@ -653,7 +664,7 @@ function buildPerformance(rows: InternalRow[], pagespeedUrls: string[] = []): { 
     kind: "section-cover",
     section_id: "performance",
     title: SECTION_COVER.performance.title,
-    eyebrow: "Partie 2 / 6",
+    eyebrow: "Partie 2 / 8",
     icon: SECTION_COVER.performance.icon,
     bullets: SECTION_COVER.performance.bullets,
   };
@@ -684,11 +695,13 @@ function buildPerformance(rows: InternalRow[], pagespeedUrls: string[] = []): { 
 // ---------- Meta section ---------------------------------------------------
 
 function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSection; slides: AdvSlide[] } {
-  // Perimeter for title/meta/H1 checks = ALL HTML pages (not just
-  // indexable). A title missing on a noindex page is still a title
-  // missing : the client needs to see it to validate that the noindex
-  // is intentional. Restricting to indexable previously hid real issues.
-  const html = rows.filter(isHtml);
+  // Perimeter for title/meta checks = HTML pages returning 200 ONLY.
+  // 301 redirects and 404 errors have an empty title/meta by nature, so
+  // counting them produced massive false positives (e.g. 97 "title
+  // manquant" that were all 86 redirects + 11 errors, zero real pages).
+  // We keep noindex 200 pages in scope (a missing title there is still a
+  // real issue worth surfacing), we only exclude non-200 responses.
+  const html = rows.filter(isHtml).filter((r) => r.status_code === 200);
   // Indexable HTML : used for the *duplicate* counts (duplicates on
   // noindex pages are rarely actionable since the pages aren't in
   // search).
@@ -872,7 +885,7 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
     kind: "section-cover",
     section_id: "meta",
     title: SECTION_COVER.meta.title,
-    eyebrow: "Partie 3 / 6",
+    eyebrow: "Partie 3 / 8",
     icon: SECTION_COVER.meta.icon,
     bullets: SECTION_COVER.meta.bullets,
   };
@@ -988,7 +1001,7 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
     kind: "section-cover",
     section_id: "structure",
     title: SECTION_COVER.structure.title,
-    eyebrow: "Partie 4 / 6",
+    eyebrow: "Partie 4 / 8",
     icon: SECTION_COVER.structure.icon,
     bullets: SECTION_COVER.structure.bullets,
   };
@@ -1153,38 +1166,40 @@ function buildLinking(
     }
   }
 
-  // Dedup ZIP-side rows too (some SF exports duplicate when a URL
-  // matches multiple sub-issues), then merge with the anchor-derived
-  // unique sets. End result: every KPI is a count of UNIQUE destination
-  // URLs, never of occurrences.
-  const internalTotal = new Set([
-    ...((brokenInternal?.rows || []).map((r) => r.url)),
-    ...uniqueInternalFromInlinks,
-  ]).size;
-  const external4xxTotal = new Set([
-    ...((brokenExternal4xx?.rows || []).map((r) => r.url)),
-    ...uniqueExternal4xxFromInlinks,
-  ]).size;
-  const external5xxTotal = new Set([
-    ...((brokenExternal5xx?.rows || []).map((r) => r.url)),
-    ...uniqueExternal5xxFromInlinks,
-  ]).size;
+  // Anti-bot false positives : external hosts (LinkedIn 999, Cloudflare 403,
+  // 429 rate-limit, 0 no-response) routinely block Screaming Frog while
+  // working fine in a real browser. We retag them as "à vérifier" so they
+  // DON'T tank the score (this is the worst note of the whole audit on the
+  // heaviest-weighted section) and don't read as confirmed broken links.
+  const ANTI_BOT_CODES = new Set([0, 403, 429, 999]);
+  for (const r of brokenIssues) {
+    if (r.type !== "Interne" && ANTI_BOT_CODES.has(Number(r.code))) {
+      r.severity = "low";
+      r.type = "Externe (à vérifier)";
+      r.note = "Code anti-bot probable (403/999/0/429) : souvent accessible dans un navigateur, à vérifier manuellement";
+    }
+  }
+  const isAntiBot = (r: AdvIssueRow) => String(r.type).includes("à vérifier");
+  const realBroken = brokenIssues.filter((r) => !isAntiBot(r));
+  const antiBotRows = brokenIssues.filter(isAntiBot);
+  const internalCount = new Set(realBroken.filter((r) => r.type === "Interne").map((r) => r.url)).size;
+  const externalRealCount = new Set(realBroken.filter((r) => r.type !== "Interne").map((r) => r.url)).size;
+  const antiBotCount = new Set(antiBotRows.map((r) => r.url)).size;
 
   const subBroken: AdvSubcategory = {
     id: "broken_links",
     label: "Liens rompus",
-    // Broken links should be ZERO. Strict scoring : even a small ratio
-    // (1% of pages with broken links) drops the score significantly.
-    // Denominator = HTML pages (not the full crawl which includes JS/CSS/
-    // image assets). One broken link per page is the meaningful ratio.
-    score: scoreStrict(brokenIssues.length / Math.max(html.length, 1), 0.005),
+    // Score driven ONLY by genuinely broken links (real 4xx/5xx), not by
+    // anti-bot-blocked external URLs. Denominator = HTML pages.
+    score: scoreStrict(realBroken.length / Math.max(html.length, 1), 0.005),
     issues_full: brokenIssues,
     columns: [
-      { key: "type", label: "Origine", width: 12 },
+      { key: "type", label: "Origine", width: 20 },
       { key: "code", label: "Code", width: 10 },
       { key: "url", label: "URL cible", width: 60 },
       { key: "source", label: "Page source", width: 60 },
       { key: "anchor", label: "Ancre", width: 30 },
+      { key: "note", label: "Note", width: 50 },
     ],
     xlsx_sheet: "Liens rompus",
   };
@@ -1195,17 +1210,17 @@ function buildLinking(
     title: "Liens internes / externes rompus",
     description: DESC.broken_links,
     kpis: [
-      { label: "Internes 4xx/5xx", value: internalTotal, tone: internalTotal > 0 ? "bad" : "ok" },
-      { label: "Externes 4xx", value: external4xxTotal, tone: external4xxTotal > 0 ? "warn" : "ok" },
-      { label: "Externes 5xx", value: external5xxTotal, tone: external5xxTotal > 0 ? "bad" : "ok" },
-      // Total = sum of unique-URL KPIs above (NOT row count), so the four
-      // KPIs are arithmetically consistent for the consultant.
-      { label: "Total", value: internalTotal + external4xxTotal + external5xxTotal, tone: (internalTotal + external4xxTotal + external5xxTotal) > 0 ? "warn" : "ok" },
+      { label: "Internes rompus", value: internalCount, tone: internalCount > 0 ? "bad" : "ok" },
+      { label: "Externes rompus", value: externalRealCount, tone: externalRealCount > 0 ? "warn" : "ok" },
+      { label: "Anti-bot (à vérifier)", value: antiBotCount, tone: "info" },
+      { label: "Total confirmés", value: internalCount + externalRealCount, tone: (internalCount + externalRealCount) > 0 ? "warn" : "ok" },
     ],
     xlsx_sheet: brokenIssues.length > 0 ? subBroken.xlsx_sheet : undefined,
-    // The pill in the slide header reads this : align it with the Total KPI
-    // so the same number appears in both places.
-    issues_count: internalTotal + external4xxTotal + external5xxTotal,
+    // Header pill = confirmed broken links only (anti-bot excluded).
+    issues_count: internalCount + externalRealCount,
+    takeaway: antiBotCount > 0
+      ? `${internalCount + externalRealCount} lien(s) réellement rompu(s). ${antiBotCount} lien(s) externe(s) renvoient un code anti-bot (403/999) : à vérifier manuellement, souvent accessibles en navigateur.`
+      : undefined,
   };
 
   // ----- Liens internes 301 (chaînes de redirection) -----
@@ -1264,8 +1279,12 @@ function buildLinking(
     title: "Liens internes 301 (chaînes de redirection)",
     description: DESC_EXT.inlinks_301,
     kpis: [
+      // Both KPIs derive from the SAME redirRows set so they can't contradict :
+      // X links pointing to Y distinct redirected URLs. (The previous "pages
+      // sources distinctes" counted a different sub-set — only the rows whose
+      // source was known — which clashed with the link total.)
       { label: "Liens vers redirections", value: redirRows.length, tone: redirRows.length === 0 ? "ok" : redirRows.length < 50 ? "warn" : "bad" },
-      { label: "Pages sources distinctes", value: new Set(redirRows.map((r) => r.source).filter(Boolean)).size, tone: "info" },
+      { label: "URLs redirigées distinctes", value: new Set(redirRows.map((r) => r.url)).size, tone: "info" },
     ],
     xlsx_sheet: redirRows.length > 0 ? subRedirects.xlsx_sheet : undefined,
     issues_count: redirRows.length,
@@ -1356,178 +1375,20 @@ function buildLinking(
       : `${orphans + low} page(s) sous-maillée(s) à raccrocher au reste du site.`,
   };
 
-  // Anchor analysis : anchors file (liens_entrants_tous.csv) is required in
-  // the advanced flow; we still keep a placeholder branch for legacy audits
-  // that pre-date this requirement.
-  const slidesAnchor: AdvSlide[] = [];
-  const subAnchor: AdvSubcategory[] = [];
-  if (anchors) {
-    // ---- Low-diversity destinations (over-optimised editorial anchors) ----
-    // CRITICAL : the anchor distribution must be EDITORIAL-ONLY. Generic
-    // anchors ("Découvrir", "En savoir plus", "Lire la suite"…) and
-    // templated CTAs ("Recevoir le guide comparateur"…) are repeated UI
-    // buttons, NOT editorial anchors. Counting them produced false
-    // positives like "20/20 Recevoir le guide" on pages whose real
-    // editorial anchors are perfectly varied. We re-aggregate from the raw
-    // rows here, keeping only genuine editorial anchors.
-    const editorialByDest = new Map<string, Map<string, number>>();
-    const contextualTotalByDest = new Map<string, number>();
-    for (const r of anchors.rows) {
-      // Denominator : every contextual inbound link (UI buttons included),
-      // so the ratio reads "X identical editorial anchors out of N total
-      // contextual links toward this page".
-      contextualTotalByDest.set(r.destination, (contextualTotalByDest.get(r.destination) || 0) + 1);
-      // Numerator pool : genuine editorial anchors only.
-      if (r.is_generic || r.is_template_cta || r.is_image_link || r.is_card_like || r.is_button_like) continue;
-      const a = (r.anchor || "").trim();
-      if (!a) continue; // empty anchors are not an over-optimisation signal
-      let m = editorialByDest.get(r.destination);
-      if (!m) { m = new Map(); editorialByDest.set(r.destination, m); }
-      m.set(a, (m.get(a) || 0) + 1);
-    }
-
-    type LowDivRow = { destination: string; anchor: string; occurrences: number; total_inlinks: number; ratio_pct: number };
-    const lowDivRows: LowDivRow[] = [];
-    for (const [dest, anchorMap] of editorialByDest) {
-      let dom = "";
-      let domCount = 0;
-      for (const [a, c] of anchorMap) {
-        if (c > domCount) { dom = a; domCount = c; }
-      }
-      // Over-optimisation requires a MEANINGFUL editorial anchor repeated
-      // at least 3 times. The ratio is against the total contextual inlinks.
-      if (domCount < 3) continue;
-      const total = contextualTotalByDest.get(dest) || domCount;
-      const ratio = Math.round((domCount / total) * 1000) / 10;
-      // Flag only when the dominant editorial anchor represents a real share
-      // (>= 50%) of the page's contextual links.
-      if (ratio < 50) continue;
-      lowDivRows.push({ destination: dest, anchor: dom, occurrences: domCount, total_inlinks: total, ratio_pct: ratio });
-    }
-    lowDivRows.sort((a, b) => (b.ratio_pct - a.ratio_pct) || (b.occurrences - a.occurrences));
-
-    const subAnchorsLowDiv: AdvSubcategory = {
-      id: "anchors_low_diversity",
-      label: "URLs avec ancres peu variées",
-      score: scoreFromRatio(Math.min(1, lowDivRows.length / Math.max(editorialByDest.size, 1))),
-      issues_full: lowDivRows.map((r) => ({
-        url: r.destination,
-        severity: r.ratio_pct >= 80 ? "high" : r.ratio_pct >= 65 ? "medium" : "low",
-        anchor: r.anchor,
-        occurrences: r.occurrences,
-        total_inlinks: r.total_inlinks,
-        ratio_pct: `${r.ratio_pct.toFixed(1)} %`,
-      } as AdvIssueRow)),
-      columns: [
-        { key: "url", label: "URL concernée", width: 70 },
-        { key: "anchor", label: "Ancre éditoriale dominante", width: 40 },
-        { key: "occurrences", label: "Occurrences", width: 14 },
-        { key: "total_inlinks", label: "Liens contextuels totaux", width: 22 },
-        { key: "ratio_pct", label: "Ratio de domination", width: 20 },
-      ],
-      xlsx_sheet: "Ancres peu variees",
-    };
-
-    subAnchor.push(subAnchorsLowDiv);
-
-    // ---- Per-link detail for the flagged destinations (XLSX only) ----
-    // For every over-optimised destination, list each EDITORIAL inbound link
-    // (page that sends it + the anchor used) so the consultant can go and
-    // diversify them one by one. Template CTAs, image links, card/button
-    // wrappers and "lire aussi" blocks are excluded (same editorial filter as
-    // the ranking), so the sheet stays clean : only real in-body hyperlinks.
-    const flagged = new Map(lowDivRows.map((r) => [r.destination, r]));
-    const detailRows: AdvIssueRow[] = [];
-    for (const r of anchors.rows) {
-      const f = flagged.get(r.destination);
-      if (!f) continue;
-      if (r.is_template_cta || r.is_image_link || r.is_card_like || r.is_button_like) continue;
-      const anchorText = (r.anchor || "").trim();
-      if (!anchorText) continue;
-      const isDominant = anchorText.toLowerCase() === f.anchor.toLowerCase();
-      detailRows.push({
-        url: r.destination,
-        severity: isDominant ? (f.ratio_pct >= 80 ? "high" : "medium") : "low",
-        source: r.source,
-        anchor: anchorText,
-      } as AdvIssueRow);
-    }
-    // Group by destination (worst-first), dominant-anchor links first inside
-    // each group : the consultant reads "this page, these are the links to fix".
-    detailRows.sort((a, b) => {
-      const fa = flagged.get(String(a.url));
-      const fb = flagged.get(String(b.url));
-      const ra = fa?.ratio_pct ?? 0;
-      const rb = fb?.ratio_pct ?? 0;
-      if (rb !== ra) return rb - ra;
-      if (a.url !== b.url) return String(a.url).localeCompare(String(b.url));
-      const sa = a.severity === "low" ? 1 : 0;
-      const sb = b.severity === "low" ? 1 : 0;
-      return sa - sb;
-    });
-    if (detailRows.length > 0) {
-      subAnchor.push({
-        id: "anchors_low_diversity_detail",
-        label: "Ancres peu variées : détail par lien",
-        score: 100,
-        weight: 0,  // already scored via the summary subcategory
-        issues_full: detailRows,
-        columns: [
-          { key: "url", label: "URL qui reçoit les liens", width: 70 },
-          { key: "source", label: "Page qui envoie le lien", width: 70 },
-          { key: "anchor", label: "Ancre du lien", width: 40 },
-        ],
-        xlsx_sheet: "Ancres peu variees (detail)",
-        why: "Pour chaque page sur-optimisée, voici les liens internes éditoriaux qui pointent vers elle. Les lignes en sévérité élevée/moyenne utilisent l'ancre dominante : ce sont celles à reformuler en priorité.",
-        how_to_fix: "Reformuler une partie de ces ancres avec des variantes naturelles et descriptives (synonymes, formulations longue traîne) au lieu de répéter la même expression exacte.",
-      });
-    }
-
-    // Single anchor slide : low diversity. (The "empty anchors" slide was
-    // removed : it was confusing and low-value.)
-    slidesAnchor.push({
-      kind: "anchor-low-diversity",
-      section_id: "linking",
-      sub_id: "anchors_low_diversity",
-      title: "URLs avec ancres de lien pas assez variées",
-      description: DESC.anchor_low_diversity,
-      // Pass the FULL candidate list, sorted worst-first. The slide picks
-      // the first 4 non-excluded ones at render time, so the consultant
-      // can dismiss off-topic pages (RGPD, mentions légales…) and the
-      // next-worst takes its place automatically.
-      rows: lowDivRows,
-      excluded_destinations: [],
-      total_concerned: lowDivRows.length,
-      xlsx_sheet: lowDivRows.length > 0 ? "Ancres peu variees" : undefined,
-      issues_count: lowDivRows.length,
-    });
-  } else {
-    // Placeholder slide explaining that liens_entrants_tous.csv is needed
-    slidesAnchor.push({
-      kind: "info",
-      section_id: "linking",
-      sub_id: "anchors_overview",
-      title: "Texte des ancres de liens internes",
-      description: `Pour activer l'analyse complète du texte des ancres (diversité, sur-optimisation, ancres génériques), uploade le fichier liens_entrants_tous.csv depuis Screaming Frog : Exporter en bloc → Liens → Liens entrants Tous.\n\nL'analyse calcule pour chaque page de destination le ratio d'ancres uniques / liens entrants et identifie les pages qui souffrent de sur-optimisation (même ancre exacte répétée) ou d'ancres trop génériques ("ici", "cliquez", "en savoir plus").`,
-      facts: [
-        { label: "Fichier requis", value: "liens_entrants_tous.csv" },
-        { label: "Source", value: "Exporter en bloc → Liens → Liens entrants Tous" },
-        { label: "Filtres appliqués", value: "Hyperlink + interne + hors nav/header/footer" },
-      ],
-    });
-  }
 
   const cover: AdvSlide = {
     kind: "section-cover",
     section_id: "linking",
     title: SECTION_COVER.linking.title,
-    eyebrow: "Partie 5 / 6",
+    eyebrow: "Partie 5 / 8",
     icon: SECTION_COVER.linking.icon,
     bullets: SECTION_COVER.linking.bullets,
   };
   const recoSlides = buildRecoSlides("linking", "Recommandations : Maillage interne");
 
-  const subcategories = [subOverview, subBroken, subRedirects, subHttp, subOrphans, ...subAnchor];
+  // NOTE : the "ancres peu variées" analysis (over-optimised editorial
+  // anchors) was removed entirely — too noisy / hard to action reliably.
+  const subcategories = [subOverview, subBroken, subRedirects, subHttp, subOrphans];
   const sectionScore = (() => {
     // Weighted average so a fixed-100 informational sub (e.g. noindex_pages)
     // does not dilute a real failure in another sub.
@@ -1545,7 +1406,7 @@ function buildLinking(
   };
   return {
     section,
-    slides: [cover, slideOverview, slideBroken, slideRedirects, slideHttp, slideOrphans, ...slidesAnchor, ...recoSlides],
+    slides: [cover, slideOverview, slideBroken, slideRedirects, slideHttp, slideOrphans, ...recoSlides],
   };
 }
 
@@ -1601,10 +1462,17 @@ function buildImages(
   // For the user's reference case this lifts an apparent "1 image" from
   // looking trivial to "682 pages affected", which makes the priority
   // immediately legible on the slide.
-  const altPagesAffected = (altMissing?.rows || []).reduce((s, l) => {
+  // Sum of "Liens entrants IMG" across alt-less images = cumulative image-link
+  // OCCURRENCES, NOT a page count (it can exceed the number of pages on the
+  // site, e.g. a footer logo present on every page). Labelled accordingly.
+  const altOccurrences = (altMissing?.rows || []).reduce((s, l) => {
     const n = parseInt(l.extras["liens entrants img"] || l.extras["nombre de liens entrants"] || l.extras["inlinks"] || "0", 10);
     return s + (Number.isFinite(n) ? n : 0);
   }, 0);
+  // Distinct source pages, when the export is link-centric (Source column).
+  const altUniquePages = new Set(
+    (altMissing?.rows || []).map((l) => l.extras["source"] || l.extras["page source"] || "").filter(Boolean),
+  ).size;
   const slideAlt: AdvSlide = {
     kind: "data",
     section_id: "images",
@@ -1615,15 +1483,17 @@ function buildImages(
       { label: "Images crawlées", value: imagesList.length, tone: "ok" },
       { label: "Sans attribut alt", value: altRows.length, tone: altRows.length > 0 ? "bad" : "ok" },
       { label: "% sans alt", value: imagesList.length > 0 ? `${Math.round((altRows.length / imagesList.length) * 100)} %` : "0 %", tone: altRows.length > 0 ? "warn" : "ok" },
-      { label: "Pages affectées", value: altPagesAffected.toLocaleString("fr-FR"), tone: altPagesAffected > 50 ? "warn" : "info" },
+      altUniquePages > 0
+        ? { label: "Pages affectées", value: altUniquePages.toLocaleString("fr-FR"), tone: altUniquePages > 50 ? "warn" : "info" }
+        : { label: "Occurrences (liens-images)", value: altOccurrences.toLocaleString("fr-FR"), tone: altOccurrences > 50 ? "warn" : "info" },
     ],
     xlsx_sheet: altRows.length > 0 ? subAlt.xlsx_sheet : undefined,
     issues_count: altRows.length,
     takeaway: altRows.length === 0
       ? "Toutes les images crawlées ont un attribut alt ✓"
-      : altRows.length === 1 && altPagesAffected > 50
-        ? `1 image sans alt mais référencée sur ${altPagesAffected.toLocaleString("fr-FR")} pages : typiquement un visuel de template (logo, footer). Un seul fix corrige toutes les occurrences.`
-        : `${altRows.length} image(s) unique(s) sans alt sur ${altPagesAffected.toLocaleString("fr-FR")} page(s) cumulée(s).`,
+      : altRows.length === 1 && altOccurrences > 50
+        ? `1 image sans alt mais référencée ${altOccurrences.toLocaleString("fr-FR")} fois (liens-images) : typiquement un visuel de template (logo, footer). Un seul fix corrige toutes les occurrences.`
+        : `${altRows.length} image(s) unique(s) sans alt · ${altOccurrences.toLocaleString("fr-FR")} occurrences (liens-images) cumulées.`,
   };
 
   // Size attrs (width/height missing).
@@ -1760,17 +1630,24 @@ function buildImages(
     columns: [],
     xlsx_sheet: "Formats d'images",
   };
+  // Distinct colour per format so the donut legend is unambiguous (PNG and
+  // JPEG previously shared the same amber, making them indistinguishable).
+  const FORMAT_COLORS: Record<string, string> = {
+    webp: VBT.good,            // green (modern)
+    avif: "#3fa06a",           // lighter green (modern)
+    jpeg: VBT.amber500,        // amber (legacy)
+    jpg: VBT.amber500,
+    png: VBT.terracotta500,    // terracotta : distinct from JPEG
+    svg: VBT.info,             // blue
+    gif: VBT.brick500,         // brick
+  };
   const formatSegments = Object.entries(formatCounts)
     .sort((a, b) => b[1] - a[1])
-    .map(([fmt, count]) => {
-      const color =
-        fmt === "webp" || fmt === "avif" ? COLORS.ok :
-        fmt === "svg" ? COLORS.info :
-        fmt === "jpeg" || fmt === "jpg" ? COLORS.warn :
-        fmt === "png" ? COLORS.warn :
-        COLORS.muted;
-      return { label: fmt.toUpperCase(), value: count, color };
-    });
+    .map(([fmt, count]) => ({
+      label: fmt.toUpperCase(),
+      value: count,
+      color: FORMAT_COLORS[fmt] || VBT.paperEdge,
+    }));
   const slideFormats: AdvSlide = {
     kind: "data",
     section_id: "images",
@@ -2547,7 +2424,7 @@ export function analyzeAdvanced(
 ): AdvReport {
   const htmlCount = rows.filter(isHtml).length;
 
-  const { section: secIdx, slides: slIdx } = buildIndexabilityCrawl(rows, issues, opts.site_resources);
+  const { section: secIdx, slides: slIdx } = buildIndexabilityCrawl(rows, issues, opts.site_resources, !!opts.sitemap_sf);
   const { section: secPerf, slides: slPerf } = buildPerformance(rows, opts.pagespeed_urls ?? []);
   const { section: secMeta, slides: slMeta } = buildMeta(rows, issues);
   const { section: secStruct, slides: slStruct } = buildStructure(rows, issues);

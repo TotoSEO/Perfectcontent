@@ -3173,12 +3173,13 @@ function MiniStat({
         {value}
       </div>
       <div
-        className="uppercase truncate mt-1"
+        className="uppercase mt-1"
         style={{
           color: VBT.ink2,
           fontWeight: 700,
           fontSize: VBT_TYPO.micro,
-          letterSpacing: "0.12em",
+          letterSpacing: "0.06em",
+          lineHeight: 1.15,
           fontFamily: VBT_FONT.title,
         }}
       >
@@ -3270,7 +3271,9 @@ export function PrioritySlideBody({
 
 // Kanban view : full-width 4-lane board.
 function PriorityKanban({ slide }: { slide: Extract<AdvSlide, { kind: "priority" }> }) {
-  const items = slide.items.slice(0, 12);
+  // Show EVERY priority item : this is the conclusion slide, nothing should be
+  // hidden behind "+ N autres". Lanes scroll if a column is very tall.
+  const items = slide.items;
   const groups: Record<PriorityItem["urgency"], PriorityItem[]> = {
     critical: [], high: [], medium: [], low: [],
   };
@@ -3448,7 +3451,7 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
           {items.length}
         </span>
       </div>
-      <div className="flex-1 overflow-hidden min-h-0 p-2 flex flex-col gap-1.5">
+      <div className="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-1.5">
         {items.length === 0 ? (
           <div
             className="flex-1 flex items-center justify-center text-center"
@@ -3462,17 +3465,7 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
             Aucun chantier
           </div>
         ) : (
-          <>
-            {items.slice(0, 5).map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)}
-            {items.length > 5 && (
-              <div
-                className="text-center"
-                style={{ color: palette.label, fontSize: VBT_TYPO.micro, fontWeight: 700, fontFamily: VBT_FONT.mono, paddingTop: 2 }}
-              >
-                + {items.length - 5} autres
-              </div>
-            )}
-          </>
+          items.map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)
         )}
       </div>
     </div>
