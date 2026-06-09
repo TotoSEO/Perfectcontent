@@ -21,7 +21,7 @@ export const DESC = {
 
   html_weight: `Depuis février 2026, Google a officialisé que Googlebot ne lit que les 2 premiers Mo d'un fichier HTML pour l'indexation. Au-delà, le contenu est tronqué : liens internes, données structurées, mots-clés en bas de page peuvent être ignorés. Cette limite concerne le fichier HTML seul, pas le poids total de la page avec ses ressources.`,
 
-  titles_meta: `La balise title est le titre de la page affiché dans les résultats Google : unique, différente du H1, idéalement 52 à 65 caractères. La meta description (130 à 155 caractères) résume la page sous le titre. Sur Google, elle n'est pas un facteur de ranking direct mais influence le taux de clic. Elle joue aussi un rôle croissant pour les IA génératives, qui s'en servent pour comprendre, résumer et citer la page ou la marque.`,
+  titles_meta: `La balise title est le titre de la page affiché dans les résultats Google : unique, différente du H1, idéalement entre 30 et 60 caractères. La meta description (entre 70 et 155 caractères) résume la page sous le titre. Sur Google, elle n'est pas un facteur de ranking direct mais influence le taux de clic. Elle joue aussi un rôle croissant pour les IA génératives, qui s'en servent pour comprendre, résumer et citer la page ou la marque.`,
 
   titles_duplicate: `Deux pages avec le même title envoient des signaux contradictoires à Google sur leur thématique respective. Cela crée de la cannibalisation et rend plus difficile pour Google de déterminer quelle page positionner pour une requête donnée.`,
 
@@ -96,8 +96,8 @@ export const SECTION_COVER: Record<string, { title: string; bullets: string[]; i
     icon: "graph",
     bullets: [
       "Distribution du PageRank interne",
-      "Liens rompus, pages orphelines, ancres",
-      "Score de diversité des ancres",
+      "Liens rompus, redirections 301, contenu mixte",
+      "Pages sans maillage contextuel",
     ],
   },
   images: {

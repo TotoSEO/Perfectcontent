@@ -90,8 +90,8 @@ export const RECO_META: RecoGroup[] = [
   {
     sub_label: "Balises title & meta description",
     items: [
-      "Title : 50-60 caractères, mot-clé principal en début, ton clair, unique sur le site, différent du H1.",
-      "Meta description : 140-160 caractères, verdict + invitation à cliquer (le bénéfice principal de la page).",
+      "Title : 30 à 60 caractères (idéalement 50-60), mot-clé principal en début, ton clair, unique sur le site, différent du H1.",
+      "Meta description : 70 à 155 caractères, verdict + invitation à cliquer (le bénéfice principal de la page).",
       "Surveiller les pixels (pas juste les caractères) : Google tronque à ~561px sur title, ~985px sur meta.",
       "Aucune page indexable ne doit avoir un title vide : c'est la première chose que Google et les utilisateurs voient.",
     ],

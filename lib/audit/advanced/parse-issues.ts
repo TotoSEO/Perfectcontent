@@ -598,6 +598,10 @@ export type IssuesParseResult = {
   matched_files: string[];
   unknown_files: string[];
   total_csv_files: number;
+  // The "rapport_apercu_problemes.csv" overview is ALWAYS present in a full
+  // "Problèmes → Tous" export. Its absence is a reliable signal that the
+  // export is partial / wrong (and that some "0" metrics may be false).
+  overview_present: boolean;
   filename: string | null;
 };
 
@@ -653,6 +657,7 @@ export async function parseIssuesZip(file: File): Promise<IssuesParseResult> {
     matched_files: matchedNames,
     unknown_files: unknownNames,
     total_csv_files: totalCsv,
+    overview_present: matched.some((m) => m.id === "issues_overview"),
     filename: file.name,
   };
 }

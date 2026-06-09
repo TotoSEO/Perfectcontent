@@ -527,6 +527,13 @@ export default function NewAdvancedAuditPage() {
             <span className="text-emerald-400">✓ {issuesResult.matched_files.length}/{issuesResult.total_csv_files} CSV utilisés</span>
             {issuesResult.unknown_files.length > 0 && <span className="text-zinc-500"> · {issuesResult.unknown_files.length} ignorés</span>}
             {" · "}{(issuesFile.size / 1024 / 1024).toFixed(1)} MB
+            {!issuesResult.overview_present && (
+              <div className="mt-1.5 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1.5 leading-relaxed">
+                ⚠ Le rapport d&apos;aperçu (<code>rapport_apercu_problemes.csv</code>) est absent : l&apos;export est
+                peut-être partiel. Certaines métriques pourraient afficher 0 à tort. Vérifie que tu as bien exporté
+                <strong> Exporter en bloc → Problèmes → Tous</strong> (et non un sous-ensemble).
+              </div>
+            )}
             {issuesResult.unknown_files.length > 0 && (
               <details className="text-[11px] text-zinc-500 mt-1.5">
                 <summary className="cursor-pointer hover:text-zinc-300">
