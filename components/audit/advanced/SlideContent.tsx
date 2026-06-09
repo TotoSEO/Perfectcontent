@@ -278,7 +278,7 @@ export function DataSlideBody({ slide }: { slide: Extract<AdvSlide, { kind: "dat
             paddingLeft: 14,
           }}
         >
-          <DescriptionBlock text={slide.description} maxLines={5} size={VBT_TYPO.bodySm} />
+          <DescriptionBlock text={slide.description} maxLines={6} size={VBT_TYPO.bodySm} />
         </div>
         {hasIssues && slide.xlsx_sheet && (
           <div className="shrink-0">
@@ -3451,7 +3451,7 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
           {items.length}
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-1.5">
+      <div className="flex-1 overflow-hidden min-h-0 p-2 flex flex-col gap-1.5">
         {items.length === 0 ? (
           <div
             className="flex-1 flex items-center justify-center text-center"
@@ -3465,7 +3465,20 @@ function KanbanLane({ urgency, items }: { urgency: PriorityItem["urgency"]; item
             Aucun chantier
           </div>
         ) : (
-          items.map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)
+          <>
+            {/* Hard cap at 5 cards per lane : beyond that the column overflows
+                the slide. The consultant curates which ones via the editor ;
+                the full list always lives in the XLSX "Priorisation" tab. */}
+            {items.slice(0, 5).map((p) => <KanbanCard key={p.rank} item={p} palette={palette} />)}
+            {items.length > 5 && (
+              <div
+                className="text-center mt-auto"
+                style={{ color: palette.label, fontSize: VBT_TYPO.micro, fontWeight: 700, fontFamily: VBT_FONT.mono, paddingTop: 2 }}
+              >
+                + {items.length - 5} dans l&apos;onglet XLSX
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
