@@ -938,20 +938,18 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
   const h1Missing = findIssue(issues, "h1_missing");
   const h2Missing = findIssue(issues, "h2_missing");
   const h2NonSeq = findIssue(issues, "h2_non_sequential");
-  const h2Duplicate = findIssue(issues, "h2_duplicate");
   const h1Long = findIssue(issues, "h1_long");
   const h2Long = findIssue(issues, "h2_long");
 
-  // NOTE : "h2_multiple" (pages with more than one H2) is NOT included : in
-  // HTML5 having several H2 is perfectly valid (it's how you structure
-  // sub-sections), and Screaming Frog's "Multiple" filter counts template
-  // headings too. Flagging it produced a huge false-positive (880/1067 pages)
-  // and the "identiques" label was wrong (SF doesn't check identity).
+  // NOTE : two SF "H2" signals are deliberately NOT flagged here :
+  //  • "h2_multiple" (pages with several H2) : valid in HTML5, and SF counts
+  //    template headings too — produced an 880/1067 false-positive.
+  //  • "h2_duplicate" (same H2 text reused across pages) : extremely common
+  //    and low value (section headings like "Nos services" repeat by design).
   const hnIssues: AdvIssueRow[] = [
     ...issueAsRows(h1Missing, "high", () => ({ type: "H1", problem: "Manquant" })),
     ...issueAsRows(h1Long, "low", () => ({ type: "H1", problem: "Plus de 70 caractères" })),
     ...issueAsRows(h2Missing, "medium", () => ({ type: "H2", problem: "Manquant" })),
-    ...issueAsRows(h2Duplicate, "low", () => ({ type: "H2", problem: "Même texte H2 réutilisé sur plusieurs pages" })),
     ...issueAsRows(h2Long, "low", () => ({ type: "H2", problem: "Plus de 70 caractères" })),
   ];
   const subHn: AdvSubcategory = {
@@ -976,7 +974,7 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
       { label: "H1 manquants", value: h1Missing?.rows.length || 0, tone: (h1Missing?.rows.length || 0) > 0 ? "bad" : "ok" },
       { label: "H2 manquants", value: h2Missing?.rows.length || 0, tone: (h2Missing?.rows.length || 0) > 0 ? "warn" : "ok" },
       { label: "H1 > 70 caractères", value: h1Long?.rows.length || 0, tone: (h1Long?.rows.length || 0) > 0 ? "info" : "ok" },
-      { label: "H2 dupliqués", value: h2Duplicate?.rows.length || 0, tone: (h2Duplicate?.rows.length || 0) > 0 ? "info" : "ok" },
+      { label: "H2 > 70 caractères", value: h2Long?.rows.length || 0, tone: (h2Long?.rows.length || 0) > 0 ? "info" : "ok" },
     ],
     chart: {
       type: "bar",
@@ -984,7 +982,6 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
         { label: "H1 manquant", value: h1Missing?.rows.length || 0, color: COLORS.bad },
         { label: "H2 manquant", value: h2Missing?.rows.length || 0, color: COLORS.warn },
         { label: "H1 > 70c", value: h1Long?.rows.length || 0, color: COLORS.info },
-        { label: "H2 réutilisé", value: h2Duplicate?.rows.length || 0, color: COLORS.info },
         { label: "H2 > 70c", value: h2Long?.rows.length || 0, color: COLORS.info },
       ],
     },
