@@ -362,11 +362,19 @@ function buildIndexabilityCrawl(
     title: "Erreurs hreflang",
     description: DESC.hreflang,
     kpis: [
+      { label: "Total erreurs", value: hreflangIssues.length, tone: hreflangIssues.length > 0 ? "warn" : "ok" },
       { label: "x-default manquant", value: hrefXdefault?.rows.length || 0, tone: (hrefXdefault?.rows.length || 0) > 0 ? "warn" : "ok" },
       { label: "Retour vers noindex", value: hrefNoindex?.rows.length || 0, tone: (hrefNoindex?.rows.length || 0) > 0 ? "bad" : "ok" },
       { label: "URL non-200", value: hrefNon200?.rows.length || 0, tone: (hrefNon200?.rows.length || 0) > 0 ? "bad" : "ok" },
-      { label: "Total erreurs", value: hreflangIssues.length, tone: hreflangIssues.length > 0 ? "warn" : "ok" },
     ],
+    chart: hreflangIssues.length > 0 ? {
+      type: "bar",
+      bars: [
+        { label: "x-default manquant", value: hrefXdefault?.rows.length || 0, color: COLORS.warn },
+        { label: "Retour vers noindex", value: hrefNoindex?.rows.length || 0, color: COLORS.bad },
+        { label: "URL hreflang non-200", value: hrefNon200?.rows.length || 0, color: COLORS.bad },
+      ],
+    } : undefined,
     xlsx_sheet: hreflangIssues.length > 0 ? subHreflang.xlsx_sheet : undefined,
     issues_count: hreflangIssues.length,
   };
@@ -796,6 +804,15 @@ function buildMeta(rows: InternalRow[], issues: ParsedIssue[]): { section: AdvSe
       { label: "Meta manquante", value: metaMissing, tone: metaMissing > 0 ? "warn" : "ok" },
       { label: "Meta hors gabarit", value: metaShort + metaLong, tone: metaShort + metaLong > 0 ? "warn" : "ok" },
     ],
+    chart: {
+      type: "bar",
+      bars: [
+        { label: "Title manquant", value: titleMissing, color: COLORS.bad },
+        { label: "Title hors gabarit", value: titleShort + titleLong, color: COLORS.warn },
+        { label: "Meta manquante", value: metaMissing, color: COLORS.warn },
+        { label: "Meta hors gabarit", value: metaShort + metaLong, color: COLORS.info },
+      ],
+    },
     // Two distinct tabs now back this slide : point the badge at both.
     xlsx_sheet: tmIssues.length > 0 ? "Long. Title / Long. Metadesc." : undefined,
     issues_count: tmIssues.length,
@@ -920,18 +937,21 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
 
   const h1Missing = findIssue(issues, "h1_missing");
   const h2Missing = findIssue(issues, "h2_missing");
-  const h2Multiple = findIssue(issues, "h2_multiple");
   const h2NonSeq = findIssue(issues, "h2_non_sequential");
   const h2Duplicate = findIssue(issues, "h2_duplicate");
   const h1Long = findIssue(issues, "h1_long");
   const h2Long = findIssue(issues, "h2_long");
 
+  // NOTE : "h2_multiple" (pages with more than one H2) is NOT included : in
+  // HTML5 having several H2 is perfectly valid (it's how you structure
+  // sub-sections), and Screaming Frog's "Multiple" filter counts template
+  // headings too. Flagging it produced a huge false-positive (880/1067 pages)
+  // and the "identiques" label was wrong (SF doesn't check identity).
   const hnIssues: AdvIssueRow[] = [
     ...issueAsRows(h1Missing, "high", () => ({ type: "H1", problem: "Manquant" })),
     ...issueAsRows(h1Long, "low", () => ({ type: "H1", problem: "Plus de 70 caractères" })),
     ...issueAsRows(h2Missing, "medium", () => ({ type: "H2", problem: "Manquant" })),
-    ...issueAsRows(h2Multiple, "low", () => ({ type: "H2", problem: "Plusieurs H2 identiques sur la page" })),
-    ...issueAsRows(h2Duplicate, "low", () => ({ type: "H2", problem: "H2 dupliqué entre plusieurs pages" })),
+    ...issueAsRows(h2Duplicate, "low", () => ({ type: "H2", problem: "Même texte H2 réutilisé sur plusieurs pages" })),
     ...issueAsRows(h2Long, "low", () => ({ type: "H2", problem: "Plus de 70 caractères" })),
   ];
   const subHn: AdvSubcategory = {
@@ -964,8 +984,8 @@ function buildStructure(rows: InternalRow[], issues: ParsedIssue[]): { section: 
         { label: "H1 manquant", value: h1Missing?.rows.length || 0, color: COLORS.bad },
         { label: "H2 manquant", value: h2Missing?.rows.length || 0, color: COLORS.warn },
         { label: "H1 > 70c", value: h1Long?.rows.length || 0, color: COLORS.info },
-        { label: "H2 dupl.", value: h2Duplicate?.rows.length || 0, color: COLORS.info },
-        { label: "H2 multi.", value: h2Multiple?.rows.length || 0, color: COLORS.info },
+        { label: "H2 réutilisé", value: h2Duplicate?.rows.length || 0, color: COLORS.info },
+        { label: "H2 > 70c", value: h2Long?.rows.length || 0, color: COLORS.info },
       ],
     },
     xlsx_sheet: hnIssues.length > 0 ? subHn.xlsx_sheet : undefined,
@@ -1095,10 +1115,10 @@ function buildLinking(
     sub_id: "internal_linking_overview",
     title: "Maillage interne",
     description: DESC.internal_linking + (contextualInlinks
-      ? "\n\nLes comptes ci-dessous excluent le menu, l'en-tête et le pied de page : seuls les liens internes contextuels (dans le contenu) sont pris en compte."
-      : "\n\n⚠️ Sans le fichier liens_entrants_tous.csv, les comptes incluent les liens de navigation (menu/en-tête/pied de page) et surestiment le maillage réel."),
+      ? "\n\nComptes hors menu / en-tête / pied de page : seuls les liens internes dans le contenu sont pris en compte."
+      : "\n\n⚠️ Sans liens_entrants_tous.csv, les comptes incluent les liens de navigation et surestiment le maillage réel."),
     kpis: [
-      { label: "Orphelines (0 lien)", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
+      { label: "Sans lien contextuel", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
       { label: "1-2 liens entrants", value: low, tone: low > 0 ? "warn" : "ok" },
       { label: "3-9 liens entrants", value: mid, tone: "ok" },
       { label: "10+ liens entrants", value: high, tone: "ok" },
@@ -1466,14 +1486,9 @@ function buildImages(
   // For the user's reference case this lifts an apparent "1 image" from
   // looking trivial to "682 pages affected", which makes the priority
   // immediately legible on the slide.
-  // Sum of "Liens entrants IMG" across alt-less images = cumulative image-link
-  // OCCURRENCES, NOT a page count (it can exceed the number of pages on the
-  // site, e.g. a footer logo present on every page). Labelled accordingly.
-  const altOccurrences = (altMissing?.rows || []).reduce((s, l) => {
-    const n = parseInt(l.extras["liens entrants img"] || l.extras["nombre de liens entrants"] || l.extras["inlinks"] || "0", 10);
-    return s + (Number.isFinite(n) ? n : 0);
-  }, 0);
   // Distinct source pages, when the export is link-centric (Source column).
+  // We deliberately do NOT surface the cumulative "Liens entrants IMG" sum :
+  // it reads as a scary five-digit number that isn't a page count.
   const altUniquePages = new Set(
     (altMissing?.rows || []).map((l) => l.extras["source"] || l.extras["page source"] || "").filter(Boolean),
   ).size;
@@ -1487,17 +1502,15 @@ function buildImages(
       { label: "Images crawlées", value: imagesList.length, tone: "ok" },
       { label: "Sans attribut alt", value: altRows.length, tone: altRows.length > 0 ? "bad" : "ok" },
       { label: "% sans alt", value: imagesList.length > 0 ? `${Math.round((altRows.length / imagesList.length) * 100)} %` : "0 %", tone: altRows.length > 0 ? "warn" : "ok" },
-      altUniquePages > 0
-        ? { label: "Pages affectées", value: altUniquePages.toLocaleString("fr-FR"), tone: altUniquePages > 50 ? "warn" : "info" }
-        : { label: "Occurrences (liens-images)", value: altOccurrences.toLocaleString("fr-FR"), tone: altOccurrences > 50 ? "warn" : "info" },
+      ...(altUniquePages > 0
+        ? [{ label: "Pages affectées", value: altUniquePages.toLocaleString("fr-FR"), tone: (altUniquePages > 50 ? "warn" : "info") as AdvKPI["tone"] }]
+        : []),
     ],
     xlsx_sheet: altRows.length > 0 ? subAlt.xlsx_sheet : undefined,
     issues_count: altRows.length,
     takeaway: altRows.length === 0
       ? "Toutes les images crawlées ont un attribut alt ✓"
-      : altRows.length === 1 && altOccurrences > 50
-        ? `1 image sans alt mais référencée ${altOccurrences.toLocaleString("fr-FR")} fois (liens-images) : typiquement un visuel de template (logo, footer). Un seul fix corrige toutes les occurrences.`
-        : `${altRows.length} image(s) unique(s) sans alt · ${altOccurrences.toLocaleString("fr-FR")} occurrences (liens-images) cumulées.`,
+      : `${altRows.length.toLocaleString("fr-FR")} image(s) unique(s) sans attribut alt à corriger.`,
   };
 
   // Size attrs (width/height missing).
@@ -1510,7 +1523,6 @@ function buildImages(
   // a single image present on 1 040 pages is one template fix, not 1 040
   // separate jobs.
   const sizeRawRows = sizeMissing?.rows || [];
-  const sizeOccurrences = sizeRawRows.length;
   const sizeUniquePages = new Set(
     sizeRawRows.map((l) => l.extras["source"] || l.extras["page source"] || "").filter(Boolean),
   ).size;
@@ -1540,19 +1552,18 @@ function buildImages(
     description: DESC.images_size_attr,
     kpis: [
       { label: "Images uniques concernées", value: sizeAttrRows.length, tone: sizeAttrRows.length > 0 ? "warn" : "ok" },
-      { label: "Occurrences sur le site", value: sizeOccurrences.toLocaleString("fr-FR"), tone: sizeOccurrences > 100 ? "warn" : "info" },
-      { label: "Pages affectées", value: sizeUniquePages.toLocaleString("fr-FR"), tone: sizeUniquePages > 100 ? "warn" : "info" },
+      ...(sizeUniquePages > 0
+        ? [{ label: "Pages affectées", value: sizeUniquePages.toLocaleString("fr-FR"), tone: (sizeUniquePages > 100 ? "warn" : "info") as AdvKPI["tone"] }]
+        : []),
       { label: "Impact CLS", value: sizeAttrRows.length > 0 ? "Élevé" : "Faible", tone: sizeAttrRows.length > 0 ? "bad" : "ok" },
     ],
     xlsx_sheet: sizeAttrRows.length > 0 ? subSize.xlsx_sheet : undefined,
     issues_count: sizeAttrRows.length,
     takeaway: sizeAttrRows.length === 0
       ? "Toutes les images crawlées déclarent width/height ✓"
-      : sizeAttrRows.length === 1 && sizeOccurrences > 50
-        ? `1 image unique mal balisée mais ${sizeOccurrences.toLocaleString("fr-FR")} occurrences : typiquement un visuel de template (footer, header). Un seul fix dans le template corrige tout.`
-        : sizeAttrRows.length < 10
-          ? `${sizeAttrRows.length} images uniques à corriger, présentes ${sizeOccurrences.toLocaleString("fr-FR")} fois : quelques fixes ciblés.`
-          : `${sizeAttrRows.length.toLocaleString("fr-FR")} images uniques sans width/height sur ${sizeUniquePages.toLocaleString("fr-FR")} pages : chantier transversal sur les templates de contenu.`,
+      : sizeUniquePages > 0
+        ? `${sizeAttrRows.length.toLocaleString("fr-FR")} image(s) unique(s) sans width/height sur ${sizeUniquePages.toLocaleString("fr-FR")} page(s) : un fix dans les templates corrige l'essentiel.`
+        : `${sizeAttrRows.length.toLocaleString("fr-FR")} image(s) unique(s) sans width/height : à corriger dans les templates.`,
   };
 
   // Weight : driven by images_tous.csv when available (full distribution),

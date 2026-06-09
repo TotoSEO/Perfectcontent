@@ -20,12 +20,29 @@ export function DonutChart({
   const total = segments.reduce((s, x) => s + x.value, 0) || 1;
   // viewBox space is normalised to 100×100 so the SVG scales to its box.
   const VB = 100;
-  const r = (VB - (thickness / size) * VB) / 2;
   const cx = VB / 2;
   const cy = VB / 2;
-  const c = 2 * Math.PI * r;
-  const strokeW = (thickness / size) * VB;
-  let offset = 0;
+  const ringW = (thickness / size) * VB;
+  const outerR = VB / 2 - 1;          // 1u padding so the ring never clips
+  const innerR = Math.max(2, outerR - ringW);
+  const visible = segments.filter((s) => s.value > 0);
+
+  // Build proper filled annular SECTORS (SVG paths) rather than dashed thick
+  // strokes : small slices (e.g. a handful of 4xx out of 1000) then render as
+  // clean thin wedges instead of blobby, overlapping arcs that "bleed".
+  const point = (radius: number, angle: number) => {
+    // angle in radians, 0 = top, clockwise.
+    return [cx + radius * Math.sin(angle), cy - radius * Math.cos(angle)];
+  };
+  const sectorPath = (a0: number, a1: number) => {
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const [ox0, oy0] = point(outerR, a0);
+    const [ox1, oy1] = point(outerR, a1);
+    const [ix1, iy1] = point(innerR, a1);
+    const [ix0, iy0] = point(innerR, a0);
+    return `M ${ox0} ${oy0} A ${outerR} ${outerR} 0 ${large} 1 ${ox1} ${oy1} L ${ix1} ${iy1} A ${innerR} ${innerR} 0 ${large} 0 ${ix0} ${iy0} Z`;
+  };
+  let acc = 0;
   return (
     <div className="flex items-center gap-5 w-full min-w-0">
       <div
@@ -33,27 +50,19 @@ export function DonutChart({
         style={{ width: `min(42%, ${size}px)`, aspectRatio: "1 / 1" }}
       >
         <svg width="100%" height="100%" viewBox={`0 0 ${VB} ${VB}`} preserveAspectRatio="xMidYMid meet">
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke={VBT.paperEdge} strokeWidth={strokeW} />
-          {segments.map((s, i) => {
-            const dash = (s.value / total) * c;
-            const seg = (
-              <circle
-                key={i}
-                cx={cx}
-                cy={cy}
-                r={r}
-                fill="none"
-                stroke={s.color}
-                strokeWidth={strokeW}
-                strokeDasharray={`${dash} ${c - dash}`}
-                strokeDashoffset={-offset}
-                transform={`rotate(-90 ${cx} ${cy})`}
-                strokeLinecap="butt"
-              />
-            );
-            offset += dash;
-            return seg;
-          })}
+          {/* Track ring */}
+          <circle cx={cx} cy={cy} r={(outerR + innerR) / 2} fill="none" stroke={VBT.paperEdge} strokeWidth={outerR - innerR} />
+          {visible.length === 1 ? (
+            // Single non-zero segment : a full ring (a sector of 2π degenerates).
+            <circle cx={cx} cy={cy} r={(outerR + innerR) / 2} fill="none" stroke={visible[0].color} strokeWidth={outerR - innerR} />
+          ) : (
+            visible.map((s, i) => {
+              const a0 = (acc / total) * 2 * Math.PI;
+              acc += s.value;
+              const a1 = (acc / total) * 2 * Math.PI;
+              return <path key={i} d={sectorPath(a0, a1)} fill={s.color} stroke={VBT.paper} strokeWidth={0.5} />;
+            })
+          )}
           <text
             x={cx}
             y={cy - 1}
