@@ -1059,7 +1059,7 @@ function buildLinking(
     const i = contextualInlinks ? inlinksFor(r.url) : (r.inlinks ?? 0);
     if (i === 0) {
       orphans++;
-      orphanRows.push(toRow(r.url, "high", { inlinks: 0, outlinks: r.outlinks ?? 0, problem: "Page orpheline (0 lien entrant contextuel)" }));
+      orphanRows.push(toRow(r.url, "high", { inlinks: 0, outlinks: r.outlinks ?? 0, problem: "Sans lien entrant contextuel (accessible via la navigation uniquement)" }));
     } else if (i < 3) {
       low++;
       orphanRows.push(toRow(r.url, "medium", { inlinks: i, outlinks: r.outlinks ?? 0, problem: "Sous-maillée (< 3 liens entrants contextuels)" }));
@@ -1190,8 +1190,12 @@ function buildLinking(
     id: "broken_links",
     label: "Liens rompus",
     // Score driven ONLY by genuinely broken links (real 4xx/5xx), not by
-    // anti-bot-blocked external URLs. Denominator = HTML pages.
-    score: scoreStrict(realBroken.length / Math.max(html.length, 1), 0.005),
+    // anti-bot-blocked external URLs. Denominator = HTML pages. Floor at 40
+    // when there are fewer than 10 real broken links : a handful of dead
+    // external links shouldn't drag a high-weight section to near-zero.
+    score: realBroken.length < 10
+      ? Math.max(40, scoreStrict(realBroken.length / Math.max(html.length, 1), 0.005))
+      : scoreStrict(realBroken.length / Math.max(html.length, 1), 0.005),
     issues_full: brokenIssues,
     columns: [
       { key: "type", label: "Origine", width: 20 },
@@ -1343,7 +1347,7 @@ function buildLinking(
   // > 5% is critical.
   const subOrphans: AdvSubcategory = {
     id: "orphan_pages",
-    label: "Pages orphelines",
+    label: "Pages sans maillage contextuel",
     score: Math.min(
       scoreStrict(orphans / Math.max(html.length, 1), 0.01),
       scoreStrict((orphans + low) / Math.max(html.length, 1), 0.05),
@@ -1355,24 +1359,24 @@ function buildLinking(
       { key: "outlinks", label: "Liens sortants", width: 16 },
       { key: "url", label: "URL", width: 60 },
     ],
-    xlsx_sheet: "Pages orphelines",
+    xlsx_sheet: "Sans maillage contextuel",
   };
   const slideOrphans: AdvSlide = {
     kind: "data",
     section_id: "linking",
     sub_id: "orphan_pages",
-    title: "Pages sans / avec peu de liens entrants (hors navigation)",
+    title: "Pages sans maillage contextuel (hors navigation)",
     description: DESC.orphan_pages,
     kpis: [
-      { label: "Orphelines", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
-      { label: "Sous-maillées (1-2)", value: low, tone: low > 0 ? "warn" : "ok" },
+      { label: "Sans lien contextuel", value: orphans, tone: orphans > 0 ? "bad" : "ok" },
+      { label: "Peu maillées (1-2)", value: low, tone: low > 0 ? "warn" : "ok" },
       { label: "Sans lien sortant", value: noOutlinks, tone: noOutlinks > 0 ? "warn" : "ok" },
     ],
     xlsx_sheet: orphanRows.length > 0 ? subOrphans.xlsx_sheet : undefined,
     issues_count: orphanRows.length,
     takeaway: orphans === 0 && low === 0
-      ? "Maillage interne sain : aucune page orpheline détectée ✓"
-      : `${orphans + low} page(s) sous-maillée(s) à raccrocher au reste du site.`,
+      ? "Maillage interne sain : toutes les pages reçoivent des liens contextuels ✓"
+      : `${orphans + low} page(s) peu/pas maillée(s) dans le contenu (elles restent accessibles via la navigation) : à raccrocher par des liens éditoriaux.`,
   };
 
 
@@ -1401,7 +1405,7 @@ function buildLinking(
     label: "Maillage interne",
     score: sectionScore,
     weight: 18,
-    summary: `${orphans} orphelines · ${brokenIssues.length} liens rompus · ${anchors ? `${anchors.total_links_filtered.toLocaleString("fr-FR")} liens contextuels analysés` : "ancres non analysées (liens_entrants_tous.csv manquant)"}`,
+    summary: `${orphans.toLocaleString("fr-FR")} pages sans maillage contextuel · ${brokenIssues.length} liens rompus · ${anchors ? `${anchors.total_links_filtered.toLocaleString("fr-FR")} liens contextuels analysés` : "ancres non analysées (liens_entrants_tous.csv manquant)"}`,
     subcategories,
   };
   return {
@@ -1922,7 +1926,7 @@ function buildStructuredDataSf(stats: StructuredSfStats): { section: AdvSection;
     label: "Données structurées",
     score,
     weight: 7,
-    summary: `${stats.distinct_types} types schema.org · ${stats.pages_with_data}/${stats.page_count} pages couvertes · ${stats.total_errors} erreurs`,
+    summary: `${stats.distinct_types} types schema.org · ${stats.pages_with_data.toLocaleString("fr-FR")}/${stats.page_count.toLocaleString("fr-FR")} pages couvertes · ${stats.total_errors.toLocaleString("fr-FR")} erreurs`,
     subcategories: [subDetail],
   };
 
